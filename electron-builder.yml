@@ -10,6 +10,7 @@ files:
 win:
   target: nsis
   icon: public/icon.png
+  signAndEditExecutable: false
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
