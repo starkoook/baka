@@ -1,3 +1,14 @@
+// ── Auto-fix: if ELECTRON_RUN_AS_NODE is set, re-launch without it ──
+if (process.env.ELECTRON_RUN_AS_NODE) {
+  const { spawn } = require('child_process')
+  const env = { ...process.env }
+  delete env.ELECTRON_RUN_AS_NODE
+  spawn(process.execPath, process.argv.slice(1), { env, stdio: 'inherit' })
+    .on('exit', (code) => process.exit(code))
+  // Block further execution
+  setInterval(() => {}, 10000)
+}
+
 const { join } = require('path')
 const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const { registerLLMHandlers } = require('./ipc/llm')
