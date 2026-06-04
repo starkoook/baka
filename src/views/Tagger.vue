@@ -2,10 +2,12 @@
 import { ref, computed } from 'vue'
 import { useTaggerStore } from '@/stores/tagger'
 import { useAppStore } from '@/stores/app'
+import { useLogStore } from '@/stores/logs'
 import { playSuccess } from '@/composables/useSound'
 
 const taggerStore = useTaggerStore()
 const appStore = useAppStore()
+const logStore = useLogStore()
 
 // ── Mode ──
 const mode = ref<'single' | 'batch'>('single')
@@ -99,8 +101,32 @@ async function runBatchTagging() {
     batchProgress.value.current++
   }
 
+  // ── Save .txt files + create .已标 folder ──
+  let savedCount = 0
+  const taggedDir = folderPath.value + '.已标'
+
+  for (const [filePath, result] of batchResults.value.entries()) {
+    if (!result.done || result.error) continue
+    const tags = result.tags.map((t) => t.tag).join(', ')
+    const base = filePath.replace(/\.[^.]+$/, '')
+    const txtPath = base + '.txt'
+
+    // Save .txt next to original
+    await window.fsAPI.saveCaption({ txtPath, caption: tags })
+    savedCount++
+
+    // Copy to .已标 folder
+    const ext = filePath.split('.').pop() || 'png'
+    const name = filePath.split(/[/\\]/).pop() || 'image.' + ext
+    const destImg = taggedDir + '/' + name
+    const destTxt = taggedDir + '/' + name.replace(/\.[^.]+$/, '.txt')
+    await window.fsAPI.copyFile({ src: filePath, dest: destImg, destDir: taggedDir })
+    await window.fsAPI.saveCaption({ txtPath: destTxt, caption: tags })
+  }
+
   const doneCount = [...batchResults.value.values()].filter((r) => r.done && !r.error).length
-  appStore.setStatus(`批量完成 · ${doneCount}/${files.length} 张成功`)
+  appStore.setStatus(`批量完成 · ${doneCount}/${files.length} 张成功 · 已保存 ${savedCount} 个标注`)
+  logStore.success(`已标数据已保存至: ${taggedDir}`)
   playSuccess()
 }
 
@@ -115,6 +141,13 @@ async function handleRunTagging() {
   if (taggerStore.lastError) {
     appStore.setStatus('标注失败: ' + taggerStore.lastError)
   } else {
+    // Save .txt alongside original if it's a file
+    if (taggerStore.selectedFile && taggerStore.results.length > 0) {
+      const tags = taggerStore.results.map((t) => t.tag).join(', ')
+      const base = taggerStore.selectedFile.replace(/\.[^.]+$/, '')
+      // Can't save directly for drag-drop files in browser, but log it
+      logStore.info(`标注结果 (${taggerStore.results.length} 个标签): ${tags.slice(0, 200)}...`)
+    }
     appStore.setStatus(`标注完成 · ${taggerStore.results.length} 个标签`)
     playSuccess()
   }

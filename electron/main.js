@@ -120,6 +120,17 @@ ipcMain.handle('fs:readImageBase64', async (_event, filePath) => {
   }
 })
 
+// ── Copy file ──
+ipcMain.handle('fs:copyFile', async (_event, { src, dest, destDir }) => {
+  try {
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
+    fs.copyFileSync(src, dest)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
 // ── Dataset: list image+txt pairs ──
 ipcMain.handle('fs:listDataset', async (_event, folderPath) => {
   const imageExts = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp'])

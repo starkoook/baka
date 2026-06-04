@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('fsAPI', {
   readImageBase64: (filePath) => ipcRenderer.invoke('fs:readImageBase64', filePath),
   listDataset: (folderPath) => ipcRenderer.invoke('fs:listDataset', folderPath),
   saveCaption: (params) => ipcRenderer.invoke('fs:saveCaption', params),
+  copyFile: (params) => ipcRenderer.invoke('fs:copyFile', params),
 })
 
 contextBridge.exposeInMainWorld('systemAPI', {
