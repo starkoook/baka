@@ -160,6 +160,44 @@ function registerLLMHandlers() {
   ipcMain.handle('llm:saveConfig', async (_event, config) => {
     return saveApiConfig(config)
   })
+
+  // ── List models from API ──
+  ipcMain.handle('llm:listModels', async (_event, params) => {
+    try {
+      const config = loadConfig()
+      const provider = params?.provider || config.provider
+      const baseUrl = params?.baseUrl || config.baseUrl
+      const apiKey = params?.apiKey || config.apiKey
+
+      if (!apiKey) throw new Error('请先填写 API Key')
+
+      let models = []
+      if (provider === 'gemini') {
+        const url = baseUrl.replace(/\/$/, '') + '/v1beta/models?key=' + apiKey
+        const res = await fetch(url)
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        models = (data.models || [])
+          .filter((m) => m.name?.includes('gemini'))
+          .map((m) => m.name.replace('models/', ''))
+      } else {
+        // OpenAI-compatible
+        const url = baseUrl.replace(/\/$/, '') + '/models'
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${apiKey}` },
+        })
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        const data = await res.json()
+        models = (data.data || [])
+          .map((m) => m.id)
+          .sort()
+      }
+
+      return { success: true, models }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
 }
 
 module.exports = { registerLLMHandlers }

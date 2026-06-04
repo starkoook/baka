@@ -4,7 +4,6 @@ import { useAppStore } from '@/stores/app'
 
 const appStore = useAppStore()
 
-// LLM config loaded from main process
 const provider = ref('openai')
 const baseUrl = ref('https://api.openai.com/v1')
 const apiKey = ref('')
@@ -12,35 +11,55 @@ const model = ref('gpt-4o')
 const prompt = ref('')
 const saving = ref(false)
 const saved = ref(false)
+const connecting = ref(false)
+const connectStatus = ref('')
+const models = ref<string[]>([])
+const showKey = ref(false)
 
 onMounted(async () => {
   if (window.llmAPI) {
     try {
-      const config = await window.llmAPI.getConfig()
-      provider.value = config.provider || 'openai'
-      baseUrl.value = config.baseUrl || 'https://api.openai.com/v1'
-      apiKey.value = config.apiKey || ''
-      model.value = config.model || 'gpt-4o'
-      prompt.value = config.prompt || ''
+      const c = await window.llmAPI.getConfig()
+      provider.value = c.provider || 'openai'
+      baseUrl.value = c.baseUrl || 'https://api.openai.com/v1'
+      apiKey.value = c.apiKey || ''
+      model.value = c.model || 'gpt-4o'
+      prompt.value = c.prompt || ''
     } catch (_) {}
   }
 })
 
-async function saveLLMConfig() {
-  if (!window.llmAPI) return
-  saving.value = true
-  saved.value = false
+async function connectAndList() {
+  if (!apiKey.value.trim()) {
+    connectStatus.value = '请输入 API Key'; return
+  }
+  connecting.value = true; connectStatus.value = '连接中...'; models.value = []
   try {
-    await window.llmAPI.saveConfig({
-      provider: provider.value,
-      baseUrl: baseUrl.value,
-      apiKey: apiKey.value,
-      model: model.value,
-      prompt: prompt.value,
+    const res = await window.llmAPI.listModels({
+      provider: provider.value, baseUrl: baseUrl.value, apiKey: apiKey.value,
     })
-    saved.value = true
-    setTimeout(() => (saved.value = false), 2000)
-  } catch (_) {}
+    if (res.success && res.models?.length) {
+      models.value = res.models
+      connectStatus.value = `已获取 ${res.models.length} 个模型`
+      if (!model.value || !res.models.includes(model.value)) {
+        model.value = res.models[0]
+      }
+    } else {
+      connectStatus.value = res.error || '未获取到模型'
+    }
+  } catch (e: any) { connectStatus.value = e.message || '连接失败' }
+  connecting.value = false
+}
+
+async function saveConfig() {
+  if (!window.llmAPI) return
+  saving.value = true; saved.value = false
+  await window.llmAPI.saveConfig({
+    provider: provider.value, baseUrl: baseUrl.value,
+    apiKey: apiKey.value, model: model.value, prompt: prompt.value,
+  })
+  saved.value = true
+  setTimeout(() => { saved.value = false }, 2000)
   saving.value = false
 }
 </script>
@@ -57,19 +76,14 @@ async function saveLLMConfig() {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-label">主题</span>
-          <span class="setting-desc">
-            {{ appStore.theme === 'dark' ? '暗色霓虹模式' : '亮色日间模式' }}
-          </span>
+          <span class="setting-desc">{{ appStore.theme === 'dark' ? '暗色霓虹模式' : '亮色日间模式' }}</span>
         </div>
         <button class="theme-toggle" @click="appStore.toggleTheme()">
           <svg v-if="appStore.theme === 'dark'" class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <circle cx="12" cy="12" r="5"/>
-            <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
             <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
           </svg>
           <svg v-else class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
             <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
@@ -81,9 +95,7 @@ async function saveLLMConfig() {
       <div class="setting-item">
         <div class="setting-info">
           <span class="setting-label">桌面人偶</span>
-          <span class="setting-desc">
-            {{ appStore.showMascot ? '仪表盘常驻显示' : '已关闭' }}
-          </span>
+          <span class="setting-desc">{{ appStore.showMascot ? '仪表盘常驻显示' : '已关闭' }}</span>
         </div>
         <button class="theme-toggle" @click="appStore.toggleMascot()">
           <span>{{ appStore.showMascot ? '🎀 显示中' : '关闭' }}</span>
@@ -93,86 +105,82 @@ async function saveLLMConfig() {
 
     <!-- LLM API -->
     <div class="settings-group glass-panel" style="margin-top: 16px;">
-      <div class="setting-section-title">🤖 LLM 标注配置</div>
+      <div class="setting-section-title">🤖 LLM API 配置</div>
 
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-label">API 提供商</span>
+      <!-- Provider -->
+      <div class="setting-row">
+        <label class="field-label">提供商</label>
+        <div class="field-right">
+          <div class="source-tabs">
+            <button class="source-tab" :class="{ active: provider === 'openai' }" @click="provider = 'openai'">OpenAI 兼容</button>
+            <button class="source-tab" :class="{ active: provider === 'gemini' }" @click="provider = 'gemini'">Google Gemini</button>
+          </div>
         </div>
-        <select class="form-select" style="width: 180px;" v-model="provider">
-          <option value="openai">OpenAI 兼容</option>
-          <option value="gemini">Google Gemini</option>
-        </select>
       </div>
       <div class="setting-divider"></div>
 
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-label">API 地址</span>
+      <!-- Base URL -->
+      <div class="setting-row">
+        <label class="field-label">API 地址</label>
+        <div class="field-right">
+          <input class="form-input styled-input" v-model="baseUrl" placeholder="https://api.openai.com/v1" />
         </div>
-        <input
-          class="form-input"
-          style="width: 280px;"
-          v-model="baseUrl"
-          placeholder="https://api.openai.com/v1"
-        />
       </div>
       <div class="setting-divider"></div>
 
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-label">API Key</span>
+      <!-- API Key -->
+      <div class="setting-row">
+        <label class="field-label">API Key</label>
+        <div class="field-right">
+          <div class="input-with-icon">
+            <input class="form-input styled-input" :type="showKey ? 'text' : 'password'" v-model="apiKey" placeholder="sk-..." />
+            <button class="eye-btn" @click="showKey = !showKey">
+              <svg v-if="!showKey" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+              </svg>
+              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
+              </svg>
+            </button>
+          </div>
         </div>
-        <input
-          class="form-input"
-          style="width: 280px;"
-          type="password"
-          v-model="apiKey"
-          placeholder="sk-..."
-        />
       </div>
       <div class="setting-divider"></div>
 
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-label">模型名称</span>
+      <!-- Connect + Model -->
+      <div class="setting-row">
+        <label class="field-label">模型</label>
+        <div class="field-right">
+          <div class="model-row">
+            <select class="form-input styled-input" v-model="model" style="flex:1;">
+              <option v-if="models.length === 0" :value="model">{{ model || '请先连接' }}</option>
+              <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
+            </select>
+            <button class="connect-btn" @click="connectAndList" :disabled="connecting">
+              <svg v-if="connecting" class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+              <span v-else>🔗</span>
+              {{ connecting ? '获取中' : '连接' }}
+            </button>
+          </div>
+          <span class="connect-status" v-if="connectStatus" :class="{ error: connectStatus.includes('失败') || connectStatus.includes('请输入') }">
+            {{ connectStatus }}
+          </span>
         </div>
-        <input
-          class="form-input"
-          style="width: 200px;"
-          v-model="model"
-          placeholder="gpt-4o / gemini-pro-vision"
-        />
       </div>
       <div class="setting-divider"></div>
 
-      <div class="setting-item" style="flex-direction: column; align-items: flex-start; gap: 8px;">
-        <div class="setting-info">
-          <span class="setting-label">标注 Prompt</span>
-          <span class="setting-desc">发送给 LLM 的标注指令</span>
+      <!-- Prompt -->
+      <div class="setting-row">
+        <label class="field-label">标注 Prompt</label>
+        <div class="field-right">
+          <textarea class="form-input styled-input" v-model="prompt" rows="3" placeholder="发送给 LLM 的标注指令..."></textarea>
         </div>
-        <textarea
-          class="form-textarea"
-          v-model="prompt"
-          rows="3"
-          placeholder="Describe this anime image and list all character tags..."
-        ></textarea>
       </div>
-      <div class="setting-divider"></div>
 
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-label">本地模型目录</span>
-          <span class="setting-desc">ONNX / 标注模型存放路径</span>
-        </div>
-        <button class="btn btn-secondary" disabled>选择目录</button>
-      </div>
-      <div class="setting-divider"></div>
-
-      <div class="setting-item">
-        <span></span>
-        <button class="btn btn-primary" @click="saveLLMConfig" :disabled="saving">
-          {{ saving ? '保存中...' : saved ? '✓ 已保存' : '保存 LLM 配置' }}
+      <!-- Save -->
+      <div class="setting-footer">
+        <button class="save-btn" @click="saveConfig" :disabled="saving">
+          {{ saving ? '保存中...' : saved ? '✓ 已保存' : '💾 保存配置' }}
         </button>
       </div>
     </div>
@@ -182,15 +190,13 @@ async function saveLLMConfig() {
       <div class="setting-section-title">关于</div>
       <div class="setting-item">
         <div class="setting-info">
-          <span class="setting-label">版本</span>
-          <span class="setting-desc">Baka TOOLS v{{ appStore.version }}</span>
+          <span class="setting-label">版本</span><span class="setting-desc">Baka TOOLS v{{ appStore.version }}</span>
         </div>
       </div>
       <div class="setting-divider"></div>
       <div class="setting-item">
         <div class="setting-info">
-          <span class="setting-label">技术栈</span>
-          <span class="setting-desc">Electron · Vue 3 · Vite · LLM</span>
+          <span class="setting-label">技术栈</span><span class="setting-desc">Electron · Vue 3 · Vite · LLM</span>
         </div>
       </div>
     </div>
@@ -198,116 +204,122 @@ async function saveLLMConfig() {
 </template>
 
 <style scoped>
-.settings-page {
-  max-width: 680px;
-  margin: 0 auto;
-}
+.settings-page { max-width: 660px; margin: 0 auto; }
+.page-header { margin-bottom: 24px; }
+.page-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; letter-spacing: -0.01em; }
+.page-desc { font-size: 13px; color: var(--text-tertiary); }
 
-.page-header {
-  margin-bottom: 24px;
-}
+.settings-group { padding: 8px 0; }
 
-.page-title {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin-bottom: 4px;
-  letter-spacing: -0.01em;
-}
-
-.page-desc {
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-
-.settings-group {
-  padding: 8px 0;
-}
-
-.setting-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* ── Rows ── */
+.setting-row {
+  display: flex; align-items: flex-start; gap: 16px;
   padding: 14px 20px;
 }
-
-.setting-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.field-label {
+  font-size: 13px; font-weight: 600; color: var(--text-secondary);
+  min-width: 80px; padding-top: 9px; flex-shrink: 0;
 }
+.field-right { flex: 1; min-width: 0; }
 
-.setting-label {
-  font-size: 14px;
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-.setting-desc {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.setting-divider {
-  height: 1px;
-  background: var(--border-subtle);
-  margin: 0 20px;
-}
-
-.setting-section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  padding: 12px 20px 8px;
-}
-
-/* Theme toggle */
-.theme-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-full);
-  color: var(--text-secondary);
-  font-size: 13px;
-  font-family: var(--font-sans);
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-base);
-  backdrop-filter: blur(8px);
-}
-
-.theme-toggle:hover {
-  background: var(--glass-bg-hover);
-  border-color: var(--border-accent);
-  color: var(--text-primary);
-  transform: scale(1.04);
-}
-
-.toggle-icon {
-  width: 16px;
-  height: 16px;
-}
-
-/* Textarea */
-.form-textarea {
-  width: 100%;
-  padding: 10px 14px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
+/* ── Styled inputs ── */
+.styled-input {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 12px;
+  padding: 10px 14px; font-size: 13px; color: var(--text-primary);
   font-family: var(--font-sans);
-  resize: vertical;
-  transition: border-color var(--transition-fast);
+  transition: all 0.25s ease;
+  width: 100%;
 }
-
-.form-textarea:focus {
+.styled-input:focus {
   outline: none;
-  border-color: var(--border-accent);
-  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.1);
+  border-color: rgba(var(--accent-primary-rgb), 0.4);
+  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.08);
+  background: rgba(255,255,255,0.06);
 }
+.styled-input::placeholder { color: var(--text-disabled); }
+
+/* ── Input with eye icon ── */
+.input-with-icon { position: relative; display: flex; align-items: center; }
+.input-with-icon .styled-input { padding-right: 40px; }
+.eye-btn {
+  position: absolute; right: 8px;
+  background: none; border: none; color: var(--text-tertiary);
+  cursor: pointer; padding: 4px; display: flex;
+  transition: color 0.2s;
+}
+.eye-btn:hover { color: var(--text-secondary); }
+
+/* ── Model row ── */
+.model-row { display: flex; gap: 8px; align-items: center; }
+
+.connect-btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 9px 16px; white-space: nowrap;
+  border: 1px solid rgba(var(--accent-primary-rgb), 0.25);
+  border-radius: var(--radius-sm);
+  background: rgba(var(--accent-primary-rgb), 0.08);
+  color: var(--accent-primary); font-size: 12px; font-weight: 600;
+  font-family: var(--font-sans); cursor: pointer;
+  transition: all 0.25s ease;
+}
+.connect-btn:hover { background: rgba(var(--accent-primary-rgb), 0.15); box-shadow: 0 0 12px rgba(var(--accent-primary-rgb), 0.15); }
+.connect-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.connect-status {
+  display: block; font-size: 11px; margin-top: 5px;
+  color: var(--accent-success);
+}
+.connect-status.error { color: var(--accent-danger); }
+
+/* ── Save button ── */
+.setting-footer { padding: 16px 20px; display: flex; justify-content: flex-end; }
+.save-btn {
+  display: flex; align-items: center; gap: 6px;
+  padding: 11px 28px;
+  border: none; border-radius: var(--radius-full);
+  background: var(--gradient-accent);
+  color: #fff; font-size: 13px; font-weight: 700;
+  font-family: var(--font-sans); cursor: pointer;
+  box-shadow: 0 4px 16px rgba(var(--accent-primary-rgb), 0.3);
+  transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+}
+.save-btn:hover { transform: scale(1.04); box-shadow: 0 8px 28px rgba(var(--accent-primary-rgb), 0.45); }
+.save-btn:active { transform: scale(0.96); }
+.save-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* ── Source tabs ── */
+.source-tabs { display: flex; gap: 6px; }
+.source-tab {
+  padding: 8px 16px; border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full); background: var(--glass-bg);
+  color: var(--text-tertiary); font-size: 12px;
+  font-family: var(--font-sans); font-weight: 500;
+  cursor: pointer; transition: all var(--transition-fast);
+}
+.source-tab:hover { background: var(--glass-bg-hover); color: var(--text-secondary); }
+.source-tab.active { background: var(--accent-bg); border-color: var(--border-accent); color: var(--accent-primary); font-weight: 600; }
+
+/* ── Theme toggle ── */
+.setting-item {
+  display: flex; align-items: center; justify-content: space-between; padding: 14px 20px;
+}
+.setting-info { display: flex; flex-direction: column; gap: 2px; }
+.setting-label { font-size: 14px; color: var(--text-primary); font-weight: 500; }
+.setting-desc { font-size: 12px; color: var(--text-tertiary); }
+.setting-divider { height: 1px; background: var(--border-subtle); margin: 0 20px; }
+.setting-section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); padding: 12px 20px 8px; }
+.theme-toggle {
+  display: flex; align-items: center; gap: 8px; padding: 9px 16px;
+  background: var(--glass-bg); border: 1px solid var(--glass-border);
+  border-radius: var(--radius-full); color: var(--text-secondary);
+  font-size: 13px; font-family: var(--font-sans); font-weight: 500;
+  cursor: pointer; transition: all var(--transition-base); backdrop-filter: blur(8px);
+}
+.theme-toggle:hover { background: var(--glass-bg-hover); border-color: var(--border-accent); color: var(--text-primary); transform: scale(1.04); }
+.toggle-icon { width: 16px; height: 16px; }
+
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 </style>

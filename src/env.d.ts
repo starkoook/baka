@@ -33,6 +33,7 @@ interface LLMAPI {
   tagImage: (params: { imageBase64: string; prompt?: string }) => Promise<{ success: boolean; tags?: string[]; error?: string }>
   getConfig: () => Promise<LLMConfig>
   saveConfig: (config: Partial<LLMConfig>) => Promise<{ success: boolean; error?: string }>
+  listModels: (params?: { provider?: string; baseUrl?: string; apiKey?: string }) => Promise<{ success: boolean; models?: string[]; error?: string }>
 }
 
 interface SysStats {

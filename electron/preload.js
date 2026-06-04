@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('llmAPI', {
   tagImage: (params) => ipcRenderer.invoke('llm:tag', params),
   getConfig: () => ipcRenderer.invoke('llm:getConfig'),
   saveConfig: (config) => ipcRenderer.invoke('llm:saveConfig', config),
+  listModels: (params) => ipcRenderer.invoke('llm:listModels', params),
 })
 
 contextBridge.exposeInMainWorld('fsAPI', {
