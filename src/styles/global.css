@@ -1,0 +1,166 @@
+@import './variables.css';
+@import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
+
+/* ═══════════════════════════════════════════
+   Global Reset & Base Styles
+   ═══════════════════════════════════════════ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-primary);
+  background-color: var(--bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Cat paw cursor trail class — apply to interactive areas */
+.paw-cursor, .card, .nav-item, button, .btn {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='14' r='6' fill='%23f472b6' opacity='0.7'/%3E%3Ccircle cx='8' cy='10' r='3' fill='%23f472b6' opacity='0.6'/%3E%3Ccircle cx='16' cy='10' r='3' fill='%23f472b6' opacity='0.6'/%3E%3Ccircle cx='6' cy='7' r='2.5' fill='%23f472b6' opacity='0.5'/%3E%3Ccircle cx='18' cy='7' r='2.5' fill='%23f472b6' opacity='0.5'/%3E%3C/svg%3E") 10 10, auto;
+}
+
+#app {
+  height: 100%;
+}
+
+/* ── Selection ── */
+::selection {
+  background-color: rgba(var(--accent-primary-rgb), 0.35);
+  color: #fff;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(var(--accent-primary-rgb), 0.18);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--accent-primary-rgb), 0.35);
+}
+
+/* ── Focus ── */
+/* Kill ALL default focus rings — replace with pink glow */
+*:focus {
+  outline: none !important;
+}
+*:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.35);
+  border-radius: var(--radius-xs);
+}
+/* Chromium-specific */
+*::-webkit-focus-ring-color {
+  outline: none !important;
+}
+/* For non-:focus-visible browsers */
+button:focus,
+a:focus,
+input:focus,
+select:focus,
+textarea:focus,
+[role="button"]:focus {
+  outline: none !important;
+}
+
+/* ── Links ── */
+a {
+  color: var(--accent-primary);
+  text-decoration: none;
+  transition: all var(--transition-fast);
+}
+a:hover {
+  color: var(--accent-secondary);
+}
+
+/* ═══════════════════════════════════════════
+   Utility Classes
+   ═══════════════════════════════════════════ */
+
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+}
+.glass-hover:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border-hover);
+}
+
+/* Gradient text */
+.text-gradient {
+  background: var(--gradient-hero);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Background grid pattern */
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(var(--accent-primary-rgb), 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--accent-primary-rgb), 0.03) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* Hover scale effect — use on clickable blocks */
+.hover-lift {
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+}
+.hover-lift:hover {
+  transform: scale(1.03) translateY(-2px);
+}
+
+/* Prevent window drag blocking clicks */
+button, input, select, textarea, a, [role="button"] {
+  -webkit-app-region: no-drag;
+}
+
+/* ── Window-level softening ── */
+#app {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 1px rgba(var(--accent-primary-rgb), 0.08),
+    inset 0 1px 0 rgba(255,255,255,0.03),
+    0 0 0 1px rgba(0,0,0,0.2),
+    0 0 40px rgba(0,0,0,0.4);
+}
+
+/* ── Page transitions ── */
+.page-enter-active {
+  transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.page-leave-active {
+  transition: opacity 0.12s ease, transform 0.15s ease;
+}
+.page-enter-from {
+  opacity: 0;
+  transform: translateY(10px) scale(0.97);
+}
+.page-leave-to {
+  opacity: 0;
+  transform: translateY(-6px);
+}

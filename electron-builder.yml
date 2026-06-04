@@ -1,0 +1,22 @@
+appId: com.bakatools.app
+productName: Baka TOOLS
+directories:
+  output: release
+  buildResources: public
+files:
+  - dist/**/*
+  - electron/**/*.js
+  - package.json
+win:
+  target: nsis
+  icon: public/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+extraMetadata:
+  name: baka-tools
+# Auto-update via GitHub Releases
+publish:
+  provider: github
+  owner: starkoook
+  repo: baka

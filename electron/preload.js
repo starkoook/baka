@@ -1,0 +1,43 @@
+const { contextBridge, ipcRenderer } = require('electron')
+
+contextBridge.exposeInMainWorld('windowAPI', {
+  minimize: () => ipcRenderer.send('window:minimize'),
+  maximize: () => ipcRenderer.send('window:maximize'),
+  close: () => ipcRenderer.send('window:close'),
+  isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+  onMaximizeChange: (callback) => {
+    ipcRenderer.on('window:maximizeChange', (_event, maximized) => {
+      callback(maximized)
+    })
+  },
+})
+
+contextBridge.exposeInMainWorld('appAPI', {
+  getVersion: () => '0.1.0',
+  getPlatform: () => process.platform,
+})
+
+contextBridge.exposeInMainWorld('llmAPI', {
+  tagImage: (params) => ipcRenderer.invoke('llm:tag', params),
+  getConfig: () => ipcRenderer.invoke('llm:getConfig'),
+  saveConfig: (config) => ipcRenderer.invoke('llm:saveConfig', config),
+})
+
+contextBridge.exposeInMainWorld('fsAPI', {
+  selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
+  listImages: (folderPath) => ipcRenderer.invoke('fs:listImages', folderPath),
+  readImageBase64: (filePath) => ipcRenderer.invoke('fs:readImageBase64', filePath),
+})
+
+contextBridge.exposeInMainWorld('systemAPI', {
+  getStats: () => ipcRenderer.invoke('system:stats'),
+})
+
+contextBridge.exposeInMainWorld('updaterAPI', {
+  check: () => ipcRenderer.invoke('updater:check'),
+  download: () => ipcRenderer.send('updater:download'),
+  install: () => ipcRenderer.send('updater:install'),
+  onProgress: (cb) => { ipcRenderer.on('updater:progress', (_, d) => cb(d)) },
+  onDownloaded: (cb) => { ipcRenderer.on('updater:downloaded', (_, d) => cb(d)) },
+  onError: (cb) => { ipcRenderer.on('updater:error', (_, e) => cb(e)) },
+})

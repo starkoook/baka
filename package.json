@@ -1,0 +1,38 @@
+{
+  "name": "baka-tools",
+  "version": "0.1.0",
+  "description": "Baka TOOLS — 动漫图像 AI 处理工具箱",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "node scripts/start.js",
+    "build:renderer": "vite build",
+    "build": "vite build",
+    "package": "vite build && electron-builder",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "keywords": [
+    "anime",
+    "image-processing",
+    "ai",
+    "tagging"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "electron-updater": "^6.8.3",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.35",
+    "vue-router": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "concurrently": "^10.0.3",
+    "electron": "42.3.3",
+    "electron-builder": "^26.8.1",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16",
+    "vue-tsc": "^3.3.3",
+    "wait-on": "^9.0.10"
+  }
+}

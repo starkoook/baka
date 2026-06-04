@@ -1,0 +1,32 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'          # 推送 v1.0.0 等 tag 自动触发
+  workflow_dispatch:   # 允许手动触发
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build & Package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run package
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
