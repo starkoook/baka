@@ -13,6 +13,7 @@ const navItems: NavItem[] = [
   { path: '/reverse', label: '提示词反推', icon: 'brain' },
   { path: '/upscale', label: '超分放大', icon: 'zoom' },
   { path: '/generate', label: 'AI 生成', icon: 'sparkle' },
+  { path: '/console', label: '控制台', icon: 'terminal' },
   { path: '/settings', label: '设置', icon: 'gear' },
 ]
 
@@ -65,6 +66,9 @@ function isActive(path: string): boolean {
           <circle cx="10.5" cy="6" r="0.8" fill="currentColor" stroke="none"/>
           <circle cx="13.5" cy="6" r="0.8" fill="currentColor" stroke="none"/>
           <line x1="12" y1="9.5" x2="12" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+        </svg>
+        <svg v-else-if="item.icon === 'terminal'" class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
         </svg>
         <svg v-else-if="item.icon === 'gear'" class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
           <circle cx="12" cy="12" r="3"/>

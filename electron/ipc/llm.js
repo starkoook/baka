@@ -2,6 +2,7 @@ const { ipcMain } = require('electron')
 const fs = require('fs')
 const path = require('path')
 const { app } = require('electron')
+const sharp = require('sharp')
 
 // Default config
 const defaultConfig = {
@@ -43,6 +44,19 @@ function saveApiConfig(partial) {
 }
 
 // ── LLM API Call ──
+// ── Resize image to avoid 413 ──
+async function resizeBase64(base64, maxDim = 1024) {
+  const buffer = Buffer.from(base64, 'base64')
+  const img = sharp(buffer)
+  const meta = await img.metadata()
+  if (meta.width <= maxDim && meta.height <= maxDim) return base64
+  const resized = await img
+    .resize(maxDim, maxDim, { fit: 'inside', withoutEnlargement: true })
+    .png({ quality: 80 })
+    .toBuffer()
+  return resized.toString('base64')
+}
+
 async function callLLM(params) {
   const config = loadConfig()
   const provider = params.provider || config.provider
@@ -50,10 +64,15 @@ async function callLLM(params) {
   const apiKey = params.apiKey || config.apiKey
   const model = params.model || config.model
   const prompt = params.prompt || config.prompt
-  const imageBase64 = params.imageBase64
+  let imageBase64 = params.imageBase64
 
   if (!apiKey) {
     throw new Error('API Key 未配置，请在设置中填写')
+  }
+
+  // Resize image to avoid 413 Payload Too Large
+  if (imageBase64) {
+    imageBase64 = await resizeBase64(imageBase64, 1024)
   }
 
   if (provider === 'gemini') {
