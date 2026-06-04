@@ -120,6 +120,42 @@ ipcMain.handle('fs:readImageBase64', async (_event, filePath) => {
   }
 })
 
+// ── Dataset: list image+txt pairs ──
+ipcMain.handle('fs:listDataset', async (_event, folderPath) => {
+  const imageExts = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp'])
+  try {
+    const files = fs.readdirSync(folderPath)
+    return files
+      .filter((f) => imageExts.has(path.extname(f).toLowerCase()))
+      .map((f) => {
+        const base = f.replace(/\.[^.]+$/, '')
+        const txtPath = path.join(folderPath, base + '.txt')
+        const hasCaption = fs.existsSync(txtPath)
+        return {
+          name: f,
+          path: path.join(folderPath, f),
+          txtPath: hasCaption ? txtPath : null,
+          caption: hasCaption ? fs.readFileSync(txtPath, 'utf-8') : '',
+          hasCaption,
+        }
+      })
+  } catch (e) {
+    return []
+  }
+})
+
+// ── Save caption to txt file ──
+ipcMain.handle('fs:saveCaption', async (_event, { txtPath, caption }) => {
+  try {
+    const actualPath = txtPath || ''
+    if (!actualPath) throw new Error('No path')
+    fs.writeFileSync(actualPath, caption, 'utf-8')
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
 // ── System monitor ──
 function getGPUInfo() {
   try {

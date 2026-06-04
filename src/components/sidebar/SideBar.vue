@@ -10,6 +10,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   { path: '/', label: '仪表盘', icon: 'grid' },
   { path: '/tagger', label: '图像标注', icon: 'tag' },
+  { path: '/dataset', label: '训练集', icon: 'database' },
   { path: '/reverse', label: '提示词反推', icon: 'brain' },
   { path: '/upscale', label: '超分放大', icon: 'zoom' },
   { path: '/generate', label: 'AI 生成', icon: 'sparkle' },
@@ -61,6 +62,10 @@ function isActive(path: string): boolean {
         </svg>
         <!-- Gear icon -->
         <!-- Brain icon -->
+        <!-- Database icon -->
+        <svg v-else-if="item.icon === 'database'" class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+          <ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+        </svg>
         <svg v-else-if="item.icon === 'brain'" class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
           <path d="M12 3a3.5 3.5 0 00-3.5 3.5c0 1.3.7 2.4 1.7 3H9.5C6.5 9.5 4 11 2.5 13.5 1 16.5 2.5 19 4.5 19.5c1 .2 2-.2 2.5-1L10.5 14l3.5 4.5c.5.8 1.5 1.2 2.5 1 2-.5 3.5-2.8 2-4.8-1-1.3-2.5-2.2-4-2.5H13.8c1-.6 1.7-1.7 1.7-3A3.5 3.5 0 0012 3z"/>
           <circle cx="10.5" cy="6" r="0.8" fill="currentColor" stroke="none"/>

@@ -19,6 +19,11 @@ const router = createRouter({
       component: () => import('@/views/Upscale.vue'),
     },
     {
+      path: '/dataset',
+      name: 'dataset',
+      component: () => import('@/views/Dataset.vue'),
+    },
+    {
       path: '/reverse',
       name: 'reverse',
       component: () => import('@/views/Reverse.vue'),

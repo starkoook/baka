@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld('fsAPI', {
   selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
   listImages: (folderPath) => ipcRenderer.invoke('fs:listImages', folderPath),
   readImageBase64: (filePath) => ipcRenderer.invoke('fs:readImageBase64', filePath),
+  listDataset: (folderPath) => ipcRenderer.invoke('fs:listDataset', folderPath),
+  saveCaption: (params) => ipcRenderer.invoke('fs:saveCaption', params),
 })
 
 contextBridge.exposeInMainWorld('systemAPI', {
