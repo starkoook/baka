@@ -137,6 +137,17 @@ ipcMain.handle('fs:copyFile', async (_event, { src, dest, destDir }) => {
   }
 })
 
+// ── Read thumbnail (max 256px) ──
+ipcMain.handle('fs:readThumb', async (_event, filePath) => {
+  try {
+    const sharp = require('sharp')
+    const buffer = await sharp(filePath).resize(256, 256, { fit: 'inside' }).jpeg({ quality: 70 }).toBuffer()
+    return { success: true, base64: buffer.toString('base64') }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
 // ── Dataset: list image+txt pairs ──
 ipcMain.handle('fs:listDataset', async (_event, folderPath) => {
   const imageExts = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp'])

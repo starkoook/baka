@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('fsAPI', {
   listDataset: (folderPath) => ipcRenderer.invoke('fs:listDataset', folderPath),
   saveCaption: (params) => ipcRenderer.invoke('fs:saveCaption', params),
   copyFile: (params) => ipcRenderer.invoke('fs:copyFile', params),
+  readThumb: (filePath) => ipcRenderer.invoke('fs:readThumb', filePath),
 })
 
 contextBridge.exposeInMainWorld('systemAPI', {
