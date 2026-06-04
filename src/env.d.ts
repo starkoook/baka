@@ -62,6 +62,7 @@ declare global {
     llmAPI: LLMAPI
     systemAPI: SystemAPI
     fsAPI: FsAPI
+    logAPI: { onEntry: (cb: (entry: { time: string; type: string; message: string }) => void) => void }
   }
 }
 

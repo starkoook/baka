@@ -115,13 +115,10 @@ async function runBatchTagging() {
     await window.fsAPI.saveCaption({ txtPath, caption: tags })
     savedCount++
 
-    // Copy to .已标 folder
+    // Copy image to .已标 folder (no txt)
     const ext = filePath.split('.').pop() || 'png'
     const name = filePath.split(/[/\\]/).pop() || 'image.' + ext
-    const destImg = taggedDir + '/' + name
-    const destTxt = taggedDir + '/' + name.replace(/\.[^.]+$/, '.txt')
-    await window.fsAPI.copyFile({ src: filePath, dest: destImg, destDir: taggedDir })
-    await window.fsAPI.saveCaption({ txtPath: destTxt, caption: tags })
+    await window.fsAPI.copyFile({ src: filePath, dest: taggedDir + '/' + name, destDir: taggedDir })
   }
 
   const doneCount = [...batchResults.value.values()].filter((r) => r.done && !r.error).length

@@ -37,6 +37,10 @@ contextBridge.exposeInMainWorld('systemAPI', {
   getStats: () => ipcRenderer.invoke('system:stats'),
 })
 
+contextBridge.exposeInMainWorld('logAPI', {
+  onEntry: (cb) => { ipcRenderer.on('log:entry', (_e, d) => cb(d)) },
+})
+
 contextBridge.exposeInMainWorld('updaterAPI', {
   check: () => ipcRenderer.invoke('updater:check'),
   download: () => ipcRenderer.send('updater:download'),

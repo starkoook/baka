@@ -43,6 +43,12 @@ function createWindow() {
     },
   })
 
+  // ── Capture all renderer console output → log panel ──
+  mainWindow.webContents.on('console-message', (_event, level, message) => {
+    const type = level === 3 ? 'error' : level === 2 ? 'warn' : 'info'
+    mainWindow?.webContents.send('log:entry', { time: new Date().toLocaleTimeString('zh-CN', { hour12: false }), type, message })
+  })
+
   mainWindow.on('maximize', () => {
     mainWindow?.webContents.send('window:maximizeChange', true)
   })

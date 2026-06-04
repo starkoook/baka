@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useLogStore } from '@/stores/logs'
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 
 const logStore = useLogStore()
 const listEl = ref<HTMLElement | null>(null)
@@ -8,6 +8,16 @@ const listEl = ref<HTMLElement | null>(null)
 watch(() => logStore.logs.length, async () => {
   await nextTick()
   if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight
+})
+
+// ── Listen for main process logs ──
+function handleLog(entry: { time: string; type: string; message: string }) {
+  logStore.add(entry.type as any, entry.message)
+}
+
+onMounted(() => {
+  if (window.logAPI) window.logAPI.onEntry(handleLog)
+  logStore.info('控制台已就绪')
 })
 
 function typeIcon(t: string): string {
