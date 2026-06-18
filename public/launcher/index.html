@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SD-reScripts Launcher</title>
+    <style>
+      /* Prevent FOUC */
+      body { margin: 0; background: #0a0b0e; overflow: hidden; }
+    </style>
+    <script>
+      (function(){
+        const API = {
+          get_settings:()=>({language:'zh',theme:'dark',proxy_enabled:false}),set_settings:()=>({}),
+          get_language:()=>'zh',set_language:()=>({}),get_translations:()=>({}),
+          get_app_version:()=>'1.6.12',get_project_version:()=>({version:'1.6.12'}),
+          get_runtimes:()=>({runtimes:{},selected_runtime_id:null,best_runtime_id:null,installable:false}),
+          get_runtime_defs:()=>[],get_best_runtime:()=>null,select_runtime:()=>({success:true}),
+          get_gpu_stats:()=>({gpus:[],platform:'win32'}),
+          get_health_report:()=>({status:'ok',checks:[]}),
+          get_launch_preflight:()=>({ok:true,warnings:[],errors:[]}),
+          get_runtime_recommendation:()=>null,get_runtime_compatibility:()=>[],
+          get_dependency_cache_states:()=>({}),prefetch_runtime_dependencies:()=>({}),clear_runtime_dependency_cache:()=>({}),
+          install_runtime:()=>({success:false}),initialize_runtime:()=>({success:false}),uninstall_runtime:()=>({success:false}),
+          scan_plugins:()=>[],set_plugin_enabled:()=>({success:true}),
+          get_ui_profiles:()=>({profiles:[],active:'default'}),activate_ui_profile:()=>({success:true}),install_ui_profile:()=>({success:false}),uninstall_ui_profile:()=>({success:false}),
+          get_managed_catalog:()=>({presets:[]}),test_managed_connection:()=>({success:false}),get_managed_import_state:()=>({}),import_managed_preset:()=>({success:false}),revert_managed_import:()=>({success:true}),
+          get_task_state:()=>({task:null,status:'idle'}),get_task_history:()=>[],clear_task_history:()=>({success:true}),
+          check_for_updates:()=>({update_available:false}),run_updater:()=>({success:false}),
+          launch:()=>({success:false,error:'Use Baka TOOLS'}),stop:()=>({success:true}),kill:()=>({success:true}),is_running:()=>false,is_installing:()=>false,
+          get_launch_plan:()=>null,get_install_plan:()=>null,
+          open_path:()=>({success:true}),flush_frontend_settings_on_close:()=>({success:true}),
+        }
+        const wrap = {}
+        for(const[k,v]of Object.entries(API)){wrap[k]=(...a)=>{try{return Promise.resolve(v(...a))}catch(e){return Promise.reject(e)}}}
+        window.pywebview = { api: wrap }
+      })()
+    </script>
+    <script type="module" crossorigin src="./assets/index-pzgwsAmV.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-D_VazE6z.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

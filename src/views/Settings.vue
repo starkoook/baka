@@ -4,199 +4,162 @@ import { useAppStore } from '@/stores/app'
 
 const appStore = useAppStore()
 
-const provider = ref('openai')
-const baseUrl = ref('https://api.openai.com/v1')
-const apiKey = ref('')
-const model = ref('gpt-4o')
-const prompt = ref('')
-const saving = ref(false)
-const saved = ref(false)
-const connecting = ref(false)
-const connectStatus = ref('')
-const models = ref<string[]>([])
-const showKey = ref(false)
+const provider = ref('openai'); const apiKey = ref(''); const baseUrl = ref(''); const model = ref('gpt-4o')
+const temperature = ref(0.3); const maxTokens = ref(500); const systemPrompt = ref('')
+const profiles = ref<string[]>([]); const activeProfile = ref(''); const models = ref<string[]>([])
+const testResult = ref(''); const testOk = ref(false); const showApiKey = ref(false)
+const cacheItems = ref<{ name: string; size: string }[]>([]); const cacheTotal = ref('')
 
-onMounted(async () => {
-  if (window.llmAPI) {
-    try {
-      const c = await window.llmAPI.getConfig()
-      provider.value = c.provider || 'openai'
-      baseUrl.value = c.baseUrl || 'https://api.openai.com/v1'
-      apiKey.value = c.apiKey || ''
-      model.value = c.model || 'gpt-4o'
-      prompt.value = c.prompt || ''
-    } catch (_) {}
-  }
-})
-
-async function connectAndList() {
-  if (!apiKey.value.trim()) {
-    connectStatus.value = '请输入 API Key'; return
-  }
-  connecting.value = true; connectStatus.value = '连接中...'; models.value = []
-  try {
-    const res = await window.llmAPI.listModels({
-      provider: provider.value, baseUrl: baseUrl.value, apiKey: apiKey.value,
-    })
-    if (res.success && res.models?.length) {
-      models.value = res.models
-      connectStatus.value = `已获取 ${res.models.length} 个模型`
-      if (!model.value || !res.models.includes(model.value)) {
-        model.value = res.models[0]
-      }
-    } else {
-      connectStatus.value = res.error || '未获取到模型'
-    }
-  } catch (e: any) { connectStatus.value = e.message || '连接失败' }
-  connecting.value = false
-}
-
-async function saveConfig() {
+async function loadConfig() {
   if (!window.llmAPI) return
-  saving.value = true; saved.value = false
-  await window.llmAPI.saveConfig({
-    provider: provider.value, baseUrl: baseUrl.value,
-    apiKey: apiKey.value, model: model.value, prompt: prompt.value,
-  })
-  saved.value = true
-  setTimeout(() => { saved.value = false }, 2000)
-  saving.value = false
+  const c = await window.llmAPI.getConfig()
+  if (c) { provider.value = c.provider || 'openai'; apiKey.value = c.apiKey || ''; baseUrl.value = c.baseUrl || ''; model.value = c.model || 'gpt-4o'; temperature.value = c.temperature ?? 0.3; maxTokens.value = c.maxTokens ?? 500; systemPrompt.value = c.prompt || '' }
+  const p = await window.llmAPI.getProfiles(); if (p) profiles.value = p
+  if (window.cacheAPI) { const s = await window.cacheAPI.getSize(); if (s) { cacheItems.value = s.items || []; cacheTotal.value = s.total || '0 B' } }
 }
+async function saveConfig() { if (window.llmAPI) await window.llmAPI.saveConfig({ provider: provider.value, apiKey: apiKey.value, baseUrl: baseUrl.value, model: model.value, temperature: temperature.value, maxTokens: maxTokens.value, prompt: systemPrompt.value }); appStore.setStatus('配置已保存') }
+async function testConn() { if (!window.llmAPI) return; testResult.value = '测试中...'; testOk.value = false; const r = await window.llmAPI.test({ provider: provider.value, apiKey: apiKey.value, baseUrl: baseUrl.value, model: model.value }); testOk.value = r.success; testResult.value = r.success ? '连接成功' : (r.error || '连接失败') }
+async function loadModels() { if (!window.llmAPI) return; const r = await window.llmAPI.listModels({ provider: provider.value, baseUrl: baseUrl.value, apiKey: apiKey.value }); if (r.success && r.models) models.value = r.models }
+async function saveProfile() { const name = prompt('配置存档名称:'); if (name && window.llmAPI) { await window.llmAPI.saveProfile({ name, config: { provider: provider.value, apiKey: apiKey.value, baseUrl: baseUrl.value, model: model.value, temperature: temperature.value, maxTokens: maxTokens.value, prompt: systemPrompt.value } }); profiles.value = await window.llmAPI.getProfiles() || [] } }
+async function switchProfile(name: string) { if (!window.llmAPI) return; await window.llmAPI.switchProfile(name); activeProfile.value = name; await loadConfig() }
+async function deleteProfile(name: string) { if (!confirm(`删除 "${name}"？`)) return; if (window.llmAPI) { await window.llmAPI.deleteProfile(name); profiles.value = await window.llmAPI.getProfiles() || [] } }
+async function clearCache(target: string) { if (window.cacheAPI) { await window.cacheAPI.clear(target); const s = await window.cacheAPI.getSize(); if (s) { cacheItems.value = s.items || []; cacheTotal.value = s.total || '0 B' } } }
+onMounted(loadConfig)
 </script>
 
 <template>
-  <div class="settings-page">
-    <div class="page-header">
-      <h1 class="page-title">设置</h1>
-      <p class="page-desc">配置 Baka TOOLS 参数</p>
+  <div class="sk-root">
+    <div class="sk-hero">
+      <div class="sk-hero-glow"></div>
+      <div class="sk-hero-icon">⚙</div>
+      <h1>Settings</h1>
+      <p>配置 LLM API · 管理缓存 · 自定义外观</p>
+      <div class="sk-version">v0.2 · {{ appStore.platform }}</div>
     </div>
 
-    <!-- Appearance -->
-    <div class="settings-group glass-panel">
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-label">主题</span>
-          <span class="setting-desc">{{ appStore.theme === 'dark' ? '暗色霓虹模式' : '亮色日间模式' }}</span>
-        </div>
-        <button class="theme-toggle" @click="appStore.toggleTheme()">
-          <svg v-if="appStore.theme === 'dark'" class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
-            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-            <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
-            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-          </svg>
-          <svg v-else class="toggle-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-          </svg>
-          <span>{{ appStore.theme === 'dark' ? '夜间' : '日间' }}</span>
-        </button>
-      </div>
-      <div class="setting-divider"></div>
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-label">桌面人偶</span>
-          <span class="setting-desc">{{ appStore.showMascot ? '仪表盘常驻显示' : '已关闭' }}</span>
-        </div>
-        <button class="theme-toggle" @click="appStore.toggleMascot()">
-          <span>{{ appStore.showMascot ? '🎀 显示中' : '关闭' }}</span>
-        </button>
-      </div>
-    </div>
-
-    <!-- LLM API -->
-    <div class="settings-group glass-panel" style="margin-top: 16px;">
-      <div class="setting-section-title">🤖 LLM API 配置</div>
-
-      <!-- Provider -->
-      <div class="setting-row">
-        <label class="field-label">提供商</label>
-        <div class="field-right">
-          <div class="source-tabs">
-            <button class="source-tab" :class="{ active: provider === 'openai' }" @click="provider = 'openai'">OpenAI 兼容</button>
-            <button class="source-tab" :class="{ active: provider === 'gemini' }" @click="provider = 'gemini'">Google Gemini</button>
-          </div>
-        </div>
-      </div>
-      <div class="setting-divider"></div>
-
-      <!-- Base URL -->
-      <div class="setting-row">
-        <label class="field-label">API 地址</label>
-        <div class="field-right">
-          <input class="form-input styled-input" v-model="baseUrl" placeholder="https://api.openai.com/v1" />
-        </div>
-      </div>
-      <div class="setting-divider"></div>
-
-      <!-- API Key -->
-      <div class="setting-row">
-        <label class="field-label">API Key</label>
-        <div class="field-right">
-          <div class="input-with-icon">
-            <input class="form-input styled-input" :type="showKey ? 'text' : 'password'" v-model="apiKey" placeholder="sk-..." />
-            <button class="eye-btn" @click="showKey = !showKey">
-              <svg v-if="!showKey" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
-              </svg>
-              <svg v-else width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-                <path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/>
-              </svg>
+    <div class="sk-grid">
+      <!-- LEFT COLUMN -->
+      <div class="sk-col">
+        <!-- Appearance -->
+        <div class="sk-card">
+          <div class="sk-card-icon">🎨</div>
+          <div class="sk-card-title">外观</div>
+          <div class="sk-card-sub">选择你喜欢的界面风格</div>
+          <div class="sk-theme-row">
+            <button class="sk-theme-btn" :class="{ on: !appStore.isLight }" @click="appStore.isLight ? appStore.toggleTheme() : undefined">
+              <span class="sk-theme-icon">🌙</span>
+              <span class="sk-theme-label">深色模式</span>
+              <span class="sk-theme-check" v-if="!appStore.isLight">✓</span>
+            </button>
+            <button class="sk-theme-btn" :class="{ on: appStore.isLight }" @click="!appStore.isLight ? appStore.toggleTheme() : undefined">
+              <span class="sk-theme-icon">☀</span>
+              <span class="sk-theme-label">浅色模式</span>
+              <span class="sk-theme-check" v-if="appStore.isLight">✓</span>
             </button>
           </div>
         </div>
-      </div>
-      <div class="setting-divider"></div>
 
-      <!-- Connect + Model -->
-      <div class="setting-row">
-        <label class="field-label">模型</label>
-        <div class="field-right">
-          <div class="model-row">
-            <select class="form-input styled-input" v-model="model" style="flex:1;">
-              <option v-if="models.length === 0" :value="model">{{ model || '请先连接' }}</option>
-              <option v-for="m in models" :key="m" :value="m">{{ m }}</option>
-            </select>
-            <button class="connect-btn" @click="connectAndList" :disabled="connecting">
-              <svg v-if="connecting" class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
-              <span v-else>🔗</span>
-              {{ connecting ? '获取中' : '连接' }}
+        <!-- Cache -->
+        <div class="sk-card">
+          <div class="sk-card-icon">🗂</div>
+          <div class="sk-card-title">缓存</div>
+          <div class="sk-card-sub">总计 {{ cacheTotal }}</div>
+          <div class="sk-cache-list" v-if="cacheItems.length > 0">
+            <div v-for="c in cacheItems" :key="c.name" class="sk-cache-row">
+              <span>{{ c.name }}</span>
+              <span class="sk-cache-size">{{ c.size }}</span>
+              <button @click="clearCache(c.name)">清理</button>
+            </div>
+          </div>
+          <div v-else class="sk-empty">暂无缓存数据</div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="sk-col">
+        <!-- LLM Config -->
+        <div class="sk-card sk-card-main">
+          <div class="sk-card-icon">☁</div>
+          <div class="sk-card-title">LLM API</div>
+          <div class="sk-card-sub">云端大模型用于图像标注和提示词反推</div>
+
+          <!-- Profiles -->
+          <div class="sk-field" v-if="profiles.length > 0">
+            <label>配置存档</label>
+            <div class="sk-chips">
+              <button v-for="p in profiles" :key="p" :class="{ active: activeProfile === p }" @click="switchProfile(p)">{{ p }}</button>
+              <button v-if="activeProfile" class="sk-chip-x" @click="deleteProfile(activeProfile)">×</button>
+            </div>
+          </div>
+
+          <!-- Provider -->
+          <div class="sk-field">
+            <label>提供商</label>
+            <div class="sk-seg">
+              <button :class="{ on: provider === 'openai' }" @click="provider = 'openai'">OpenAI</button>
+              <button :class="{ on: provider === 'gemini' }" @click="provider = 'gemini'">Gemini</button>
+            </div>
+          </div>
+
+          <!-- Base URL -->
+          <div class="sk-field">
+            <label>API 地址</label>
+            <input v-model="baseUrl" :placeholder="provider === 'openai' ? 'https://api.openai.com/v1' : ''" />
+          </div>
+
+          <!-- API Key -->
+          <div class="sk-field">
+            <label>API 密钥</label>
+            <div class="sk-input-grp">
+              <input :type="showApiKey ? 'text' : 'password'" v-model="apiKey" placeholder="sk-..." />
+              <button @click="showApiKey = !showApiKey">{{ showApiKey ? '🙈' : '👁' }}</button>
+            </div>
+          </div>
+
+          <!-- Model -->
+          <div class="sk-field">
+            <label>模型</label>
+            <div class="sk-input-row">
+              <select v-model="model" v-if="models.length > 0"><option v-for="m in models" :key="m" :value="m">{{ m }}</option></select>
+              <input v-else v-model="model" placeholder="gpt-4o" />
+              <button class="sk-btn-mini" @click="loadModels">获取</button>
+            </div>
+          </div>
+
+          <!-- System Prompt -->
+          <div class="sk-field">
+            <label>标注指令 <span class="sk-label-hint">— 告诉 AI 如何标注图像</span></label>
+            <textarea v-model="systemPrompt" rows="4" placeholder="Danbooru 标签格式输出，按置信度排序..."></textarea>
+          </div>
+
+          <!-- Params -->
+          <div class="sk-field">
+            <label>参数</label>
+            <div class="sk-params">
+              <div class="sk-param">
+                <span>Temperature</span>
+                <input type="range" min="0" max="2" step="0.1" v-model.number="temperature" />
+                <em>{{ temperature.toFixed(1) }}</em>
+              </div>
+              <div class="sk-param">
+                <span>Max Tokens</span>
+                <input type="number" min="50" max="4000" step="50" v-model.number="maxTokens" />
+              </div>
+            </div>
+          </div>
+
+          <!-- Actions -->
+          <div class="sk-actions">
+            <button class="sk-btn sk-btn-pri" @click="saveConfig">
+              <span>💾</span> 保存
+            </button>
+            <button class="sk-btn" @click="saveProfile">
+              <span>📋</span> 另存为
+            </button>
+            <button class="sk-btn" @click="testConn" :class="{ ok: testOk, fail: testResult && !testOk }">
+              <span>🔌</span> {{ testResult || '测试连接' }}
             </button>
           </div>
-          <span class="connect-status" v-if="connectStatus" :class="{ error: connectStatus.includes('失败') || connectStatus.includes('请输入') }">
-            {{ connectStatus }}
-          </span>
-        </div>
-      </div>
-      <div class="setting-divider"></div>
-
-      <!-- Prompt -->
-      <div class="setting-row">
-        <label class="field-label">标注 Prompt</label>
-        <div class="field-right">
-          <textarea class="form-input styled-input" v-model="prompt" rows="3" placeholder="发送给 LLM 的标注指令..."></textarea>
-        </div>
-      </div>
-
-      <!-- Save -->
-      <div class="setting-footer">
-        <button class="save-btn" @click="saveConfig" :disabled="saving">
-          {{ saving ? '保存中...' : saved ? '✓ 已保存' : '💾 保存配置' }}
-        </button>
-      </div>
-    </div>
-
-    <!-- About -->
-    <div class="settings-group glass-panel" style="margin-top: 16px;">
-      <div class="setting-section-title">关于</div>
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-label">版本</span><span class="setting-desc">Baka TOOLS v{{ appStore.version }}</span>
-        </div>
-      </div>
-      <div class="setting-divider"></div>
-      <div class="setting-item">
-        <div class="setting-info">
-          <span class="setting-label">技术栈</span><span class="setting-desc">Electron · Vue 3 · Vite · LLM</span>
         </div>
       </div>
     </div>
@@ -204,122 +167,101 @@ async function saveConfig() {
 </template>
 
 <style scoped>
-.settings-page { max-width: 660px; margin: 0 auto; }
-.page-header { margin-bottom: 24px; }
-.page-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; letter-spacing: -0.01em; }
-.page-desc { font-size: 13px; color: var(--text-tertiary); }
+.sk-root { max-width: 880px; margin: 0 auto; }
+.sk-hero { text-align: center; padding: 36px 0 28px; position: relative; }
+.sk-hero-glow { position: absolute; width: 260px; height: 260px; border-radius: 50%; background: radial-gradient(circle, rgba(255,105,180,0.1) 0%, transparent 70%); top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.sk-hero-icon { font-size: 40px; margin-bottom: 8px; position: relative; display: block; animation: sk-float 3s ease-in-out infinite; }
+@keyframes sk-float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.sk-hero h1 { font-size: 28px; font-weight: 700; background: linear-gradient(135deg, #ff69b4 0%, #f9a8d4 50%, #c4b5fd 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0 0 6px; position: relative; }
+.sk-hero p { font-size: 13px; color: #6b7280; margin: 0; position: relative; }
+.sk-version { font-size: 10px; color: #374151; margin-top: 8px; position: relative; font-family: monospace; }
 
-.settings-group { padding: 8px 0; }
+.sk-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
 
-/* ── Rows ── */
-.setting-row {
-  display: flex; align-items: flex-start; gap: 16px;
-  padding: 14px 20px;
+/* Cards */
+.sk-card {
+  background: linear-gradient(145deg, rgba(255,255,255,0.025) 0%, rgba(255,255,255,0.01) 100%);
+  border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 22px;
+  transition: all 0.3s; position: relative; overflow: hidden;
 }
-.field-label {
-  font-size: 13px; font-weight: 600; color: var(--text-secondary);
-  min-width: 80px; padding-top: 9px; flex-shrink: 0;
-}
-.field-right { flex: 1; min-width: 0; }
+.sk-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent); opacity: 0; transition: opacity 0.3s; }
+.sk-card:hover::before { opacity: 1; }
+.sk-card:hover { border-color: rgba(255,255,255,0.1); transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,0.3); }
+.sk-card-main { border-color: rgba(255,105,180,0.1); }
+.sk-card-main:hover { border-color: rgba(255,105,180,0.2); box-shadow: 0 12px 40px rgba(255,105,180,0.08); }
+.sk-card-icon { font-size: 26px; margin-bottom: 8px; }
+.sk-card-title { font-size: 15px; font-weight: 700; color: #f3f4f6; margin-bottom: 2px; }
+.sk-card-sub { font-size: 11px; color: #6b7280; margin-bottom: 16px; }
+.sk-empty { text-align: center; padding: 20px; font-size: 12px; color: #4b5563; }
 
-/* ── Styled inputs ── */
-.styled-input {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: var(--radius-sm);
-  padding: 10px 14px; font-size: 13px; color: var(--text-primary);
-  font-family: var(--font-sans);
-  transition: all 0.25s ease;
-  width: 100%;
+/* Theme buttons */
+.sk-theme-row { display: flex; gap: 10px; }
+.sk-theme-btn {
+  flex: 1; padding: 14px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02);
+  border-radius: 12px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 6px;
+  transition: all 0.2s; position: relative;
 }
-.styled-input:focus {
-  outline: none;
-  border-color: rgba(var(--accent-primary-rgb), 0.4);
-  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.08);
-  background: rgba(255,255,255,0.06);
-}
-.styled-input::placeholder { color: var(--text-disabled); }
+.sk-theme-btn:hover { border-color: rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); }
+.sk-theme-btn.on { border-color: rgba(255,105,180,0.3); background: rgba(255,105,180,0.06); }
+.sk-theme-icon { font-size: 28px; }
+.sk-theme-label { font-size: 12px; color: #9ca3af; font-weight: 500; }
+.sk-theme-btn.on .sk-theme-label { color: #ff69b4; }
+.sk-theme-check { position: absolute; top: 8px; right: 10px; font-size: 12px; color: #ff69b4; font-weight: 700; }
 
-/* ── Input with eye icon ── */
-.input-with-icon { position: relative; display: flex; align-items: center; }
-.input-with-icon .styled-input { padding-right: 40px; }
-.eye-btn {
-  position: absolute; right: 8px;
-  background: none; border: none; color: var(--text-tertiary);
-  cursor: pointer; padding: 4px; display: flex;
-  transition: color 0.2s;
-}
-.eye-btn:hover { color: var(--text-secondary); }
+/* Cache */
+.sk-cache-list { display: flex; flex-direction: column; gap: 6px; }
+.sk-cache-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: rgba(255,255,255,0.02); border-radius: 8px; font-size: 12px; color: #9ca3af; }
+.sk-cache-size { font-family: monospace; font-size: 11px; color: #6b7280; margin-left: auto; }
+.sk-cache-row button { padding: 3px 10px; border: 1px solid rgba(239,68,68,0.15); background: none; border-radius: 14px; color: #ef4444; font-size: 10px; cursor: pointer; }
+.sk-cache-row button:hover { background: rgba(239,68,68,0.1); }
 
-/* ── Model row ── */
-.model-row { display: flex; gap: 8px; align-items: center; }
-
-.connect-btn {
-  display: flex; align-items: center; gap: 5px;
-  padding: 9px 16px; white-space: nowrap;
-  border: 1px solid rgba(var(--accent-primary-rgb), 0.25);
-  border-radius: var(--radius-sm);
-  background: rgba(var(--accent-primary-rgb), 0.08);
-  color: var(--accent-primary); font-size: 12px; font-weight: 600;
-  font-family: var(--font-sans); cursor: pointer;
-  transition: all 0.25s ease;
+/* Fields */
+.sk-field { margin-bottom: 14px; }
+.sk-field label { display: block; font-size: 11px; font-weight: 600; color: #9ca3af; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+.sk-label-hint { font-weight: 400; text-transform: none; letter-spacing: 0; color: #6b7280; font-size: 10px; }
+.sk-field input, .sk-field select, .sk-field textarea {
+  width: 100%; padding: 9px 12px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px; color: #e5e7eb; font-size: 12px; font-family: inherit; box-sizing: border-box;
+  transition: border-color 0.2s;
 }
-.connect-btn:hover { background: rgba(var(--accent-primary-rgb), 0.15); box-shadow: 0 0 12px rgba(var(--accent-primary-rgb), 0.15); }
-.connect-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.sk-field input:focus, .sk-field select:focus, .sk-field textarea:focus { outline: none; border-color: rgba(255,105,180,0.3); box-shadow: 0 0 0 3px rgba(255,105,180,0.06); }
+.sk-field textarea { resize: vertical; line-height: 1.5; }
 
-.connect-status {
-  display: block; font-size: 11px; margin-top: 5px;
-  color: var(--accent-success);
-}
-.connect-status.error { color: var(--accent-danger); }
+.sk-input-grp { display: flex; }
+.sk-input-grp input { flex: 1; border-radius: 8px 0 0 8px; }
+.sk-input-grp button { padding: 9px 12px; border: 1px solid rgba(255,255,255,0.08); border-left: none; background: rgba(0,0,0,0.2); border-radius: 0 8px 8px 0; cursor: pointer; font-size: 14px; }
 
-/* ── Save button ── */
-.setting-footer { padding: 16px 20px; display: flex; justify-content: flex-end; }
-.save-btn {
-  display: flex; align-items: center; gap: 6px;
-  padding: 11px 28px;
-  border: none; border-radius: var(--radius-full);
-  background: var(--gradient-accent);
-  color: #fff; font-size: 13px; font-weight: 700;
-  font-family: var(--font-sans); cursor: pointer;
-  box-shadow: 0 4px 16px rgba(var(--accent-primary-rgb), 0.3);
-  transition: all 0.3s cubic-bezier(0.34,1.56,0.64,1);
-}
-.save-btn:hover { transform: scale(1.04); box-shadow: 0 8px 28px rgba(var(--accent-primary-rgb), 0.45); }
-.save-btn:active { transform: scale(0.96); }
-.save-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+.sk-input-row { display: flex; gap: 6px; }
+.sk-input-row input, .sk-input-row select { flex: 1; }
 
-/* ── Source tabs ── */
-.source-tabs { display: flex; gap: 6px; }
-.source-tab {
-  padding: 8px 16px; border: 1px solid var(--glass-border);
-  border-radius: var(--radius-full); background: var(--glass-bg);
-  color: var(--text-tertiary); font-size: 12px;
-  font-family: var(--font-sans); font-weight: 500;
-  cursor: pointer; transition: all var(--transition-fast);
-}
-.source-tab:hover { background: var(--glass-bg-hover); color: var(--text-secondary); }
-.source-tab.active { background: var(--accent-bg); border-color: var(--border-accent); color: var(--accent-primary); font-weight: 600; }
+/* Segmented */
+.sk-seg { display: flex; border-radius: 8px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); }
+.sk-seg button { flex: 1; padding: 8px; border: none; background: none; color: #6b7280; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+.sk-seg button.on { background: rgba(255,105,180,0.15); color: #ff69b4; font-weight: 600; }
 
-/* ── Theme toggle ── */
-.setting-item {
-  display: flex; align-items: center; justify-content: space-between; padding: 14px 20px;
-}
-.setting-info { display: flex; flex-direction: column; gap: 2px; }
-.setting-label { font-size: 14px; color: var(--text-primary); font-weight: 500; }
-.setting-desc { font-size: 12px; color: var(--text-tertiary); }
-.setting-divider { height: 1px; background: var(--border-subtle); margin: 0 20px; }
-.setting-section-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); padding: 12px 20px 8px; }
-.theme-toggle {
-  display: flex; align-items: center; gap: 8px; padding: 9px 16px;
-  background: var(--glass-bg); border: 1px solid var(--glass-border);
-  border-radius: var(--radius-full); color: var(--text-secondary);
-  font-size: 13px; font-family: var(--font-sans); font-weight: 500;
-  cursor: pointer; transition: all var(--transition-base); backdrop-filter: blur(8px);
-}
-.theme-toggle:hover { background: var(--glass-bg-hover); border-color: var(--border-accent); color: var(--text-primary); transform: scale(1.04); }
-.toggle-icon { width: 16px; height: 16px; }
+/* Chips */
+.sk-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.sk-chips button { padding: 5px 12px; border: 1px solid rgba(255,255,255,0.08); background: none; border-radius: 20px; color: #9ca3af; font-size: 11px; cursor: pointer; }
+.sk-chips button.active { border-color: #ff69b4; color: #ff69b4; }
+.sk-chip-x { border-color: transparent !important; color: #ef4444 !important; }
 
-.spin { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+/* Params */
+.sk-params { display: flex; gap: 14px; }
+.sk-param { flex: 1; }
+.sk-param span { font-size: 10px; color: #6b7280; display: block; margin-bottom: 4px; }
+.sk-param em { font-style: normal; font-size: 12px; color: #ff69b4; font-weight: 700; font-family: monospace; }
+.sk-param input[type=range] { width: 100%; accent-color: #ff69b4; padding: 0; background: none; border: none; }
+.sk-param input[type=number] { width: 100%; }
+
+/* Buttons */
+.sk-btn-mini { padding: 5px 10px; border: 1px solid rgba(255,255,255,0.08); background: none; border-radius: 6px; color: #6b7280; font-size: 10px; cursor: pointer; white-space: nowrap; }
+.sk-btn-mini:hover { color: #ff69b4; border-color: rgba(255,105,180,0.2); }
+
+.sk-actions { display: flex; gap: 8px; padding-top: 8px; }
+.sk-btn { padding: 9px 16px; border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.02); border-radius: 10px; color: #9ca3af; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+.sk-btn:hover { border-color: rgba(255,255,255,0.15); color: #d1d5db; background: rgba(255,255,255,0.04); }
+.sk-btn-pri { background: linear-gradient(135deg, rgba(255,105,180,0.15), rgba(255,105,180,0.05)); border-color: rgba(255,105,180,0.2); color: #ff69b4; font-weight: 600; }
+.sk-btn-pri:hover { background: linear-gradient(135deg, rgba(255,105,180,0.25), rgba(255,105,180,0.1)); border-color: rgba(255,105,180,0.35); }
+.sk-btn.ok { border-color: rgba(34,197,94,0.3); color: #22c55e; }
+.sk-btn.fail { border-color: rgba(239,68,68,0.3); color: #ef4444; }
 </style>

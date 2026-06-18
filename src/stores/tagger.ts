@@ -16,12 +16,27 @@ export const useTaggerStore = defineStore('tagger', () => {
   const threshold = ref(0.35)
   const lastError = ref('')
 
+  // Gallery import: batch of images to tag
+  const pendingImages = ref<GalleryImage[]>([])
+  const fromGallery = ref(false)
+
   const localModels = [
     { value: 'wd14-vit-v2', label: 'WD14 ViT v2' },
     { value: 'wd14-convnext-v2', label: 'WD14 ConvNext v2' },
     { value: 'wd14-swinv2-v2', label: 'WD14 SwinV2 v2' },
     { value: 'deepdanbooru', label: 'DeepDanbooru' },
   ]
+
+  // ── Import from Gallery ──
+  function importFromGallery(images: GalleryImage[]) {
+    pendingImages.value = images
+    fromGallery.value = true
+  }
+
+  function clearImport() {
+    pendingImages.value = []
+    fromGallery.value = false
+  }
 
   // ── Local model tagging (placeholder) ──
   async function runLocalTagging() {
@@ -58,7 +73,6 @@ export const useTaggerStore = defineStore('tagger', () => {
       })
 
       if (res.success && res.tags) {
-        // Assign decreasing confidence to LLM-generated tags
         results.value = res.tags.map((tag, i) => ({
           tag,
           confidence: Math.max(0.99 - i * 0.01, 0.5),
@@ -99,6 +113,10 @@ export const useTaggerStore = defineStore('tagger', () => {
     threshold,
     lastError,
     localModels,
+    pendingImages,
+    fromGallery,
+    importFromGallery,
+    clearImport,
     runTagging,
     runLLMTagging,
     clearResults,

@@ -39,7 +39,12 @@ export const useAppStore = defineStore('app', () => {
     saveConfig({ theme: t, showMascot: showMascot.value })
   }
 
-  function toggleTheme() { setTheme(theme.value === 'dark' ? 'light' : 'dark') }
+  function toggleTheme() {
+    // Trigger wipe animation
+    document.documentElement.classList.add('theme-wiping')
+    setTimeout(() => document.documentElement.classList.remove('theme-wiping'), 600)
+    setTheme(theme.value === 'dark' ? 'light' : 'dark')
+  }
 
   function toggleMascot() {
     showMascot.value = !showMascot.value

@@ -9,19 +9,19 @@ const router = createRouter({
       component: () => import('@/views/Dashboard.vue'),
     },
     {
-      path: '/tagger',
-      name: 'tagger',
-      component: () => import('@/views/Tagger.vue'),
-    },
-    {
       path: '/upscale',
       name: 'upscale',
       component: () => import('@/views/Upscale.vue'),
     },
     {
-      path: '/dataset',
-      name: 'dataset',
-      component: () => import('@/views/Dataset.vue'),
+      path: '/gallery',
+      name: 'gallery',
+      component: () => import('@/views/TaggerV2.vue'),
+    },
+    {
+      path: '/training',
+      name: 'training',
+      component: () => import('@/views/Training.vue'),
     },
     {
       path: '/reverse',

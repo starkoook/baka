@@ -7,6 +7,9 @@ files:
   - dist/**/*
   - electron/**/*.js
   - package.json
+extraResources:
+  - from: dist/renderer/launcher
+    to: launcher
 win:
   target: nsis
   icon: public/icon.png

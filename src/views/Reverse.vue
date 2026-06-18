@@ -1,287 +1,132 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useAppStore } from '@/stores/app'
-import { playSuccess } from '@/composables/useSound'
-
+import { ref } from 'vue'; import { useAppStore } from '@/stores/app'; import { playSuccess } from '@/composables/useSound'
 const appStore = useAppStore()
-
-const isDragover = ref(false)
-const imageBase64 = ref<string | null>(null)
-const imagePreview = ref<string | null>(null)
-const fileName = ref<string | null>(null)
-const isProcessing = ref(false)
-const promptText = ref('')
-const copied = ref(false)
-
-// ── Drag & drop ──
+const isDragover = ref(false); const imageBase64 = ref<string | null>(null); const imagePreview = ref<string | null>(null); const fileName = ref<string | null>(null); const isProcessing = ref(false)
+const threshold = ref(0.25); const cleanTags = ref(true); const engineMode = ref<'api' | 'local'>('api'); const outputFormat = ref<'danbooru' | 'natural' | 'both'>('danbooru')
+const tags = ref<string[]>([]); const naturalText = ref(''); const copied = ref(false); const activeTagFilter = ref('')
 function onDragOver(e: DragEvent) { e.preventDefault(); isDragover.value = true }
 function onDragLeave() { isDragover.value = false }
-
-async function loadFile(file: File) {
-  fileName.value = file.name
-  const reader = new FileReader()
-  reader.onload = () => {
-    const dataUrl = reader.result as string
-    imagePreview.value = dataUrl
-    imageBase64.value = dataUrl.split(',')[1] || ''
-  }
-  reader.readAsDataURL(file)
-}
-
-function onDrop(e: DragEvent) {
-  e.preventDefault(); isDragover.value = false
-  if (e.dataTransfer?.files.length) loadFile(e.dataTransfer.files[0])
-}
-
-function selectFile() {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.accept = 'image/jpeg,image/png,image/webp'
-  input.onchange = () => { if (input.files?.length) loadFile(input.files[0]) }
-  input.click()
-}
-
-// ── Reverse prompt via LLM ──
+async function loadFile(file: File) { fileName.value = file.name; const reader = new FileReader(); reader.onload = () => { const d = reader.result as string; imagePreview.value = d; imageBase64.value = d.split(',')[1] || '' }; reader.readAsDataURL(file) }
+function onDrop(e: DragEvent) { e.preventDefault(); isDragover.value = false; if (e.dataTransfer?.files.length) loadFile(e.dataTransfer.files[0]) }
+function selectFile() { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/jpeg,image/png,image/webp'; input.onchange = () => { if (input.files?.length) loadFile(input.files[0]) }; input.click() }
+function cleanTag(t: string): string { if (!cleanTags.value) return t; return t.replace(/_/g, ' ').replace(/\\/g, '').replace(/['"]/g, '').trim() }
+function parseTagList(raw: string): string[] { return raw.split(/[,，\n]+/).map(t => cleanTag(t)).filter(t => t.length > 0 && t.length < 80 && !t.includes('.')) }
 async function runReverse() {
-  if (!imageBase64.value || !window.llmAPI) return
-  isProcessing.value = true
-  promptText.value = ''
-  appStore.setStatus('反推中...')
-
-  try {
-    const res = await window.llmAPI.tagImage({
-      imageBase64: imageBase64.value,
-      prompt: `Analyze this image in extreme detail. Describe it as a Stable Diffusion / NovelAI prompt. Include: character appearance, art style, lighting, background, composition, quality tags. Output ONLY comma-separated tags. Be comprehensive.`
-    })
-    if (res.success && res.tags) {
-      promptText.value = res.tags.join(', ')
-      appStore.setStatus('反推完成')
-      playSuccess()
-    } else {
-      promptText.value = '反推失败: ' + (res.error || '未知错误')
-    }
-  } catch (e: any) {
-    promptText.value = '反推失败: ' + (e.message || '未知错误')
-  }
-
+  if (!imageBase64.value) return; isProcessing.value = true; tags.value = []; naturalText.value = ''; appStore.setStatus('反推中...')
+  try { let tagList: string[] = []
+    if (engineMode.value === 'local') { const res = await window.taggerAPI.localInfer({ imagePath: fileName.value!, threshold: threshold.value }); if (res.success && res.tags) tagList = res.tags }
+    else { const res = await window.llmAPI.tagImage({ imageBase64: imageBase64.value, threshold: threshold.value, outputFormat: outputFormat.value }); if (res.success && res.tags) tagList = res.tags; if (res.raw) { const extra = parseTagList(res.raw); if (extra.length > tagList.length) tagList = extra } }
+    if (outputFormat.value === 'natural' || outputFormat.value === 'both') { naturalText.value = tagList.join(', ') }
+    if (outputFormat.value !== 'natural') tags.value = tagList.map(cleanTag)
+    appStore.setStatus(`完成: ${tags.value.length} 个标签`); playSuccess()
+  } catch (e: any) { appStore.setStatus('反推失败') }
   isProcessing.value = false
 }
-
-async function copyPrompt() {
-  if (!promptText.value) return
-  try {
-    await navigator.clipboard.writeText(promptText.value)
-    copied.value = true
-    setTimeout(() => { copied.value = false }, 2000)
-  } catch {
-    // Fallback
-    const ta = document.createElement('textarea')
-    ta.value = promptText.value
-    document.body.appendChild(ta)
-    ta.select()
-    document.execCommand('copy')
-    document.body.removeChild(ta)
-    copied.value = true
-    setTimeout(() => { copied.value = false }, 2000)
-  }
-}
-
-function handleClear() {
-  imageBase64.value = null
-  imagePreview.value = null
-  fileName.value = null
-  promptText.value = ''
-  appStore.setStatus('就绪')
-}
+function copyAll() { navigator.clipboard.writeText(tags.value.join(', ')); copied.value = true; setTimeout(() => copied.value = false, 2000) }
+function removeTag(i: number) { tags.value.splice(i, 1) }
+function clearAll() { imageBase64.value = null; imagePreview.value = null; fileName.value = null; tags.value = []; naturalText.value = '' }
+const displayTags = computed(() => { if (!activeTagFilter.value) return tags.value; return tags.value.filter(t => t.toLowerCase().includes(activeTagFilter.value.toLowerCase())) })
+import { computed } from 'vue'
 </script>
 
 <template>
-  <div class="reverse-page">
-    <div class="page-header">
-      <h1 class="page-title">提示词反推</h1>
-      <p class="page-desc">上传图片，AI 反推出可用于生成的提示词</p>
+  <div class="rv-root">
+    <!-- Hero upload area -->
+    <div class="rv-hero" :class="{ loaded: imagePreview, hover: isDragover }" @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop" @click="!imagePreview && selectFile()">
+      <template v-if="imagePreview">
+        <img :src="imagePreview" class="rv-hero-img" />
+        <div class="rv-hero-overlay">
+          <span class="rv-hero-fn">{{ fileName }}</span>
+          <button class="rv-hero-change" @click.stop="selectFile">更换图片</button>
+        </div>
+      </template>
+      <template v-else>
+        <div class="rv-hero-empty">
+          <span class="rv-hero-icon">🖼</span>
+          <h1>拖入图片开始反推</h1>
+          <p>支持 JPEG / PNG / WebP · 本地 ONNX 或云端 LLM</p>
+        </div>
+      </template>
     </div>
 
-    <div class="reverse-layout">
-      <!-- Left: Upload -->
-      <div class="panel glass-panel">
-        <h3 class="panel-title">输入图像</h3>
-        <div
-          class="drop-zone"
-          :class="{ dragover: isDragover, hasFile: fileName }"
-          @dragover="onDragOver" @dragleave="onDragLeave" @drop="onDrop" @click="selectFile"
-        >
-          <template v-if="!imagePreview">
-            <div class="drop-icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4">
-                <rect x="3" y="3" width="18" height="18" rx="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
-              </svg>
-            </div>
-            <p class="drop-text">拖拽图像到此处</p>
-            <p class="drop-hint">或点击选择 · JPG / PNG / WEBP</p>
-          </template>
-          <template v-else>
-            <img :src="imagePreview" class="preview-img" />
-            <p class="drop-text selected">{{ fileName }}</p>
-            <p class="drop-hint">点击更换图像</p>
-          </template>
-        </div>
-
-        <div class="btn-group">
-          <button class="action-btn" :disabled="!fileName || isProcessing" @click="runReverse">
-            <span class="action-btn-icon">
-              <svg v-if="isProcessing" class="spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 12a9 9 0 11-6.219-8.56"/>
-              </svg>
-              <span v-else>🔮</span>
-            </span>
-            <span class="action-btn-text">{{ isProcessing ? '反推中...' : '开始反推' }}</span>
-          </button>
-          <button class="clear-btn" :disabled="!fileName && !promptText" @click="handleClear">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><line x1="10" y1="10" x2="10" y2="18"/><line x1="14" y1="10" x2="14" y2="18"/></svg>
-            清除
-          </button>
-        </div>
+    <!-- Control strip -->
+    <div class="rv-strip">
+      <div class="rv-chip-row">
+        <button :class="{ on: engineMode === 'api' }" @click="engineMode = 'api'">☁ API</button>
+        <button :class="{ on: engineMode === 'local' }" @click="engineMode = 'local'">💻 本地</button>
       </div>
+      <div class="rv-chip-row" v-if="engineMode === 'api'">
+        <button :class="{ on: outputFormat === 'danbooru' }" @click="outputFormat = 'danbooru'">标签</button>
+        <button :class="{ on: outputFormat === 'natural' }" @click="outputFormat = 'natural'">描述</button>
+        <button :class="{ on: outputFormat === 'both' }" @click="outputFormat = 'both'">全部</button>
+      </div>
+      <div class="rv-slider-group">
+        <span class="rv-slider-label">阈值 {{ (threshold * 100).toFixed(0) }}%</span>
+        <input type="range" min="0.05" max="0.95" step="0.05" v-model.number="threshold" />
+      </div>
+      <label class="rv-check"><input type="checkbox" v-model="cleanTags" /> 清洗标签</label>
+      <button class="rv-go" :disabled="!imageBase64 || isProcessing" @click="runReverse">{{ isProcessing ? '处理中...' : '🔮 开始反推' }}</button>
+      <button class="rv-clr" @click="clearAll">清除</button>
+    </div>
 
-      <!-- Right: Result -->
-      <div class="panel glass-panel panel-result">
-        <h3 class="panel-title">反推结果</h3>
-
-        <div class="result-box" v-if="promptText">
-          <div class="prompt-content">{{ promptText }}</div>
-          <div class="result-actions">
-            <button class="copy-btn" @click="copyPrompt">
-              {{ copied ? '✓ 已复制' : '📋 复制提示词' }}
-            </button>
-            <span class="prompt-stats">{{ promptText.split(',').length }} 个标签</span>
-          </div>
-        </div>
-
-        <div class="empty-state" v-else-if="!isProcessing">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3">
-            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-          </svg>
-          <p>拖入图片后点击「开始反推」</p>
-          <p style="font-size: 11px; margin-top: 4px;">使用设置中配置的 LLM 模型进行反推</p>
-        </div>
-
-        <div class="loading-state" v-if="isProcessing">
-          <div class="shimmer" style="width: 100%; height: 60px; border-radius: var(--radius-sm);"></div>
-          <div class="shimmer" style="width: 70%; height: 16px; border-radius: var(--radius-sm); margin-top: 8px;"></div>
-        </div>
+    <!-- Results -->
+    <div class="rv-results" v-if="tags.length > 0 || naturalText">
+      <div class="rv-nl-block" v-if="naturalText">
+        <div class="rv-nl-label">📝 自然语言描述</div>
+        <p class="rv-nl-text">{{ naturalText }}</p>
+      </div>
+      <div class="rv-tags-head" v-if="tags.length > 0">
+        <span class="rv-tags-count">{{ tags.length }} 个标签</span>
+        <input class="rv-tags-filter" v-model="activeTagFilter" placeholder="筛选标签..." />
+        <button class="rv-copy-btn" @click="copyAll">{{ copied ? '✓ 已复制' : '📋 复制全部' }}</button>
+      </div>
+      <div class="rv-tags-wall" v-if="displayTags.length > 0">
+        <span v-for="(t, i) in displayTags" :key="i" class="rv-tag-pill" :class="{ top: i < Math.ceil(tags.length * 0.3) }">
+          {{ t }}<button @click="removeTag(i)">×</button>
+        </span>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-.reverse-page { max-width: 960px; margin: 0 auto; }
-.page-header { margin-bottom: 24px; }
-.page-title { font-size: 24px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; letter-spacing: -0.01em; }
-.page-desc { font-size: 13px; color: var(--text-tertiary); }
-.reverse-layout { display: grid; grid-template-columns: 340px 1fr; gap: 18px; align-items: start; }
+.rv-root { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.rv-hero { border: 2px dashed rgba(255,255,255,0.08); border-radius: 16px; min-height: 260px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; overflow: hidden; transition: all 0.3s; background: rgba(255,255,255,0.01); }
+.rv-hero.hover { border-color: #ff69b4; background: rgba(255,105,180,0.04); }
+.rv-hero.loaded { border-style: solid; border-color: rgba(255,255,255,0.04); }
+.rv-hero-img { width: 100%; height: 100%; object-fit: contain; max-height: 400px; border-radius: 12px; }
+.rv-hero-overlay { position: absolute; bottom: 12px; left: 12px; display: flex; gap: 8px; align-items: center; }
+.rv-hero-fn { font-size: 11px; color: #fff; background: rgba(0,0,0,0.6); padding: 4px 10px; border-radius: 6px; }
+.rv-hero-change { font-size: 10px; background: rgba(255,105,180,0.3); border: 1px solid rgba(255,105,180,0.3); color: #fff; padding: 4px 10px; border-radius: 6px; cursor: pointer; }
+.rv-hero-empty { text-align: center; }
+.rv-hero-icon { font-size: 56px; display: block; margin-bottom: 12px; }
+.rv-hero-empty h1 { font-size: 22px; font-weight: 700; color: #e5e7eb; margin: 0 0 6px; }
+.rv-hero-empty p { font-size: 13px; color: #6b7280; margin: 0; }
 
-.panel { padding: 20px; }
-.panel-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin-bottom: 14px; }
-.panel-result { background: #18131b; border: 1px solid rgba(var(--accent-primary-rgb), 0.15); border-radius: var(--radius-lg); min-height: 300px; box-shadow: 0 0 16px rgba(var(--accent-primary-rgb), 0.08), 0 0 40px rgba(var(--accent-primary-rgb), 0.04), inset 0 0 40px rgba(0,0,0,0.15); }
+.rv-strip { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: rgba(24,24,26,0.6); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; flex-wrap: wrap; }
+.rv-chip-row { display: flex; border-radius: 6px; overflow: hidden; border: 1px solid rgba(255,255,255,0.06); }
+.rv-chip-row button { padding: 6px 12px; border: none; background: none; color: #6b7280; font-size: 11px; cursor: pointer; }
+.rv-chip-row button.on { background: rgba(255,105,180,0.12); color: #ff69b4; }
+.rv-slider-group { display: flex; align-items: center; gap: 6px; }
+.rv-slider-label { font-size: 10px; color: #6b7280; white-space: nowrap; }
+.rv-slider-group input[type=range] { width: 60px; accent-color: #ff69b4; }
+.rv-check { font-size: 11px; color: #9ca3af; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+.rv-check input { accent-color: #ff69b4; }
+.rv-go { padding: 8px 20px; background: linear-gradient(135deg, #ff69b4, #ff85c2); border: none; border-radius: 8px; color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; }
+.rv-go:disabled { opacity: 0.3; cursor: not-allowed; }
+.rv-clr { padding: 6px 14px; background: none; border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; color: #6b7280; font-size: 11px; cursor: pointer; }
 
-/* Drop zone */
-.drop-zone {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 36px 20px; border: 2px dashed var(--glass-border);
-  border-radius: var(--radius-md); cursor: pointer;
-  transition: all var(--transition-base); margin-bottom: 18px;
-  background: var(--glass-bg); overflow: hidden; min-height: 160px;
-}
-.drop-zone:hover { border-color: var(--border-accent); background: var(--glass-bg-hover); }
-.drop-zone.dragover { border-color: var(--accent-primary); background: var(--accent-bg); box-shadow: var(--accent-glow); }
-.drop-zone.hasFile { border-color: rgba(var(--accent-primary-rgb), 0.4); border-style: solid; background: var(--accent-bg); padding: 12px; }
-.drop-icon { width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; border-radius: var(--radius-sm); background: var(--glass-bg); color: var(--text-tertiary); margin-bottom: 12px; }
-.drop-icon svg { width: 28px; height: 28px; }
-.preview-img { max-width: 100%; max-height: 180px; border-radius: var(--radius-sm); object-fit: contain; margin-bottom: 8px; }
-.drop-text { font-size: 14px; color: var(--text-secondary); margin-bottom: 4px; font-weight: 500; }
-.drop-text.selected { color: var(--accent-primary); }
-.drop-hint { font-size: 11px; color: var(--text-tertiary); }
-.full-width { width: 100%; }
-.btn-group { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
-
-/* ── Action button ── */
-.action-btn {
-  display: flex; align-items: center; justify-content: center; gap: 10px;
-  width: 100%; padding: 14px 20px;
-  border: none; border-radius: var(--radius-full);
-  background: var(--gradient-accent);
-  color: #fff; font-size: 15px; font-weight: 700;
-  font-family: var(--font-sans); cursor: pointer;
-  letter-spacing: 0.03em;
-  box-shadow: 0 4px 20px rgba(var(--accent-primary-rgb), 0.35);
-  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-  position: relative; overflow: hidden;
-}
-.action-btn::before {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, transparent 50%);
-  pointer-events: none;
-}
-.action-btn:hover { transform: scale(1.03); box-shadow: 0 8px 30px rgba(var(--accent-primary-rgb), 0.5); }
-.action-btn:active { transform: scale(0.96); }
-.action-btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; box-shadow: none; }
-.action-btn-icon { font-size: 20px; flex-shrink: 0; line-height: 1; }
-.action-btn-text { white-space: nowrap; }
-
-/* ── Clear button ── */
-.clear-btn {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  width: 100%; padding: 10px 16px;
-  border: 1px solid var(--glass-border); border-radius: var(--radius-full);
-  background: var(--glass-bg); backdrop-filter: blur(6px);
-  color: var(--text-tertiary); font-size: 12px; font-weight: 500;
-  font-family: var(--font-sans); cursor: pointer;
-  transition: all 0.25s ease;
-}
-.clear-btn:hover { background: rgba(248, 113, 113, 0.1); border-color: rgba(248, 113, 113, 0.25); color: #f87171; }
-.clear-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-
-/* ── Copy button ── */
-.copy-btn {
-  display: flex; align-items: center; gap: 6px;
-  padding: 10px 20px; border: none; border-radius: var(--radius-full);
-  background: linear-gradient(135deg, rgba(var(--accent-primary-rgb), 0.2), rgba(var(--accent-secondary-rgb), 0.15));
-  border: 1px solid rgba(var(--accent-primary-rgb), 0.2);
-  color: var(--accent-primary); font-size: 13px; font-weight: 600;
-  font-family: var(--font-sans); cursor: pointer;
-  transition: all 0.25s ease;
-}
-.copy-btn:hover { background: rgba(var(--accent-primary-rgb), 0.25); transform: scale(1.03); }
-
-/* Result */
-.result-box { position: relative; z-index: 1; }
-.prompt-content {
-  padding: 16px; background: rgba(255,255,255,0.03);
-  border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
-  font-size: 13px; line-height: 1.7; color: var(--text-primary);
-  word-break: break-all; min-height: 60px; max-height: 400px; overflow-y: auto;
-  font-family: var(--font-mono); font-size: 12px;
-}
-.result-actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
-.prompt-stats { font-size: 11px; color: var(--text-tertiary); }
-
-.loading-state { position: relative; z-index: 1; padding: 12px 0; }
-.shimmer {
-  background: linear-gradient(90deg, var(--glass-bg) 25%, var(--glass-bg-hover) 50%, var(--glass-bg) 75%);
-  background-size: 200px 100%; animation: shimmer 1.5s infinite;
-}
-@keyframes shimmer {
-  0% { background-position: -200px 0; }
-  100% { background-position: calc(200px + 100%) 0; }
-}
-
-.spin { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.empty-state { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 80px 24px; color: var(--text-tertiary); text-align: center; }
-.empty-state svg { width: 44px; height: 44px; margin-bottom: 12px; opacity: 0.25; }
-.empty-state p { font-size: 13px; }
+.rv-results { display: flex; flex-direction: column; gap: 10px; }
+.rv-nl-block { background: rgba(24,24,26,0.6); border: 1px solid rgba(255,255,255,0.04); border-radius: 12px; padding: 16px; }
+.rv-nl-label { font-size: 10px; font-weight: 700; color: #ff69b4; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+.rv-nl-text { font-size: 14px; color: #d1d5db; line-height: 1.8; margin: 0; }
+.rv-tags-head { display: flex; align-items: center; gap: 10px; }
+.rv-tags-count { font-size: 13px; font-weight: 600; color: #d1d5db; }
+.rv-tags-filter { padding: 5px 10px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; color: #e5e7eb; font-size: 11px; width: 180px; }
+.rv-copy-btn { margin-left: auto; padding: 5px 12px; background: none; border: 1px solid rgba(255,105,180,0.15); border-radius: 6px; color: #ff69b4; font-size: 11px; cursor: pointer; }
+.rv-tags-wall { display: flex; flex-wrap: wrap; gap: 6px; }
+.rv-tag-pill { display: flex; align-items: center; gap: 4px; padding: 7px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; font-size: 12px; color: #9ca3af; }
+.rv-tag-pill.top { color: #22c55e; background: rgba(34,197,94,0.06); border-color: rgba(34,197,94,0.1); font-weight: 500; }
+.rv-tag-pill button { background: none; border: none; color: inherit; opacity: 0.4; font-size: 13px; cursor: pointer; padding: 0; }
+.rv-tag-pill button:hover { opacity: 1; }
 </style>

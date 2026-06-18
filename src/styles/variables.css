@@ -68,6 +68,17 @@
   --sidebar-width: 72px;
   --titlebar-height: 42px;
   --statusbar-height: 30px;
+
+  /* ── HUD / Cabin surfaces (dark recessed) ── */
+  --hud-bg: #0C0C0E;
+  --hud-bg-lighter: #141518;
+  --hud-border: rgba(255,255,255,0.04);
+  --hud-border-accent: rgba(255,0,127,0.2);
+  --hud-glow: 0 0 15px rgba(255,0,127,0.1);
+  --hud-inset-shadow: inset 0 3px 8px rgba(0,0,0,0.6);
+  --hud-text-dim: rgba(244,114,182,0.2);
+  --cabin-bg: rgba(12,13,16,0.6);
+  --panel-bg: rgba(18,18,22,0.45);
 }
 
 /* ── Light Theme - soft pink white ── */
@@ -112,4 +123,24 @@
   --shadow-lg: 0 12px 40px rgba(236, 72, 153, 0.1);
   --shadow-glow: 0 0 20px rgba(236, 72, 153, 0.1);
   --shadow-glow-strong: 0 0 24px rgba(236, 72, 153, 0.18);
+
+  /* ── HUD / Cabin surfaces (light mode: Light Cyber white porcelain) ── */
+  --light-bg-base: #FCF7F9;
+  --light-panel-cabin: rgba(255, 255, 255, 0.65);
+  --light-inset-slot: #F4EBEF;
+  --neon-pink: #FF007F;
+  --tech-dark-pink: #4A3034;
+  --tech-muted-text: #7D666A;
+  --light-shadow-soft: 0 8px 32px rgba(234, 190, 204, 0.25);
+  --light-shadow-inset: inset 0 2px 6px rgba(74, 48, 52, 0.08);
+
+  --hud-bg: var(--light-panel-cabin);
+  --hud-bg-lighter: rgba(255, 255, 255, 0.9);
+  --hud-border: rgba(255, 0, 127, 0.18);
+  --hud-border-accent: rgba(255, 0, 127, 0.35);
+  --hud-glow: 0 0 20px rgba(255, 0, 127, 0.2);
+  --hud-inset-shadow: var(--light-shadow-inset);
+  --hud-text-dim: rgba(74, 48, 52, 0.4);
+  --cabin-bg: var(--light-panel-cabin);
+  --panel-bg: var(--light-panel-cabin);
 }

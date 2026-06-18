@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import TitleBar from '@/components/titlebar/TitleBar.vue'
-import SideBar from '@/components/sidebar/SideBar.vue'
+import TopMenuBar from '@/components/sidebar/TopMenuBar.vue'
 import StatusBar from '@/components/statusbar/StatusBar.vue'
 </script>
 
@@ -22,8 +22,8 @@ import StatusBar from '@/components/statusbar/StatusBar.vue'
     </div>
 
     <TitleBar />
+    <TopMenuBar />
     <div class="main-body">
-      <SideBar />
       <main class="main-content">
         <slot />
       </main>
@@ -46,13 +46,14 @@ import StatusBar from '@/components/statusbar/StatusBar.vue'
   display: flex;
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 .main-content {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 32px 36px;
+  padding: 24px 28px;
   position: relative;
   z-index: 1;
   border-radius: 0 0 10px 0;

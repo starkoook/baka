@@ -20,8 +20,10 @@
   "license": "MIT",
   "dependencies": {
     "electron-updater": "^6.8.3",
+    "onnxruntime-node": "^1.26.0",
     "pinia": "^3.0.4",
     "sharp": "^0.34.5",
+    "sql.js": "^1.14.1",
     "vue": "^3.5.35",
     "vue-router": "^5.1.0"
   },

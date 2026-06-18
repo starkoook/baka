@@ -1,20 +1,31 @@
 const { ipcMain } = require('electron')
-const { autoUpdater } = require('electron-updater')
 
-// Configure for your update server
-// Supports: GitHub Releases, S3, generic HTTP server
-autoUpdater.autoDownload = false  // Let user decide
-autoUpdater.autoInstallOnAppQuit = true
+let autoUpdater = null
+
+function getAutoUpdater() {
+  if (autoUpdater) return autoUpdater
+  try {
+    const updater = require('electron-updater')
+    autoUpdater = updater.autoUpdater
+    autoUpdater.autoDownload = false
+    autoUpdater.autoInstallOnAppQuit = true
+    return autoUpdater
+  } catch (e) {
+    return null
+  }
+}
 
 function registerUpdaterHandlers(mainWindow) {
   // Check for updates
   ipcMain.handle('updater:check', async () => {
+    const au = getAutoUpdater()
+    if (!au) return { available: false, error: 'electron-updater not available' }
     try {
-      const result = await autoUpdater.checkForUpdates()
+      const result = await au.checkForUpdates()
       return {
         available: !!result?.updateInfo?.version,
         version: result?.updateInfo?.version || null,
-        currentVersion: autoUpdater.currentVersion?.version || '0.1.0',
+        currentVersion: au.currentVersion?.version || '0.1.0',
       }
     } catch (e) {
       return { available: false, error: e.message }
@@ -23,29 +34,33 @@ function registerUpdaterHandlers(mainWindow) {
 
   // Download update
   ipcMain.on('updater:download', () => {
-    autoUpdater.downloadUpdate()
+    const au = getAutoUpdater()
+    if (au) au.downloadUpdate()
   })
 
   // Install now
   ipcMain.on('updater:install', () => {
-    autoUpdater.quitAndInstall()
+    const au = getAutoUpdater()
+    if (au) au.quitAndInstall()
   })
 
   // Progress events → renderer
-  autoUpdater.on('download-progress', (progress) => {
+  const au = getAutoUpdater()
+  if (!au) return
+  au.on('download-progress', (progress) => {
     mainWindow?.webContents.send('updater:progress', {
       percent: Math.round(progress.percent),
       speed: progress.bytesPerSecond,
     })
   })
 
-  autoUpdater.on('update-downloaded', (info) => {
+  au.on('update-downloaded', (info) => {
     mainWindow?.webContents.send('updater:downloaded', {
       version: info.version,
     })
   })
 
-  autoUpdater.on('error', (err) => {
+  au.on('error', (err) => {
     mainWindow?.webContents.send('updater:error', err.message)
   })
 }

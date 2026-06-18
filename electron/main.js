@@ -4,15 +4,22 @@ if (process.env.ELECTRON_RUN_AS_NODE) {
   const env = { ...process.env }
   delete env.ELECTRON_RUN_AS_NODE
   spawn(process.execPath, process.argv.slice(1), { env, stdio: 'inherit' })
-    .on('exit', (code) => process.exit(code))
-  // Block further execution
-  setInterval(() => {}, 10000)
+    .on('exit', (code) => process.exit(code || 0))
+  // Halt this process — wait for child to exit
+  return
 }
 
 const { join } = require('path')
 const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const { registerLLMHandlers } = require('./ipc/llm')
 const { registerUpdaterHandlers } = require('./ipc/updater')
+const { registerCacheHandlers } = require('./ipc/cache')
+const { registerTaggerHandlers } = require('./ipc/tagger')
+const { registerTrainingHandlers } = require('./ipc/training')
+const { registerGalleryHandlers } = require('./ipc/gallery')
+const { registerTaggerV2Handlers, shutdownWorker } = require('./ipc/tagger-v2')
+const { registerModelHandlers } = require('./ipc/tagger-models')
+const { registerVocabHandlers } = require('./ipc/tagger-vocab')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
@@ -40,6 +47,7 @@ function createWindow() {
       preload: join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      webviewTag: true,
     },
   })
 
@@ -88,16 +96,6 @@ ipcMain.on('window:maximize', () => {
 ipcMain.on('window:close', () => { mainWindow?.close() })
 ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
 
-// ── Folder selection dialog ──
-ipcMain.handle('dialog:selectFolder', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory'],
-    title: '选择图片文件夹',
-  })
-  if (result.canceled || !result.filePaths.length) return null
-  return result.filePaths[0]
-})
-
 // ── List image files in a folder ──
 ipcMain.handle('fs:listImages', async (_event, folderPath) => {
   const imageExts = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
@@ -126,6 +124,19 @@ ipcMain.handle('fs:readImageBase64', async (_event, filePath) => {
   }
 })
 
+// ── Write file from base64 (for drag-drop) ──
+ipcMain.handle('fs:writeBase64', async (_event, { filePath, base64 }) => {
+  try {
+    const buffer = Buffer.from(base64, 'base64')
+    const dir = path.dirname(filePath)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(filePath, buffer)
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
 // ── Copy file ──
 ipcMain.handle('fs:copyFile', async (_event, { src, dest, destDir }) => {
   try {
@@ -141,7 +152,7 @@ ipcMain.handle('fs:copyFile', async (_event, { src, dest, destDir }) => {
 ipcMain.handle('fs:readThumb', async (_event, filePath) => {
   try {
     const sharp = require('sharp')
-    const buffer = await sharp(filePath).resize(256, 256, { fit: 'inside' }).jpeg({ quality: 70 }).toBuffer()
+    const buffer = await sharp(filePath).resize(384, 384, { fit: 'inside' }).jpeg({ quality: 80 }).toBuffer()
     return { success: true, base64: buffer.toString('base64') }
   } catch (e) {
     return { success: false, error: e.message }
@@ -179,6 +190,61 @@ ipcMain.handle('fs:saveCaption', async (_event, { txtPath, caption }) => {
     if (!actualPath) throw new Error('No path')
     fs.writeFileSync(actualPath, caption, 'utf-8')
     return { success: true }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
+// ── Create new folder ──
+ipcMain.handle('fs:createFolder', async (_event, folderPath) => {
+  try {
+    if (!fs.existsSync(folderPath)) { fs.mkdirSync(folderPath, { recursive: true }); return { success: true, path: folderPath } }
+    return { success: false, error: '文件夹已存在' }
+  } catch (e) { return { success: false, error: e.message } }
+})
+
+// ── Move/copy images to folder ──
+ipcMain.handle('fs:moveImages', async (_event, { filePaths, destFolder, keepOriginal }) => {
+  try {
+    if (!fs.existsSync(destFolder)) fs.mkdirSync(destFolder, { recursive: true })
+    let moved = 0
+    for (const src of filePaths) {
+      const filename = path.basename(src)
+      const dest = path.join(destFolder, filename)
+      // Handle duplicate filenames
+      let finalDest = dest
+      let n = 1
+      while (fs.existsSync(finalDest)) {
+        const ext = path.extname(filename)
+        const base = filename.replace(ext, '')
+        finalDest = path.join(destFolder, `${base}_${n}${ext}`)
+        n++
+      }
+      if (keepOriginal) {
+        fs.copyFileSync(src, finalDest)
+      } else {
+        fs.renameSync(src, finalDest)
+      }
+      moved++
+    }
+    return { success: true, data: { moved } }
+  } catch (e) { return { success: false, error: e.message } }
+})
+
+// ── Scan directory for ONNX models ──
+ipcMain.handle('fs:scanModels', async (_event, dirPath) => {
+  try {
+    const files = fs.readdirSync(dirPath)
+    const onnxFiles = files.filter((f) => f.endsWith('.onnx'))
+    const csvFiles = files.filter((f) => f.endsWith('.csv'))
+    return {
+      success: true,
+      models: onnxFiles.map((f) => ({
+        name: f,
+        path: path.join(dirPath, f),
+        hasCsv: csvFiles.includes(f.replace('.onnx', '.csv')),
+      })),
+    }
   } catch (e) {
     return { success: false, error: e.message }
   }
@@ -260,12 +326,42 @@ ipcMain.handle('system:stats', async () => {
 
 app.whenReady().then(() => {
   createWindow()
+
+  // ── Folder selection dialog ──
+  ipcMain.handle('dialog:selectFolder', async () => {
+    const result = await dialog.showOpenDialog(null, {
+      properties: ['openDirectory'],
+      title: '选择图片文件夹',
+    })
+    if (result.canceled || !result.filePaths.length) return null
+    return result.filePaths[0]
+  })
+
   registerUpdaterHandlers(mainWindow)
+  registerCacheHandlers()
+  registerTaggerHandlers()
+  registerTrainingHandlers(mainWindow)
+  registerGalleryHandlers(mainWindow)
+  registerModelHandlers()
+  registerVocabHandlers()
+  registerTaggerV2Handlers(mainWindow)
+
+  // ── Open file in Explorer ──
+  ipcMain.handle('shell:openFolder', async (_event, filePath) => {
+    try {
+      const { shell } = require('electron')
+      shell.showItemInFolder(filePath)
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
 app.on('window-all-closed', () => {
+  shutdownWorker()
   if (process.platform !== 'darwin') app.quit()
 })
