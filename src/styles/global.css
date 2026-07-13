@@ -1,4 +1,5 @@
 @import './variables.css';
+@import './components.css';
 @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
 
 /* ═══════════════════════════════════════════
@@ -158,20 +159,22 @@ button, input, select, textarea, a, [role="button"] {
     0 0 40px rgba(0,0,0,0.4);
 }
 
-/* ── Page transitions ── */
+/* ── Page transitions (3D cabin style) ── */
 .page-enter-active {
-  transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: opacity 0.4s ease, transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.35s ease;
 }
 .page-leave-active {
-  transition: opacity 0.12s ease, transform 0.15s ease;
+  transition: opacity 0.18s ease, transform 0.2s ease, filter 0.18s ease;
 }
 .page-enter-from {
   opacity: 0;
-  transform: translateY(10px) scale(0.97);
+  transform: translateY(30px) scale(0.92) perspective(800px) rotateX(3deg);
+  filter: blur(6px);
 }
 .page-leave-to {
   opacity: 0;
-  transform: translateY(-6px);
+  transform: translateY(-16px) scale(0.96) perspective(800px) rotateX(-1deg);
+  filter: blur(3px);
 }
 
 /* ── Theme wipe scan animation ── */

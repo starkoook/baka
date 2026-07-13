@@ -235,3 +235,113 @@
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
 }
+
+/* ═══════════════════════════════════════════
+   Cabin / HUD Panel System
+   ═══════════════════════════════════════════ */
+
+/* ── Cabin Panel (recessed tech surface with corner marks) ── */
+.cabin-panel {
+  position: relative;
+  background: var(--hud-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--hud-border);
+  border-radius: var(--radius-md);
+  padding: 22px;
+  box-shadow: var(--hud-inset-shadow);
+  transition: border-color 0.3s, box-shadow 0.3s;
+  isolation: isolate;
+  overflow: hidden;
+}
+.cabin-panel:hover {
+  border-color: var(--hud-border-accent);
+  box-shadow: var(--hud-inset-shadow), var(--hud-glow);
+}
+
+/* Subtle gradient wash inside panel */
+.cabin-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(160deg, rgba(244,114,182,0.03) 0%, transparent 50%);
+}
+
+/* Corner decorations — TL + BR via pseudo */
+.cabin-panel::after {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 14px;
+  height: 14px;
+  border-top: 2px solid var(--hud-text-dim);
+  border-left: 2px solid var(--hud-text-dim);
+  border-radius: var(--radius-xs) 0 0 0;
+  pointer-events: none;
+  z-index: 2;
+}
+/* Use a second pseudo trick: .cabin-panel-inner for the extra corners if needed */
+.cabin-panel > .cabin-panel-br {
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 14px;
+  height: 14px;
+  border-bottom: 2px solid var(--hud-text-dim);
+  border-right: 2px solid var(--hud-text-dim);
+  border-radius: 0 0 var(--radius-xs) 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* ── Explicit corner classes (for all-4-corners layout) ── */
+.cabin-corner-tl,
+.cabin-corner-tr,
+.cabin-corner-bl,
+.cabin-corner-br {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  z-index: 2;
+}
+.cabin-corner-tl { top: -1px; left: -1px; border-top: 2px solid var(--hud-text-dim); border-left: 2px solid var(--hud-text-dim); border-radius: var(--radius-xs) 0 0 0; }
+.cabin-corner-tr { top: -1px; right: -1px; border-top: 2px solid var(--hud-text-dim); border-right: 2px solid var(--hud-text-dim); border-radius: 0 var(--radius-xs) 0 0; }
+.cabin-corner-bl { bottom: -1px; left: -1px; border-bottom: 2px solid var(--hud-text-dim); border-left: 2px solid var(--hud-text-dim); border-radius: 0 0 0 var(--radius-xs); }
+.cabin-corner-br { bottom: -1px; right: -1px; border-bottom: 2px solid var(--hud-text-dim); border-right: 2px solid var(--hud-text-dim); border-radius: 0 0 var(--radius-xs) 0; }
+
+/* ── HUD label (mono, dim, top-right) ── */
+.cabin-label {
+  position: absolute;
+  top: 8px;
+  right: 14px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--hud-text-dim);
+  letter-spacing: 0.1em;
+  pointer-events: none;
+  z-index: 2;
+  text-transform: uppercase;
+}
+
+/* ── Light theme overrides ── */
+[data-theme="light"] .cabin-panel {
+  background: var(--light-panel-cabin);
+  border-color: rgba(255,0,127,0.18);
+  box-shadow: 0 2px 6px rgba(74,48,52,0.04), inset 0 1px 2px rgba(255,255,255,0.8);
+}
+[data-theme="light"] .cabin-panel:hover {
+  border-color: rgba(255,0,127,0.35);
+  box-shadow: 0 4px 16px rgba(255,182,193,0.2), inset 0 1px 2px rgba(255,255,255,0.8);
+}
+[data-theme="light"] .cabin-corner-tl,
+[data-theme="light"] .cabin-corner-tr,
+[data-theme="light"] .cabin-corner-bl,
+[data-theme="light"] .cabin-corner-br,
+[data-theme="light"] .cabin-panel > .cabin-panel-br,
+[data-theme="light"] .cabin-panel::after { border-color: rgba(74,48,52,0.25); }
+[data-theme="light"] .cabin-label { color: rgba(74,48,52,0.35); }

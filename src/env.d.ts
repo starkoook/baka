@@ -51,8 +51,19 @@ interface SystemAPI {
 interface FileInfo { name: string; path: string }
 interface FsAPI {
   selectFolder: () => Promise<string | null>
+  selectImages: () => Promise<string[]>
   listImages: (folderPath: string) => Promise<FileInfo[]>
   readImageBase64: (filePath: string) => Promise<{ success: boolean; base64?: string; mime?: string; error?: string }>
+  listDataset: (folderPath: string) => Promise<{ name: string; path: string; txtPath: string | null; caption: string; hasCaption: boolean }[]>
+  saveCaption: (params: { txtPath: string; caption: string }) => Promise<{ success: boolean; error?: string }>
+  copyFile: (params: { src: string; dest: string; destDir: string }) => Promise<{ success: boolean; error?: string }>
+  readThumb: (filePath: string) => Promise<{ success: boolean; base64?: string; error?: string }>
+  readText: (filePath: string) => Promise<{ success: boolean; text?: string; error?: string }>
+  exists: (filePath: string) => Promise<boolean>
+  createFolder: (folderPath: string) => Promise<{ success: boolean; path?: string; error?: string }>
+  moveImages: (params: { filePaths: string[]; destFolder: string; keepOriginal: boolean }) => Promise<{ success: boolean; data?: { moved: number; destPaths: string[] }; error?: string }>
+  scanModels: (dirPath: string) => Promise<{ success: boolean; models?: { name: string; path: string; hasCsv: boolean }[]; error?: string }>
+  writeBase64: (params: { filePath: string; base64: string }) => Promise<{ success: boolean; error?: string }>
 }
 
 interface GalleryImage {

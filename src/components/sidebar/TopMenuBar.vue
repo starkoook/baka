@@ -106,8 +106,8 @@ function onMenuLeave() {
   display: flex; align-items: center; gap: 0;
   height: 36px; flex-shrink: 0;
   background: transparent;
-  border-bottom: 1px solid rgba(255,255,255,0.12);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  border-bottom: 1px solid var(--border-default);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
   padding: 0 10px;
   -webkit-app-region: no-drag;
 }
@@ -115,34 +115,34 @@ function onMenuLeave() {
 .tmb-link {
   display: flex; align-items: center; height: 100%;
   padding: 0 16px; font-size: 12.5px; font-weight: 500;
-  color: #8b8b90; text-decoration: none; cursor: pointer;
+  color: var(--text-tertiary); text-decoration: none; cursor: pointer;
   border: none; background: none; font-family: inherit;
   border-radius: 8px; transition: all 0.15s;
   white-space: nowrap; letter-spacing: 0.02em;
 }
-.tmb-link:hover { color: #b0b0b5; }
-.tmb-item.active .tmb-link { color: #ff69b4; font-weight: 600; }
-.tmb-item.open .tmb-link { color: #b0b0b5; }
+.tmb-link:hover { color: var(--text-secondary); }
+.tmb-item.active .tmb-link { color: var(--accent-primary); font-weight: 600; }
+.tmb-item.open .tmb-link { color: var(--text-secondary); }
 
 .tmb-trigger { gap: 4px; }
 
 .tmb-drop {
   position: absolute; top: 100%; left: 0;
-  min-width: 210px; background: #1e1e22;
-  border: 1px solid rgba(255,255,255,0.1);
+  min-width: 210px; background: var(--bg-surface);
+  border: 1px solid var(--border-default);
   border-radius: 10px; padding: 6px;
-  box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+  box-shadow: var(--shadow-lg);
   z-index: 200; display: flex; flex-direction: column;
 }
 .tmb-drop-item {
   display: flex; flex-direction: column; gap: 1px;
   padding: 10px 14px; border: none; background: none;
-  color: #8b8b90; font-size: 12px; cursor: pointer; border-radius: 6px;
+  color: var(--text-tertiary); font-size: 12px; cursor: pointer; border-radius: 6px;
   text-align: left; width: 100%; font-family: inherit;
   transition: all 0.1s;
 }
-.tmb-drop-item:hover { background: rgba(255,255,255,0.04); color: #b0b0b5; }
-.tmb-drop-item.active { color: #ff69b4; }
+.tmb-drop-item:hover { background: var(--glass-bg-hover); color: var(--text-secondary); }
+.tmb-drop-item.active { color: var(--accent-primary); }
 .tmb-drop-label { font-weight: 500; }
-.tmb-drop-desc { font-size: 10px; color: #6b7280; }
+.tmb-drop-desc { font-size: 10px; color: var(--text-tertiary); }
 </style>

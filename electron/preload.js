@@ -32,12 +32,15 @@ contextBridge.exposeInMainWorld('llmAPI', {
 
 contextBridge.exposeInMainWorld('fsAPI', {
   selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
+  selectImages: () => ipcRenderer.invoke('dialog:selectImages'),
   listImages: (folderPath) => ipcRenderer.invoke('fs:listImages', folderPath),
   readImageBase64: (filePath) => ipcRenderer.invoke('fs:readImageBase64', filePath),
   listDataset: (folderPath) => ipcRenderer.invoke('fs:listDataset', folderPath),
   saveCaption: (params) => ipcRenderer.invoke('fs:saveCaption', params),
   copyFile: (params) => ipcRenderer.invoke('fs:copyFile', params),
   readThumb: (filePath) => ipcRenderer.invoke('fs:readThumb', filePath),
+  readText: (filePath) => ipcRenderer.invoke('fs:readText', filePath),
+  exists: (filePath) => ipcRenderer.invoke('fs:exists', filePath),
   createFolder: (folderPath) => ipcRenderer.invoke('fs:createFolder', folderPath),
   moveImages: (params) => ipcRenderer.invoke('fs:moveImages', params),
   scanModels: (dirPath) => ipcRenderer.invoke('fs:scanModels', dirPath),

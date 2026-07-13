@@ -5,21 +5,29 @@ const appStore = useAppStore()
 </script>
 
 <template>
-  <footer class="statusbar">
+  <footer class="statusbar" :class="{ 'has-error': appStore.lastError }">
     <div class="status-left">
-      <span
-        class="status-dot"
-        :class="{
-          idle: appStore.status === '就绪',
-          busy: appStore.status !== '就绪'
-        }"
-      ></span>
-      <span class="status-text">{{ appStore.status }}</span>
+      <template v-if="appStore.lastError">
+        <span class="status-dot error"></span>
+        <span class="status-text error-text">{{ appStore.lastError }}</span>
+        <button class="status-dismiss" @click="appStore.clearError()" title="消除">✕</button>
+      </template>
+      <template v-else>
+        <span
+          class="status-dot"
+          :class="{
+            idle: appStore.status === '就绪',
+            busy: appStore.status !== '就绪'
+          }"
+        ></span>
+        <span class="status-text">{{ appStore.status }}</span>
+      </template>
     </div>
     <div class="status-right">
+      <span v-if="appStore.errorCount > 0" class="status-err-badge" @click="appStore.clearError()">
+        {{ appStore.errorCount }} 个报错
+      </span>
       <span class="status-item">v{{ appStore.version }}</span>
-      <span class="status-sep">·</span>
-      <span class="status-item">Baka TOOLS</span>
     </div>
   </footer>
 </template>
@@ -38,6 +46,11 @@ const appStore = useAppStore()
   user-select: none;
   border-radius: 0 0 12px 12px;
   position: relative;
+  transition: background-color 0.3s;
+}
+.statusbar.has-error {
+  background-color: rgba(239, 68, 68, 0.08);
+  border-top-color: rgba(239, 68, 68, 0.2);
 }
 /* Bottom accent dot */
 .statusbar::after {
@@ -72,9 +85,43 @@ const appStore = useAppStore()
   animation: pulse-glow 1.5s infinite;
 }
 
+.status-dot.error {
+  background: #ef4444;
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6);
+  animation: pulse-glow 1s infinite;
+}
+
 .status-text {
   color: var(--text-secondary);
 }
+.status-text.error-text {
+  color: #fca5a5;
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-dismiss {
+  background: none;
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+.status-dismiss:hover { color: #fca5a5; }
+
+.status-err-badge {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  cursor: pointer;
+}
+.status-err-badge:hover { background: rgba(239, 68, 68, 0.25); }
 
 .status-item {
   color: var(--text-tertiary);

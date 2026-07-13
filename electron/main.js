@@ -112,6 +112,21 @@ ipcMain.handle('fs:listImages', async (_event, folderPath) => {
   }
 })
 
+// ── Read text file as UTF-8 string ──
+ipcMain.handle('fs:readText', async (_event, filePath) => {
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8')
+    return { success: true, text: content }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
+// ── Check if file exists ──
+ipcMain.handle('fs:exists', async (_event, filePath) => {
+  try { return fs.existsSync(filePath) } catch { return false }
+})
+
 // ── Read image file as base64 ──
 ipcMain.handle('fs:readImageBase64', async (_event, filePath) => {
   try {
@@ -208,6 +223,7 @@ ipcMain.handle('fs:moveImages', async (_event, { filePaths, destFolder, keepOrig
   try {
     if (!fs.existsSync(destFolder)) fs.mkdirSync(destFolder, { recursive: true })
     let moved = 0
+    const destPaths = []
     for (const src of filePaths) {
       const filename = path.basename(src)
       const dest = path.join(destFolder, filename)
@@ -225,9 +241,10 @@ ipcMain.handle('fs:moveImages', async (_event, { filePaths, destFolder, keepOrig
       } else {
         fs.renameSync(src, finalDest)
       }
+      destPaths.push(finalDest)
       moved++
     }
-    return { success: true, data: { moved } }
+    return { success: true, data: { moved, destPaths } }
   } catch (e) { return { success: false, error: e.message } }
 })
 
@@ -335,6 +352,17 @@ app.whenReady().then(() => {
     })
     if (result.canceled || !result.filePaths.length) return null
     return result.filePaths[0]
+  })
+
+  // ── Image file selection dialog ──
+  ipcMain.handle('dialog:selectImages', async () => {
+    const result = await dialog.showOpenDialog(null, {
+      properties: ['openFile', 'multiSelections'],
+      title: '选择图片',
+      filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }],
+    })
+    if (result.canceled || !result.filePaths.length) return []
+    return result.filePaths
   })
 
   registerUpdaterHandlers(mainWindow)

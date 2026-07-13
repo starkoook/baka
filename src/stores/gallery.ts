@@ -198,10 +198,46 @@ export const useGalleryStore = defineStore('gallery', () => {
   const datasets = ref<DatasetEntry[]>([])
   const activeDatasetId = ref<string | null>(null)
   const datasetImageItems = ref<DatasetImageItem[]>([])
-  const DATASET_LIST_KEY = 'baka-datasets-v2'
+  const DATASET_LIST_KEY = 'baka-datasets'  // unified key with standalone Dataset.vue
 
   function loadDatasets() {
-    try { const r = localStorage.getItem(DATASET_LIST_KEY); if (r) datasets.value = JSON.parse(r) } catch { datasets.value = [] }
+    try {
+      // Read from both old and new keys, merge
+      const seen = new Set<string>()
+      const merged: DatasetEntry[] = []
+
+      function ingest(raw: string) {
+        let parsed: any[]
+        try { parsed = JSON.parse(raw) } catch { return }
+        if (!Array.isArray(parsed)) return
+        for (const e of parsed) {
+          const fp = e.folderPath || ''
+          if (!fp || seen.has(fp)) continue
+          seen.add(fp)
+          merged.push({
+            name: e.name || '',
+            folderPath: fp,
+            addedAt: e.addedAt || new Date().toISOString(),
+            imagePaths: Array.isArray(e.imagePaths) ? e.imagePaths : [],
+          })
+        }
+      }
+
+      // New key first, then old key (new overwrites old on duplicate folderPath)
+      const r = localStorage.getItem(DATASET_LIST_KEY)
+      if (r) ingest(r)
+
+      // Migrate from old key
+      const old = localStorage.getItem('baka-datasets-v2')
+      if (old) {
+        ingest(old)
+        // Once migrated, remove old key
+        localStorage.removeItem('baka-datasets-v2')
+      }
+
+      datasets.value = merged
+      if (merged.length > 0) saveDatasets()  // persist merged result to new key
+    } catch { datasets.value = [] }
   }
   function saveDatasets() { localStorage.setItem(DATASET_LIST_KEY, JSON.stringify(datasets.value)) }
 
@@ -210,20 +246,61 @@ export const useGalleryStore = defineStore('gallery', () => {
     if (window.fsAPI) {
       const r = await window.fsAPI.createFolder(folderPath)
       if (!r.success) { useLogStore().error(r.error || '创建失败'); return null }
+
+      // Copy selected images into the new dataset folder
+      if (imagePaths.length > 0) {
+        const moveRes = await window.fsAPI.moveImages({
+          filePaths: imagePaths,
+          destFolder: folderPath,
+          keepOriginal: true,
+        })
+        if (moveRes.success && moveRes.data?.destPaths) {
+          // Use actual destination paths (handles dedup renaming)
+          imagePaths = moveRes.data.destPaths
+        } else {
+          useLogStore().warn('图片拷贝失败: ' + (moveRes.error || '未知'))
+        }
+      }
     }
     const entry: DatasetEntry = { name, folderPath, addedAt: new Date().toISOString(), imagePaths }
     datasets.value.unshift(entry); saveDatasets()
     return entry
   }
 
-  function addToDataset(datasetId: string, imagePaths: string[]) {
+  async function addToDataset(datasetId: string, imagePaths: string[]) {
     const ds = datasets.value.find(d => d.folderPath === datasetId)
     if (!ds) return
     const existing = new Set(ds.imagePaths)
-    let added = 0
-    for (const p of imagePaths) { if (!existing.has(p)) { ds.imagePaths.push(p); added++ } }
-    if (added > 0) saveDatasets()
-    useLogStore().success(`已添加 ${added} 张到 ${ds.name}`)
+    const newPaths: string[] = []
+
+    // Copy images into the dataset folder
+    if (window.fsAPI && imagePaths.length > 0) {
+      const moveRes = await window.fsAPI.moveImages({
+        filePaths: imagePaths,
+        destFolder: datasetId,
+        keepOriginal: true,
+      })
+      if (moveRes.success && moveRes.data?.destPaths) {
+        for (const destPath of moveRes.data.destPaths) {
+          if (!existing.has(destPath)) {
+            ds.imagePaths.push(destPath)
+            newPaths.push(destPath)
+          }
+        }
+      } else {
+        // Fallback: store original paths if copy fails
+        for (const p of imagePaths) {
+          if (!existing.has(p)) { ds.imagePaths.push(p); newPaths.push(p) }
+        }
+      }
+    } else {
+      for (const p of imagePaths) {
+        if (!existing.has(p)) { ds.imagePaths.push(p); newPaths.push(p) }
+      }
+    }
+
+    if (newPaths.length > 0) saveDatasets()
+    useLogStore().success(`已添加 ${newPaths.length} 张到 ${ds.name}`)
   }
 
   function removeFromDataset(datasetId: string, imagePath: string) {
@@ -236,47 +313,88 @@ export const useGalleryStore = defineStore('gallery', () => {
     saveDatasets()
   }
 
+  function importFolderDataset(name: string, folderPath: string, imagePaths: string[]) {
+    // Direct import — images already in the folder, no copying needed
+    if (datasets.value.find(d => d.folderPath === folderPath)) {
+      useLogStore().warn('该文件夹已是数据集')
+      return null
+    }
+    const entry: DatasetEntry = { name, folderPath, addedAt: new Date().toISOString(), imagePaths }
+    datasets.value.unshift(entry); saveDatasets()
+    useLogStore().success(`已导入: ${name} (${imagePaths.length}张)`)
+    return entry
+  }
+
   function deleteDataset(datasetId: string) {
     datasets.value = datasets.value.filter(d => d.folderPath !== datasetId)
     if (activeDatasetId.value === datasetId) { activeDatasetId.value = null; datasetImageItems.value = [] }
     saveDatasets()
   }
 
-  async function loadDatasetImages(datasetId: string) {
+  function loadDatasetImages(datasetId: string) {
     const ds = datasets.value.find(d => d.folderPath === datasetId)
-    if (!ds) { datasetImageItems.value = []; return }
-    activeDatasetId.value = datasetId
-    // Map each image path to a display item
-    const items: DatasetImageItem[] = []
-    for (const p of ds.imagePaths) {
+    if (!ds || !Array.isArray(ds.imagePaths)) {
+      datasetImageItems.value = []
+      activeDatasetId.value = datasetId
+      return
+    }
+
+    // Build items synchronously — no async gaps, no flicker
+    const paths: string[] = ds.imagePaths.filter((p: any) => typeof p === 'string')
+    const items: DatasetImageItem[] = paths.map((p: string) => {
       const filename = p.split(/[/\\]/).pop() || p
       const base = filename.replace(/\.[^.]+$/, '')
-      const txtPath = p.replace(/[/\\][^/\\]+$/, '\\' + base + '.txt').replace(/[/\\]/g, '\\')
-      let caption = ''; let hasCaption = false
-      try {
-        if (window.fsAPI) {
-          // Try to load existing caption from .txt
-          const datasetData = await window.fsAPI.listDataset(ds.folderPath)
-          const found = datasetData.find((f: any) => f.path === p)
-          if (found) { caption = found.caption || ''; hasCaption = found.hasCaption }
-        }
-      } catch (_) {}
-      items.push({ path: p, filename, caption, hasCaption, txtPath })
-    }
+      const sep = p.includes('\\') ? '\\' : '/'
+      const txtPath = p.substring(0, p.lastIndexOf(sep) + 1) + base + '.txt'
+      return { path: p, filename, caption: '', hasCaption: false, txtPath }
+    })
+
     datasetImageItems.value = items
+    activeDatasetId.value = datasetId
+
+    loadCaptionsForItems(items)
+    loadThumbsBatch(0)
+  }
+
+  async function loadCaptionsForItems(items: DatasetImageItem[]) {
+    if (!window.fsAPI) return
+    for (const item of items) {
+      if (item.hasCaption) continue
+      try {
+        const r = await window.fsAPI.readText(item.txtPath)
+        if (r.success && r.text && r.text.trim()) {
+          item.caption = r.text
+          item.hasCaption = true
+        }
+      } catch (_) { /* skip — .txt missing or unreadable */ }
+    }
+  }
+
+  let _thumbBatchTimer: ReturnType<typeof setTimeout> | null = null
+
+  async function loadThumbsBatch(start: number) {
+    if (_thumbBatchTimer) clearTimeout(_thumbBatchTimer)
+    const source = datasetImageItems.value
+    const batch = source.slice(start, start + 6)
+    for (const item of batch) {
+      if (item.thumb) continue
+      try {
+        const res = await window.fsAPI.readThumb(item.path)
+        if (res.success && res.base64) {
+          item.thumb = 'data:image/jpeg;base64,' + res.base64
+        }
+      } catch (_) { /* skip */ }
+    }
+    if (start + 6 < source.length) {
+      _thumbBatchTimer = setTimeout(() => loadThumbsBatch(start + 6), 80)
+    }
   }
 
   async function loadDatasetCaptions(datasetId: string) {
-    const ds = datasets.value.find(d => d.folderPath === datasetId)
-    if (!ds || !window.fsAPI) return
-    const list = await window.fsAPI.listDataset(ds.folderPath)
-    const map = new Map(list.map((f: any) => [f.path, f]))
-    for (const item of datasetImageItems.value) {
-      const found = map.get(item.path)
-      if (found) { item.caption = found.caption || ''; item.hasCaption = found.hasCaption; item.txtPath = found.txtPath }
-    }
+    // Refresh captions for currently loaded items
+    if (datasetImageItems.value.length === 0) return
+    await loadCaptionsForItems(datasetImageItems.value)
   }
-
   async function saveDatasetCaption(item: DatasetImageItem, caption: string) {
     if (!item.txtPath) {
       const base = item.filename.replace(/\.[^.]+$/, '')
@@ -322,7 +440,7 @@ export const useGalleryStore = defineStore('gallery', () => {
     fetchTags, fetchBatchTags, saveTags, sendToTagger,
     setActiveRoot, setupScanListener,
     datasets, activeDatasetId, datasetImageItems,
-    loadDatasets, createDataset, addToDataset, removeFromDataset, deleteDataset,
+    loadDatasets, createDataset, addToDataset, importFolderDataset, removeFromDataset, deleteDataset,
     loadDatasetImages, loadDatasetCaptions, saveDatasetCaption, exportDatasetCaptions,
   }
 })

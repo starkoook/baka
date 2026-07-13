@@ -119,13 +119,95 @@ async function tagSelected() {
   appStore.setStatus('标注完成')
 }
 
+// ── Workspace ──
+const wsImages = ref<{ path: string; filename: string }[]>([])
+const wsSelected = ref<Set<string>>(new Set())
+const wsSelectedCount = computed(() => wsSelected.value.size)
+
+function wsSelectAll() {
+  wsSelected.value = new Set(wsImages.value.map(i => i.path))
+}
+function wsClearSel() {
+  wsSelected.value = new Set()
+}
+function wsToggle(path: string) {
+  const next = new Set(wsSelected.value)
+  if (next.has(path)) next.delete(path)
+  else next.add(path)
+  wsSelected.value = next
+}
+async function wsImportFiles() {
+  if (!window.fsAPI) return
+  const paths = await window.fsAPI.selectImages()
+  if (!paths || paths.length === 0) return
+  for (const p of paths) {
+    if (!wsImages.value.find(i => i.path === p)) {
+      wsImages.value.push({ path: p, filename: p.split(/[/\\]/).pop() || p })
+    }
+  }
+  appStore.setStatus(`已添加 ${paths.length} 张到标注队列`)
+}
+async function wsImportFolder() {
+  if (!window.fsAPI) return
+  const folder = await window.fsAPI.selectFolder()
+  if (!folder) return
+  const files = await window.fsAPI.listImages(folder)
+  if (!files || files.length === 0) { appStore.setStatus('该文件夹没有图片'); return }
+  for (const f of files) {
+    if (!wsImages.value.find(i => i.path === f.path)) {
+      wsImages.value.push({ path: f.path, filename: f.name })
+    }
+  }
+  appStore.setStatus(`已添加 ${files.length} 张到标注队列`)
+}
+function wsRemove(path: string) {
+  wsImages.value = wsImages.value.filter(i => i.path !== path)
+  wsToggle(path)
+}
+async function wsTagSelected() {
+  const paths = wsSelectedCount.value > 0 ? [...wsSelected.value] : wsImages.value.map(i => i.path)
+  if (paths.length === 0) return appStore.setStatus('标注队列为空，请先导入图片')
+  appStore.setStatus(`正在标注 ${paths.length} 张...`)
+  await taggerStore.inferBatch(paths)
+  appStore.setStatus('标注完成')
+}
+
 // ── Dataset ──
 const editingDatasetItem = ref<any>(null)
 const editDSCaption = ref('')
 const showDSDialog = ref(false)
 const dsDialogName = ref('')
 
-function handleEditDatasetItem(item: any) { editingDatasetItem.value = item; editDSCaption.value = item.caption || '' }
+function handleEditDatasetItem(item: any) { editingDatasetItem.value = item; editDSCaption.value = item.caption || ''; dsTagInput.value = '' }
+function handleDeleteDataset(folderPath: string) {
+  if (confirm('确定要删除这个数据集吗？图片文件不会被删除。')) {
+    galleryStore.deleteDataset(folderPath)
+  }
+}
+
+// Tag editing helpers
+const dsTagInput = ref('')
+const dsTags = computed(() => editDSCaption.value.split(/[,，\n]/).map(t => t.trim()).filter(t => t))
+
+function dsAddTag(tag: string) {
+  const t = tag.trim()
+  if (!t) return
+  const current = dsTags.value
+  if (current.includes(t)) return
+  editDSCaption.value = current.length > 0 ? current.join(', ') + ', ' + t : t
+  dsTagInput.value = ''
+}
+
+function dsRemoveTag(tag: string) {
+  editDSCaption.value = dsTags.value.filter(t => t !== tag).join(', ')
+}
+
+function dsHandleTagKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault()
+    dsAddTag(dsTagInput.value)
+  }
+}
 async function handleSaveDSCaption() {
   if (!editingDatasetItem.value) return
   await galleryStore.saveDatasetCaption(editingDatasetItem.value, editDSCaption.value)
@@ -140,6 +222,7 @@ async function handleExportDataset() {
 // ── Dataset dialog (redesigned) ──
 const dsPickMode = ref<'new' | 'pick'>('pick')  // 'new' = create new, 'pick' = add to existing
 const dsSelectedFolder = ref('')
+const dsPickFolder = ref('')  // selected existing dataset folderPath
 
 function openAddDatasetDialog() {
   const paths = selectedImages.value.map(i => i.path)
@@ -147,10 +230,20 @@ function openAddDatasetDialog() {
   dsDialogName.value = ''
   dsSelectedFolder.value = ''
   dsPickMode.value = galleryStore.datasets.length > 0 ? 'pick' : 'new'
-  if (dsPickMode.value === 'pick') {
-    dsDialogName.value = galleryStore.datasets[0]?.name || ''
-  }
+  dsPickFolder.value = galleryStore.datasets[0]?.folderPath || ''
   showDSDialog.value = true
+}
+
+function openNewDatasetDialog() {
+  dsDialogName.value = ''
+  dsSelectedFolder.value = ''
+  dsPickMode.value = 'new'
+  dsPickFolder.value = ''
+  showDSDialog.value = true
+}
+
+function pickExistingDS(folderPath: string) {
+  dsPickFolder.value = folderPath
 }
 
 async function dsSelectFolder() {
@@ -167,9 +260,50 @@ async function importFolderToDataset() {
   const files = await window.fsAPI.listImages(folder)
   if (!files || files.length === 0) { appStore.setStatus('该文件夹没有图片'); return }
   const paths = files.map((f: any) => f.path)
-  galleryStore.addToDataset(galleryStore.activeDatasetId, paths)
+  await galleryStore.addToDataset(galleryStore.activeDatasetId, paths)
   appStore.setStatus(`已导入 ${paths.length} 张到数据集`)
   galleryStore.loadDatasetImages(galleryStore.activeDatasetId)
+}
+
+async function importImagesToDataset() {
+  if (!galleryStore.activeDatasetId) { appStore.setStatus('请先选择一个数据集'); return }
+  if (!window.fsAPI) return
+  const paths = await window.fsAPI.selectImages()
+  if (!paths || paths.length === 0) return
+  await galleryStore.addToDataset(galleryStore.activeDatasetId, paths)
+  appStore.setStatus(`已导入 ${paths.length} 张到数据集`)
+  galleryStore.loadDatasetImages(galleryStore.activeDatasetId)
+}
+
+async function importFolderAsDataset() {
+  if (!window.fsAPI) return
+  const folder = await window.fsAPI.selectFolder()
+  if (!folder) return
+
+  // Already a dataset? Just load it
+  const existing = galleryStore.datasets.find(d => d.folderPath === folder)
+  if (existing) {
+    appStore.setStatus('该文件夹已是数据集，直接加载')
+    activeTab.value = 'dataset'
+    galleryStore.loadDatasetImages(folder)
+    return
+  }
+
+  // Scan folder for images
+  const files = await window.fsAPI.listImages(folder)
+  if (!files || files.length === 0) {
+    appStore.setStatus('该文件夹没有图片')
+    return
+  }
+
+  const name = folder.split(/[/\\]/).pop() || folder
+  const paths = files.map((f: any) => f.path)
+
+  // Import directly — images are already in the folder, no copy needed
+  galleryStore.importFolderDataset(name, folder, paths)
+  appStore.setStatus(`已导入: ${name} (${paths.length}张)`)
+  activeTab.value = 'dataset'
+  galleryStore.loadDatasetImages(folder)
 }
 
 async function confirmDSDialog() {
@@ -188,9 +322,9 @@ async function confirmDSDialog() {
     }
   } else {
     if (paths.length === 0) { appStore.setStatus('请先在图库里选中图片'); return }
-    const ds = galleryStore.datasets.find(d => d.name === dsDialogName.value)
+    const ds = galleryStore.datasets.find(d => d.folderPath === dsPickFolder.value)
     if (!ds) { appStore.setStatus('请选择一个数据集'); return }
-    galleryStore.addToDataset(ds.folderPath, paths)
+    await galleryStore.addToDataset(ds.folderPath, paths)
     appStore.setStatus(`已添加 ${paths.length} 张到 ${ds.name}`)
     showDSDialog.value = false
     activeTab.value = 'dataset'
@@ -254,10 +388,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
         </template>
         <!-- Workspace tab actions -->
         <template v-if="activeTab === 'workspace'">
-          <button class="tv2-top-btn" @click="tagSelected" :disabled="galleryStore.images.length === 0 || taggerStore.isProcessing">🔮 开始标注</button>
+          <button class="tv2-top-btn add" @click="wsImportFiles">🖼 选图片</button>
+          <button class="tv2-top-btn add" @click="wsImportFolder">📂 选文件夹</button>
+          <button class="tv2-top-btn" @click="wsTagSelected" :disabled="(wsImages.length === 0 && selectedCount === 0) || taggerStore.isProcessing">🔮 标注{{ wsSelectedCount > 0 ? ` (${wsSelectedCount})` : wsImages.length > 0 ? ` (${wsImages.length})` : '' }}</button>
+          <span class="tv2-sel-info" v-if="wsSelectedCount > 0">已选 {{ wsSelectedCount }} 张</span>
         </template>
         <!-- Dataset tab actions -->
         <template v-if="activeTab === 'dataset'">
+          <button class="tv2-top-btn add" @click="importFolderAsDataset">📂 导入文件夹</button>
           <button class="tv2-top-btn add" @click="openNewDatasetDialog">📦 新建数据集</button>
         </template>
       </div>
@@ -307,12 +445,27 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
       <!-- TAB: Workspace -->
       <div v-if="activeTab === 'workspace'" class="tv2-workspace">
         <div class="tws-left">
-          <div class="tws-queue-head">标注队列</div>
+          <div class="tws-queue-head">
+            标注队列
+            <span class="tws-q-count">{{ wsImages.length || selectedCount }} 张</span>
+          </div>
           <div class="tws-queue">
-            <div v-for="img in galleryStore.images.filter(i => galleryStore.selectedIds.has(i.id))" :key="img.id" class="tws-queue-item">
+            <div v-for="img in wsImages" :key="img.path"
+              :class="{ selected: wsSelected.has(img.path) }"
+              class="tws-queue-item" @click="wsToggle(img.path)"
+            >
+              <span class="tws-q-check">{{ wsSelected.has(img.path) ? '☑' : '☐' }}</span>
               <span>{{ img.filename }}</span>
+              <button class="tws-q-remove" @click.stop="wsRemove(img.path)">×</button>
             </div>
-            <div v-if="selectedCount === 0" class="tws-empty">请在图库浏览中选择图片</div>
+            <div v-if="wsImages.length === 0" class="tws-empty">
+              <p>队列是空的</p>
+              <p class="tws-empty-sub">点顶栏「选图片」或「选文件夹」导入，或从图库浏览中选中图片</p>
+            </div>
+          </div>
+          <div class="tws-q-actions" v-if="wsImages.length > 0">
+            <button class="tws-q-btn" @click="wsSelectAll">全选</button>
+            <button class="tws-q-btn" @click="wsClearSel">取消</button>
           </div>
         </div>
         <div class="tws-center">
@@ -329,36 +482,50 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
         <div class="tds-sidebar">
           <div class="tds-side-head">
             <span>数据集</span>
-            <button class="tds-new-ds" @click="dsDialogName=''; dsSelectedFolder=''; dsPickMode='new'; showDSDialog=true">＋</button>
+            <button class="tds-new-ds" @click="openNewDatasetDialog">＋</button>
           </div>
           <div class="tds-ds-list" v-if="galleryStore.datasets.length > 0">
             <div v-for="ds in galleryStore.datasets" :key="ds.folderPath"
               :class="{ active: galleryStore.activeDatasetId === ds.folderPath }"
               class="tds-ds-item"
-              @click="galleryStore.loadDatasetImages(ds.folderPath).then(() => galleryStore.loadDatasetCaptions(ds.folderPath))"
+              @click="galleryStore.loadDatasetImages(ds.folderPath); galleryStore.loadDatasetCaptions(ds.folderPath)"
             >
               <span class="tds-ds-name">{{ ds.name }}</span>
               <span class="tds-ds-count">{{ ds.imagePaths.length }}</span>
-              <button class="tds-ds-del" @click.stop="galleryStore.deleteDataset(ds.folderPath)">×</button>
+              <button class="tds-ds-del" @click.stop="handleDeleteDataset(ds.folderPath)" title="删除数据集">×</button>
             </div>
           </div>
-          <div v-else class="tds-empty-hint">暂无数据集</div>
+          <div v-else class="tds-empty-hint">
+            <span>暂无数据集</span>
+            <button class="tds-empty-import" @click="importFolderAsDataset">📂</button>
+          </div>
         </div>
 
         <div class="tds-main">
           <div v-if="!galleryStore.activeDatasetId" class="tds-placeholder">
             <span class="tds-ph-icon">📦</span>
-            <h2>选择一个数据集</h2>
-            <p>或在图库浏览中选中图片后添加到数据集</p>
+            <h2>数据集</h2>
+            <p v-if="galleryStore.datasets.length > 0">从左侧选择一个数据集</p>
+            <p v-else>导入一个图片文件夹，或新建空数据集后从图库添加</p>
+            <div class="tds-ph-actions">
+              <button class="tds-ph-btn primary" @click="importFolderAsDataset">📂 导入文件夹</button>
+              <button class="tds-ph-btn" @click="openNewDatasetDialog">🆕 新建数据集</button>
+            </div>
           </div>
           <template v-else>
             <div class="tds-toolbar">
               <span class="tds-tb-count">{{ galleryStore.datasetImageItems.length }} 张</span>
               <span class="tds-tb-info">{{ galleryStore.datasetImageItems.filter(i => i.hasCaption).length }} 已标注</span>
+              <button class="tds-tb-btn" @click="importImagesToDataset">🖼 选择图片</button>
               <button class="tds-tb-btn" @click="importFolderToDataset">📂 从文件夹导入</button>
               <button class="tds-tb-btn" @click="handleExportDataset">📤 批量导出标签</button>
             </div>
-            <div class="tds-grid">
+            <div v-if="galleryStore.datasetImageItems.length === 0" class="tds-empty-grid">
+              <span class="tds-empty-icon">📭</span>
+              <p>这个数据集还没有图片</p>
+              <p class="tds-empty-sub">用工具栏「从文件夹导入」添加，或去图库浏览选中图片后点「添加到数据集」</p>
+            </div>
+            <div v-else class="tds-grid">
               <div v-for="item in galleryStore.datasetImageItems" :key="item.path" class="tds-card" :class="{ nocap: !item.hasCaption }" @click="handleEditDatasetItem(item)">
                 <div class="tds-card-img">
                   <img v-if="item.thumb" :src="item.thumb" />
@@ -377,8 +544,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
             <span>{{ editingDatasetItem.filename }}</span>
             <button @click="editingDatasetItem = null">✕</button>
           </div>
-          <textarea class="tds-ed-area" v-model="editDSCaption" rows="8" placeholder="标签，逗号分隔..."></textarea>
-          <div class="tds-ed-info">{{ editDSCaption.split(/[,，]/).filter((t: string) => t.trim()).length }} 个标签</div>
+          <div class="tds-ed-tags">
+            <span v-for="tag in dsTags" :key="tag" class="tds-ed-tag" @click="dsRemoveTag(tag)" :title="'点击删除: ' + tag">
+              {{ tag }}
+              <i>×</i>
+            </span>
+            <span v-if="dsTags.length === 0" class="tds-ed-no-tags">暂无标签，在下方输入</span>
+          </div>
+          <div class="tds-ed-input-row">
+            <input
+              v-model="dsTagInput"
+              class="tds-ed-input"
+              placeholder="输入标签，回车添加..."
+              @keydown="dsHandleTagKeydown"
+            />
+            <button class="tds-ed-add" @click="dsAddTag(dsTagInput)" :disabled="!dsTagInput.trim()">＋</button>
+          </div>
+          <div class="tds-ed-info">{{ dsTags.length }} 个标签</div>
           <div class="tds-ed-actions">
             <button class="tds-ed-save" @click="handleSaveDSCaption">💾 保存</button>
             <button class="tds-ed-remove" @click="galleryStore.removeFromDataset(galleryStore.activeDatasetId!, editingDatasetItem.path); editingDatasetItem = null">🗑 移出数据集</button>
@@ -403,13 +585,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
           <!-- Pick existing -->
           <div v-if="dsPickMode === 'pick'" class="ds-section">
             <div class="ds-dlg-list" v-if="galleryStore.datasets.length > 0">
-              <div v-for="ds in galleryStore.datasets" :key="ds.folderPath"
-                :class="{ active: dsDialogName === ds.name }"
-                @click="dsDialogName = ds.name" class="ds-dlg-item"
+              <button v-for="ds in galleryStore.datasets" :key="ds.folderPath"
+                :class="{ active: dsPickFolder === ds.folderPath }"
+                @click="pickExistingDS(ds.folderPath)" class="ds-dlg-item-btn"
               >
                 <span class="ds-item-name">{{ ds.name }}</span>
                 <span class="ds-item-count">{{ ds.imagePaths.length }} 张</span>
-              </div>
+              </button>
             </div>
             <p v-else class="ds-none-hint">暂无数据集，请先新建</p>
           </div>
@@ -444,7 +626,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 .tv2-drag {
   position: absolute; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
   background: rgba(244,114,182,0.08); border: 2px dashed rgba(244,114,182,0.3); border-radius: 12px;
-  color: #ff69b4; font-size: 14px; font-weight: 600; pointer-events: none;
+  color: var(--accent-primary); font-size: 14px; font-weight: 600; pointer-events: none;
 }
 
 /* Top bar */
@@ -452,28 +634,28 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 .tv2-tabs { display: flex; gap: 0; }
 .tv2-tabs button {
   padding: 7px 18px; border: none; background: transparent;
-  color: #6b7280; font-size: 13px; cursor: pointer; border-radius: 6px;
+  color: var(--text-tertiary); font-size: 13px; cursor: pointer; border-radius: 6px;
   transition: color 0.15s;
 }
-.tv2-tabs button:hover { color: #d1d5db; }
-.tv2-tabs button.active { color: #ff69b4; font-weight: 600; }
+.tv2-tabs button:hover { color: var(--text-secondary); }
+.tv2-tabs button.active { color: var(--accent-primary); font-weight: 600; }
 .tv2-top-actions { display: flex; align-items: center; gap: 8px; }
-.tv2-sel-info { font-size: 11px; color: #ff69b4; font-weight: 500; }
+.tv2-sel-info { font-size: 11px; color: var(--accent-primary); font-weight: 500; }
 .tv2-top-btn {
   padding: 7px 16px; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;
-  background: linear-gradient(135deg, #ff69b4, #ff85c2); color: #fff;
-  box-shadow: 0 2px 8px rgba(255,105,180,0.2); transition: all 0.15s;
+  background: linear-gradient(135deg, var(--accent-primary), #ff85c2); color: #fff;
+  box-shadow: 0 2px 8px rgba(var(--accent-primary-rgb),0.2); transition: all 0.15s;
 }
 .tv2-top-btn:hover:not(:disabled) { filter: brightness(1.1); }
 .tv2-top-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.tv2-top-btn.add { background: rgba(255,105,180,0.1); color: #ff69b4; box-shadow: none; font-weight: 500; }
-.tv2-top-btn.add:hover { background: rgba(255,105,180,0.2); }
-.tv2-top-btn.sec { background: rgba(255,255,255,0.04); color: #9ca3af; box-shadow: none; }
-.tv2-top-btn.sec:hover { background: rgba(255,255,255,0.08); color: #e5e7eb; }
+.tv2-top-btn.add { background: rgba(var(--accent-primary-rgb),0.1); color: var(--accent-primary); box-shadow: none; font-weight: 500; }
+.tv2-top-btn.add:hover { background: rgba(var(--accent-primary-rgb),0.2); }
+.tv2-top-btn.sec { background: rgba(255,255,255,0.04); color: var(--text-tertiary); box-shadow: none; }
+.tv2-top-btn.sec:hover { background: rgba(255,255,255,0.08); color: var(--text-primary); }
 
 .tv2-view-toggle { display: flex; gap: 2px; background: rgba(255,255,255,0.02); border-radius: 6px; padding: 2px; }
-.tv2-view-toggle button { width: 28px; height: 26px; border: none; background: none; color: #6b7280; font-size: 14px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
-.tv2-view-toggle button.on { background: rgba(255,105,180,0.12); color: #ff69b4; }
+.tv2-view-toggle button { width: 28px; height: 26px; border: none; background: none; color: var(--text-tertiary); font-size: 14px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; justify-content: center; }
+.tv2-view-toggle button.on { background: rgba(var(--accent-primary-rgb),0.12); color: var(--accent-primary); }
 
 /* Body */
 .tv2-body { flex: 1; min-height: 0; position: relative; overflow: hidden; }
@@ -483,113 +665,165 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 
 /* Sidebar */
 .tv2-sidebar { display: flex; flex-direction: column; gap: 4px; padding: 8px; overflow-y: auto; max-width: 160px; flex-shrink: 0; }
-.tv2-side-head { display: flex; justify-content: space-between; font-size: 9px; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 2px; }
-.tv2-side-add { background: none; border: none; color: #ff69b4; font-size: 16px; cursor: pointer; }
+.tv2-side-head { display: flex; justify-content: space-between; font-size: 9px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; margin-bottom: 2px; }
+.tv2-side-add { background: none; border: none; color: var(--accent-primary); font-size: 16px; cursor: pointer; }
 .tv2-root-list { display: flex; flex-direction: column; gap: 2px; }
 .tv2-root-list button {
   padding: 5px 8px; border: 1px solid transparent; border-radius: 6px;
-  background: none; color: #9ca3af; font-size: 11px; cursor: pointer; display: flex; gap: 4px; align-items: center;
+  background: none; color: var(--text-tertiary); font-size: 11px; cursor: pointer; display: flex; gap: 4px; align-items: center;
   width: 100%; text-align: left; overflow: hidden;
 }
 .tv2-root-list button:hover { background: rgba(255,255,255,0.03); }
-.tv2-root-list button.active { background: rgba(255,105,180,0.08); border-color: rgba(255,105,180,0.15); color: #ff69b4; }
-.tv2-root-list button span { font-size: 9px; color: #6b7280; flex-shrink: 0; }
-.tv2-scan { padding: 4px; border: none; background: none; color: #6b7280; font-size: 10px; cursor: pointer; align-self: flex-start; }
-.tv2-scan:hover { color: #ff69b4; }
+.tv2-root-list button.active { background: rgba(var(--accent-primary-rgb),0.08); border-color: rgba(var(--accent-primary-rgb),0.15); color: var(--accent-primary); }
+.tv2-root-list button span { font-size: 9px; color: var(--text-tertiary); flex-shrink: 0; }
+.tv2-scan { padding: 4px; border: none; background: none; color: var(--text-tertiary); font-size: 10px; cursor: pointer; align-self: flex-start; }
+.tv2-scan:hover { color: var(--accent-primary); }
 
 /* Workspace tab */
 .tv2-workspace { display: grid; grid-template-columns: 220px 1fr 420px; gap: 8px; height: 100%; }
 .tws-left { background: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03); border-radius: 8px; display: flex; flex-direction: column; }
-.tws-queue-head { padding: 10px 12px; font-size: 10px; font-weight: 700; color: #6b7280; text-transform: uppercase; border-bottom: 1px solid rgba(255,255,255,0.03); }
+.tws-queue-head { padding: 10px 12px; font-size: 10px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; border-bottom: 1px solid rgba(255,255,255,0.03); }
 .tws-queue { flex: 1; overflow-y: auto; padding: 4px; }
-.tws-queue-item { padding: 6px 10px; font-size: 11px; color: #d1d5db; border-radius: 4px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tws-queue-item { padding: 6px 10px; font-size: 11px; color: var(--text-secondary); border-radius: 4px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 6px; }
 .tws-queue-item:hover { background: rgba(255,255,255,0.03); }
-.tws-empty { padding: 20px; text-align: center; font-size: 11px; color: #4b5563; }
+.tws-queue-item.selected { background: rgba(var(--accent-primary-rgb),0.08); color: var(--accent-primary); }
+.tws-q-check { font-size: 11px; flex-shrink: 0; }
+.tws-q-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 12px; padding: 0 2px; margin-left: auto; flex-shrink: 0; opacity: 0; }
+.tws-queue-item:hover .tws-q-remove { opacity: 0.6; }
+.tws-q-remove:hover { color: var(--accent-danger); opacity: 1; }
+.tws-q-count { font-size: 9px; color: var(--text-tertiary); font-weight: 400; }
+.tws-q-actions { display: flex; gap: 4px; padding: 4px 0; }
+.tws-q-btn { padding: 3px 10px; border: 1px solid rgba(255,255,255,0.06); background: none; color: var(--text-tertiary); font-size: 10px; border-radius: 4px; cursor: pointer; }
+.tws-q-btn:hover { background: rgba(255,255,255,0.04); color: var(--text-secondary); }
+.tws-empty { padding: 20px; text-align: center; font-size: 11px; color: var(--text-muted); }
+.tws-empty p { margin: 2px 0; }
+.tws-empty-sub { font-size: 10px; color: var(--text-muted); }
 .tws-center { display: flex; align-items: center; justify-content: center; background: #111112; border-radius: 8px; overflow: hidden; }
-.tws-placeholder { color: #374151; font-size: 14px; }
+.tws-placeholder { color: var(--text-muted); font-size: 14px; }
 .tws-preview { max-width: 100%; max-height: 100%; object-fit: contain; }
 .tws-right { overflow-y: auto; }
 
 /* Dataset tab */
 .tv2-dataset { display: flex; gap: 8px; height: 100%; overflow: hidden; }
 .tds-sidebar { width: 170px; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; }
-.tds-side-head { display: flex; justify-content: space-between; align-items: center; font-size: 10px; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 4px; }
-.tds-new-ds { background: none; border: 1px solid rgba(255,105,180,0.15); color: #ff69b4; font-size: 14px; cursor: pointer; border-radius: 4px; padding: 0 6px; }
+.tds-side-head { display: flex; justify-content: space-between; align-items: center; font-size: 10px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; margin-bottom: 4px; }
+.tds-new-ds { background: none; border: 1px solid rgba(var(--accent-primary-rgb),0.15); color: var(--accent-primary); font-size: 14px; cursor: pointer; border-radius: 4px; padding: 0 6px; }
 .tds-ds-list { display: flex; flex-direction: column; gap: 2px; }
-.tds-ds-item, .tds-ds-list button { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: none; background: none; color: #9ca3af; font-size: 11px; cursor: pointer; border-radius: 6px; width: 100%; text-align: left; }
+.tds-ds-item, .tds-ds-list button { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: none; background: none; color: var(--text-tertiary); font-size: 11px; cursor: pointer; border-radius: 6px; width: 100%; text-align: left; }
 .tds-ds-item:hover, .tds-ds-list button:hover { background: rgba(255,255,255,0.03); }
-.tds-ds-item.active, .tds-ds-list button.active { background: rgba(255,105,180,0.08); color: #ff69b4; }
+.tds-ds-item.active, .tds-ds-list button.active { background: rgba(var(--accent-primary-rgb),0.08); color: var(--accent-primary); }
 .tds-ds-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tds-ds-count { font-size: 9px; color: #6b7280; }
-.tds-ds-del { background: none; border: none; color: #4b5563; font-size: 12px; cursor: pointer; padding: 0 2px; opacity: 0; }
-.tds-ds-list button:hover .tds-ds-del { opacity: 1; }
-.tds-ds-del:hover { color: #ef4444; }
-.tds-empty-hint { font-size: 11px; color: #4b5563; text-align: center; padding: 20px 0; }
+.tds-ds-count { font-size: 9px; color: var(--text-tertiary); }
+.tds-ds-del { background: none; border: none; color: var(--text-muted); font-size: 12px; cursor: pointer; padding: 0; width: 18px; height: 18px; line-height: 18px; text-align: center; opacity: 0; transition: opacity 0.15s; flex-shrink: 0; }
+.tds-ds-item:hover .tds-ds-del { opacity: 0.5; }
+.tds-ds-item:hover .tds-ds-del:hover { opacity: 1; color: var(--accent-danger); }
+.tds-empty-hint { font-size: 11px; color: var(--text-muted); text-align: center; padding: 20px 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.tds-empty-import { background: rgba(var(--accent-primary-rgb),0.08); border: 1px solid rgba(var(--accent-primary-rgb),0.12); border-radius: 6px; color: var(--accent-primary); font-size: 13px; cursor: pointer; padding: 4px 10px; }
+.tds-empty-import:hover { background: rgba(var(--accent-primary-rgb),0.15); }
 
 .tds-main { flex: 1; overflow-y: auto; min-width: 0; }
-.tds-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 8px; color: #4b5563; }
+.tds-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 8px; color: var(--text-muted); }
 .tds-ph-icon { font-size: 48px; opacity: 0.4; }
-.tds-placeholder h2 { font-size: 18px; color: #6b7280; margin: 0; }
-.tds-placeholder p { font-size: 12px; color: #4b5563; margin: 0; }
+.tds-placeholder h2 { font-size: 18px; color: var(--text-tertiary); margin: 0; }
+.tds-placeholder p { font-size: 12px; color: var(--text-muted); margin: 0; }
+.tds-ph-actions { display: flex; gap: 8px; margin-top: 12px; }
+.tds-ph-btn {
+  padding: 9px 18px; border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.03); border-radius: 8px;
+  color: var(--text-tertiary); font-size: 12px; cursor: pointer; font-family: inherit;
+  transition: all 0.15s;
+}
+.tds-ph-btn:hover { background: rgba(255,255,255,0.06); color: var(--text-primary); }
+.tds-ph-btn.primary { background: rgba(var(--accent-primary-rgb),0.1); border-color: rgba(var(--accent-primary-rgb),0.2); color: var(--accent-primary); }
+.tds-ph-btn.primary:hover { background: rgba(var(--accent-primary-rgb),0.18); }
 .tds-toolbar { display: flex; align-items: center; gap: 10px; padding: 8px 0; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.04); }
-.tds-tb-count { font-size: 12px; color: #d1d5db; font-weight: 600; }
-.tds-tb-info { font-size: 11px; color: #6b7280; }
-.tds-tb-btn { margin-left: auto; padding: 5px 12px; border: 1px solid rgba(255,105,180,0.15); background: rgba(255,105,180,0.06); color: #ff69b4; border-radius: 6px; font-size: 11px; cursor: pointer; }
-.tds-tb-btn:hover { background: rgba(255,105,180,0.12); }
+.tds-tb-count { font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+.tds-tb-info { font-size: 11px; color: var(--text-tertiary); }
+.tds-tb-btn { margin-left: auto; padding: 5px 12px; border: 1px solid rgba(var(--accent-primary-rgb),0.15); background: rgba(var(--accent-primary-rgb),0.06); color: var(--accent-primary); border-radius: 6px; font-size: 11px; cursor: pointer; }
+.tds-tb-btn:hover { background: rgba(var(--accent-primary-rgb),0.12); }
 
+.tds-empty-grid { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 60px 20px; color: var(--text-muted); text-align: center; }
+.tds-empty-icon { font-size: 40px; opacity: 0.3; margin-bottom: 8px; }
+.tds-empty-grid p { font-size: 13px; margin: 4px 0; color: var(--text-tertiary); }
+.tds-empty-sub { font-size: 11px; color: var(--text-muted); }
 .tds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 8px; }
 .tds-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px; overflow: hidden; cursor: pointer; transition: all 0.15s; }
-.tds-card:hover { border-color: rgba(255,105,180,0.15); }
-.tds-card.nocap { opacity: 0.5; }
+.tds-card:hover { border-color: rgba(var(--accent-primary-rgb),0.15); }
+.tds-card.nocap { opacity: 0.8; }
+.tds-card.nocap:hover { opacity: 1; }
 .tds-card-img { aspect-ratio: 1; background: rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .tds-card-img img { width: 100%; height: 100%; object-fit: cover; }
 .tds-card-ph { font-size: 28px; opacity: 0.2; }
-.tds-card-name { padding: 5px 8px; font-size: 10px; color: #9ca3af; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tds-card-caption { padding: 0 8px 6px; font-size: 9px; color: #6b7280; line-height: 1.3; }
+.tds-card-name { padding: 5px 8px; font-size: 10px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tds-card-caption { padding: 0 8px 6px; font-size: 9px; color: var(--text-tertiary); line-height: 1.3; }
 
 /* Dataset editor */
-.tds-editor { width: 260px; flex-shrink: 0; background: rgba(24,24,26,0.8); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
-.tds-ed-head { display: flex; justify-content: space-between; font-size: 12px; color: #d1d5db; font-weight: 600; }
-.tds-ed-head button { background: none; border: none; color: #6b7280; cursor: pointer; }
-.tds-ed-area { width: 100%; padding: 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; color: #e5e7eb; font-size: 12px; font-family: inherit; resize: vertical; box-sizing: border-box; line-height: 1.6; }
-.tds-ed-info { font-size: 10px; color: #6b7280; }
+.tds-editor { width: 260px; flex-shrink: 0; background: rgba(24,24,26,0.8); border: 1px solid rgba(255,255,255,0.04); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+.tds-ed-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--text-secondary); font-weight: 600; }
+.tds-ed-head button { background: none; border: none; color: var(--text-tertiary); cursor: pointer; font-size: 16px; }
+.tds-ed-head button:hover { color: var(--accent-danger); }
+.tds-ed-tags { display: flex; flex-wrap: wrap; gap: 5px; min-height: 32px; padding: 6px 8px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; align-items: flex-start; align-content: flex-start; }
+.tds-ed-no-tags { font-size: 11px; color: var(--text-muted); align-self: center; }
+.tds-ed-tag {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 2px 7px; background: rgba(var(--accent-primary-rgb),0.12); border: 1px solid rgba(var(--accent-primary-rgb),0.2);
+  border-radius: 12px; font-size: 11px; color: var(--accent-primary); cursor: pointer; user-select: none;
+  transition: all 0.1s;
+}
+.tds-ed-tag:hover { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.3); color: var(--accent-danger); }
+.tds-ed-tag i { font-style: normal; font-size: 11px; opacity: 0.5; }
+.tds-ed-tag:hover i { opacity: 1; }
+.tds-ed-input-row { display: flex; gap: 4px; }
+.tds-ed-input {
+  flex: 1; padding: 7px 10px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px; color: var(--text-primary); font-size: 12px; font-family: inherit; box-sizing: border-box;
+}
+.tds-ed-input:focus { outline: none; border-color: rgba(var(--accent-primary-rgb),0.3); }
+.tds-ed-add {
+  padding: 7px 12px; border: 1px solid rgba(var(--accent-primary-rgb),0.2); background: rgba(var(--accent-primary-rgb),0.08);
+  border-radius: 6px; color: var(--accent-primary); font-size: 14px; cursor: pointer;
+}
+.tds-ed-add:hover:not(:disabled) { background: rgba(var(--accent-primary-rgb),0.18); }
+.tds-ed-add:disabled { opacity: 0.3; cursor: default; }
+.tds-ed-info { font-size: 10px; color: var(--text-tertiary); }
 .tds-ed-actions { display: flex; gap: 6px; }
-.tds-ed-save { flex: 1; padding: 8px; border: none; border-radius: 6px; background: linear-gradient(135deg, #ff69b4, #ff85c2); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
-.tds-ed-remove { padding: 8px 12px; border: 1px solid rgba(239,68,68,0.15); background: rgba(239,68,68,0.05); border-radius: 6px; color: #ef4444; font-size: 11px; cursor: pointer; }
+.tds-ed-save { flex: 1; padding: 8px; border: none; border-radius: 6px; background: linear-gradient(135deg, var(--accent-primary), #ff85c2); color: #fff; font-size: 12px; font-weight: 600; cursor: pointer; }
+.tds-ed-remove { padding: 8px 12px; border: 1px solid rgba(239,68,68,0.15); background: rgba(239,68,68,0.05); border-radius: 6px; color: var(--accent-danger); font-size: 11px; cursor: pointer; }
 
 /* Dataset dialog */
 .ds-dlg-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 200; }
-.ds-dlg { background: #1c1c1e; border: 1px solid rgba(255,105,180,0.1); border-radius: 14px; padding: 24px; width: 360px; }
-.ds-dlg h3 { font-size: 16px; font-weight: 600; color: #f3f4f6; margin: 0 0 16px; }
-.ds-dlg-input { width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: #e5e7eb; font-size: 13px; box-sizing: border-box; margin-bottom: 12px; }
+.ds-dlg { background: #1c1c1e; border: 1px solid rgba(var(--accent-primary-rgb),0.1); border-radius: 14px; padding: 24px; width: 360px; }
+.ds-dlg h3 { font-size: 16px; font-weight: 600; color: var(--text-primary); margin: 0 0 16px; }
+.ds-dlg-input { width: 100%; padding: 10px 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; color: var(--text-primary); font-size: 13px; box-sizing: border-box; margin-bottom: 12px; }
 .ds-dlg-list { max-height: 160px; overflow-y: auto; margin-bottom: 14px; display: flex; flex-direction: column; gap: 2px; }
-.ds-dlg-item { padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 12px; color: #9ca3af; display: flex; justify-content: space-between; }
-.ds-dlg-item:hover { background: rgba(255,255,255,0.03); }
-.ds-dlg-item.active { background: rgba(255,105,180,0.08); color: #ff69b4; }
-.ds-dlg-item span { font-size: 10px; color: #6b7280; }
+.ds-dlg-item-btn { width: 100%; padding: 8px 10px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; color: var(--text-tertiary); display: flex; justify-content: space-between; background: none; font-family: inherit; text-align: left; }
+.ds-dlg-item-btn:hover { background: rgba(255,255,255,0.05); }
+.ds-dlg-item-btn.active { background: rgba(var(--accent-primary-rgb),0.08); color: var(--accent-primary); }
+.ds-dlg-item-btn span { font-size: 10px; color: var(--text-tertiary); }
+.ds-dlg-item-btn.active span { color: var(--accent-primary); }
 .ds-dlg-actions { display: flex; gap: 8px; }
-.ds-dlg-confirm { flex: 1; padding: 10px; border: none; border-radius: 8px; background: linear-gradient(135deg, #ff69b4, #ff85c2); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
-.ds-dlg-cancel { padding: 10px 16px; background: none; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; color: #6b7280; font-size: 13px; cursor: pointer; }
-.ds-dlg-sub { font-size: 12px; color: #ff69b4; margin: -12px 0 16px; font-weight: 500; }
+.ds-dlg-confirm { flex: 1; padding: 10px; border: none; border-radius: 8px; background: linear-gradient(135deg, var(--accent-primary), #ff85c2); color: #fff; font-size: 13px; font-weight: 600; cursor: pointer; }
+.ds-dlg-cancel { padding: 10px 16px; background: none; border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; color: var(--text-tertiary); font-size: 13px; cursor: pointer; }
+.ds-dlg-sub { font-size: 12px; color: var(--accent-primary); margin: -12px 0 16px; font-weight: 500; }
 
 .ds-mode-tabs { display: flex; gap: 4px; margin-bottom: 14px; }
 .ds-mode-tabs button {
   flex: 1; padding: 8px 12px; border: 1px solid rgba(255,255,255,0.08);
   background: rgba(255,255,255,0.02); border-radius: 8px;
-  color: #9ca3af; font-size: 12px; cursor: pointer; transition: all 0.15s;
+  color: var(--text-tertiary); font-size: 12px; cursor: pointer; transition: all 0.15s;
 }
-.ds-mode-tabs button:hover:not(:disabled) { background: rgba(255,255,255,0.04); color: #e5e7eb; }
-.ds-mode-tabs button.active { background: rgba(255,105,180,0.1); border-color: rgba(255,105,180,0.25); color: #ff69b4; font-weight: 600; }
+.ds-mode-tabs button:hover:not(:disabled) { background: rgba(255,255,255,0.04); color: var(--text-primary); }
+.ds-mode-tabs button.active { background: rgba(var(--accent-primary-rgb),0.1); border-color: rgba(var(--accent-primary-rgb),0.25); color: var(--accent-primary); font-weight: 600; }
 .ds-mode-tabs button:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .ds-section { margin-bottom: 14px; }
-.ds-field-label { display: block; font-size: 10px; font-weight: 600; color: #6b7280; text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.04em; }
+.ds-field-label { display: block; font-size: 10px; font-weight: 600; color: var(--text-tertiary); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.04em; }
 .ds-folder-row { display: flex; gap: 6px; align-items: center; }
-.ds-folder-path { flex: 1; padding: 8px 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; font-size: 11px; color: #d1d5db; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ds-folder-path.empty { color: #4b5563; }
-.ds-folder-btn { padding: 8px 12px; border: 1px solid rgba(255,105,180,0.15); background: rgba(255,105,180,0.06); border-radius: 6px; color: #ff69b4; font-size: 11px; cursor: pointer; white-space: nowrap; }
-.ds-folder-btn:hover { background: rgba(255,105,180,0.12); }
-.ds-none-hint { font-size: 11px; color: #4b5563; text-align: center; padding: 12px 0; }
+.ds-folder-path { flex: 1; padding: 8px 10px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 6px; font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ds-folder-path.empty { color: var(--text-muted); }
+.ds-folder-btn { padding: 8px 12px; border: 1px solid rgba(var(--accent-primary-rgb),0.15); background: rgba(var(--accent-primary-rgb),0.06); border-radius: 6px; color: var(--accent-primary); font-size: 11px; cursor: pointer; white-space: nowrap; }
+.ds-folder-btn:hover { background: rgba(var(--accent-primary-rgb),0.12); }
+.ds-none-hint { font-size: 11px; color: var(--text-muted); text-align: center; padding: 12px 0; }
 .ds-item-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ds-item-count { flex-shrink: 0; }
 </style>

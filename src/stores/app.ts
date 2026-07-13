@@ -28,10 +28,28 @@ applyTheme(saved.theme)
 export const useAppStore = defineStore('app', () => {
   const version = ref('0.1.0')
   const status = ref('就绪')
+  const lastError = ref('')
+  const errorCount = ref(0)
   const theme = ref<'dark' | 'light'>(saved.theme)
   const showMascot = ref(saved.showMascot)
 
+  let _errorTimer: ReturnType<typeof setTimeout> | null = null
+
   function setStatus(text: string) { status.value = text }
+
+  function setError(text: string) {
+    lastError.value = text
+    errorCount.value++
+    status.value = '❌ ' + text
+    if (_errorTimer) clearTimeout(_errorTimer)
+    _errorTimer = setTimeout(() => clearError(), 8000)
+  }
+
+  function clearError() {
+    if (_errorTimer) { clearTimeout(_errorTimer); _errorTimer = null }
+    lastError.value = ''
+    status.value = '就绪'
+  }
 
   function setTheme(t: 'dark' | 'light') {
     theme.value = t
@@ -54,9 +72,13 @@ export const useAppStore = defineStore('app', () => {
   return {
     version,
     status,
+    lastError,
+    errorCount,
     theme,
     showMascot,
     setStatus,
+    setError,
+    clearError,
     setTheme,
     toggleTheme,
     toggleMascot,
