@@ -33,7 +33,7 @@ function matchKnownModel(filename) {
 }
 
 /** Fixed default model directory on D: drive — created automatically if missing. */
-function getDefaultModelDir() { return getModelDirFromConfig() } // now uses paths.js directly
+function getDefaultModelDir() { return getModelDir() }
 
 function getModelDirFromConfig() {
   // Check config first, fall back to D:\BakaTOOLS\tagger-models\
@@ -41,7 +41,7 @@ function getModelDirFromConfig() {
     const config = JSON.parse(fs.readFileSync(getConfigPath(), 'utf-8'))
     if (config.localModelDir && fs.existsSync(config.localModelDir)) return config.localModelDir
   } catch (_) {}
-  return getModelDirFromConfig()
+  return getDefaultModelDir()
 }
 
 /** Copy a file into the model directory. Returns the new path. */

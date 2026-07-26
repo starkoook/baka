@@ -71,4 +71,11 @@ describe('gallery workspace UI', () => {
     expect(toolbar).toContain('scan: []')
     expect(toolbar).toContain('addRoot: []')
   })
+
+  it('restores a dataset view instead of replacing it with all images on mount', () => {
+    const gallery = read('src/views/Gallery.vue')
+
+    expect(gallery).toContain('if (galleryStore.activeDatasetId)')
+    expect(gallery).toContain('galleryStore.loadDatasetImages(galleryStore.activeDatasetId)')
+  })
 })

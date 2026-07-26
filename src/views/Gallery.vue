@@ -15,6 +15,7 @@ const router = useRouter()
 const galleryStore = useGalleryStore()
 const taggerStore = useTaggerStore()
 const gridRef = ref<InstanceType<typeof GalleryGrid> | null>(null)
+const datasetGridRef = ref<HTMLElement | null>(null)
 const viewMode = ref<'small' | 'large' | 'list'>('small')
 const metadataIndex = ref<number | null>(null)
 const viewerMetadata = ref<SDMetadata>({ hasMetadata: false })
@@ -155,7 +156,8 @@ function revealViewerImage() {
 
 function sendImagesToTagger(images: { id: number; path: string }[]) {
   if (images.length === 0) return
-  const handoff = createGalleryHandoff(images, galleryStore.captureReturnContext(gridRef.value?.getScrollTop() ?? 0))
+  const scrollTop = galleryStore.activeDatasetId ? datasetGridRef.value?.scrollTop ?? 0 : gridRef.value?.getScrollTop() ?? 0
+  const handoff = createGalleryHandoff(images, galleryStore.captureReturnContext(scrollTop))
   taggerStore.createQueueFromGallery(handoff)
   router.push('/tagger')
 }
@@ -312,11 +314,16 @@ watch(selectedImage, (image) => { if (image) galleryStore.fetchTags(image.id) })
 onMounted(async () => {
   galleryStore.setupScanListener()
   await galleryStore.loadRoots()
-  await galleryStore.loadImages(true)
-  await refreshVisibleTags()
+  if (galleryStore.activeDatasetId) {
+    galleryStore.loadDatasetImages(galleryStore.activeDatasetId)
+  } else {
+    await galleryStore.loadImages(true)
+    await refreshVisibleTags()
+  }
   if (galleryStore.pendingScrollTop) {
     await nextTick()
-    gridRef.value?.restoreScroll(galleryStore.pendingScrollTop)
+    if (galleryStore.activeDatasetId && datasetGridRef.value) datasetGridRef.value.scrollTop = galleryStore.pendingScrollTop
+    else gridRef.value?.restoreScroll(galleryStore.pendingScrollTop)
     galleryStore.pendingScrollTop = 0
   }
   window.addEventListener('keydown', onKeydown)
@@ -385,7 +392,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             @request-thumb="loadThumbnail"
           />
 
-          <div v-else class="dataset-grid">
+          <div v-else ref="datasetGridRef" class="dataset-grid">
             <button v-for="item in galleryStore.datasetImageItems" :key="item.path" class="dataset-card" @click="editDatasetItem(item)">
               <span class="dataset-card__image"><img v-if="item.thumb" :src="item.thumb" :alt="item.filename" /><i v-else>IMG</i></span>
               <strong>{{ item.filename }}</strong>

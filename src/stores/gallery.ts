@@ -2,7 +2,10 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useAppStore } from './app'
 import { useLogStore } from './logs'
-import { useTaggerStore } from './tagger'
+import {
+  applyGallerySelection,
+  type GalleryReturnContext,
+} from '@/features/gallery/gallery-workflow'
 
 export const useGalleryStore = defineStore('gallery', () => {
   const roots = ref<LibraryRoot[]>([])
@@ -13,6 +16,12 @@ export const useGalleryStore = defineStore('gallery', () => {
   const isScanning = ref(false)
   const isLoading = ref(false)
   const activeRootId = ref<number | null | undefined>(undefined)
+  const searchQuery = ref('')
+  const tagStateFilter = ref<'all' | 'tagged' | 'untagged'>('all')
+  const sortMode = ref('modified-desc')
+  const selectionAnchorId = ref<number | null>(null)
+  const pendingReturnContext = ref<GalleryReturnContext | null>(null)
+  const pendingScrollTop = ref(0)
 
   const currentOffset = ref(0)
   const _reachedEnd = ref(false)
@@ -125,16 +134,27 @@ export const useGalleryStore = defineStore('gallery', () => {
 
   // ── Multi-select ──
   function toggleSelect(id: number, multi: boolean = false) {
-    if (!multi) {
-      // Single click: clear all, select just this
-      selectedIds.value = new Set([id])
-    } else {
-      // Ctrl+click: toggle
-      const next = new Set(selectedIds.value)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      selectedIds.value = next
-    }
+    const result = applyGallerySelection(
+      selectedIds.value,
+      images.value.map((image) => image.id),
+      id,
+      multi ? 'toggle' : 'single',
+      selectionAnchorId.value,
+    )
+    selectedIds.value = result.selectedIds
+    selectionAnchorId.value = result.anchorId
+  }
+
+  function selectRange(id: number) {
+    const result = applyGallerySelection(
+      selectedIds.value,
+      images.value.map((image) => image.id),
+      id,
+      'range',
+      selectionAnchorId.value,
+    )
+    selectedIds.value = result.selectedIds
+    selectionAnchorId.value = result.anchorId
   }
 
   function isSelected(id: number): boolean {
@@ -143,10 +163,62 @@ export const useGalleryStore = defineStore('gallery', () => {
 
   function clearSelection() {
     selectedIds.value = new Set()
+    selectionAnchorId.value = null
   }
 
   function selectAll() {
     selectedIds.value = new Set(images.value.map((img) => img.id))
+    selectionAnchorId.value = images.value[0]?.id ?? null
+  }
+
+  function captureReturnContext(scrollTop: number): GalleryReturnContext {
+    const source = activeDatasetId.value
+      ? { kind: 'dataset' as const, id: activeDatasetId.value }
+      : activeRootId.value != null
+        ? { kind: 'root' as const, id: activeRootId.value }
+        : { kind: 'all' as const, id: null }
+
+    return {
+      ...source,
+      search: searchQuery.value,
+      tagState: tagStateFilter.value,
+      sort: sortMode.value,
+      scrollTop,
+      selectedIds: [...selectedIds.value],
+    }
+  }
+
+  function restoreReturnContext(context: GalleryReturnContext) {
+    pendingReturnContext.value = context
+    searchQuery.value = context.search
+    tagStateFilter.value = context.tagState
+    sortMode.value = context.sort
+    selectedIds.value = new Set(context.selectedIds)
+    selectionAnchorId.value = context.selectedIds[0] ?? null
+    pendingScrollTop.value = context.scrollTop
+    activeRootId.value = null
+    activeDatasetId.value = null
+    datasetImageItems.value = []
+    if (context.kind === 'root') activeRootId.value = Number(context.id)
+    if (context.kind === 'dataset') activeDatasetId.value = String(context.id)
+  }
+
+  function replaceImagePaths(mappings: { oldPath: string; newPath: string }[]) {
+    const byOldPath = new Map(mappings.map((mapping) => [mapping.oldPath, mapping.newPath]))
+    images.value.forEach((image) => {
+      image.path = byOldPath.get(image.path) ?? image.path
+    })
+    datasets.value.forEach((dataset) => {
+      dataset.imagePaths = dataset.imagePaths.map((imagePath) => byOldPath.get(imagePath) ?? imagePath)
+    })
+    datasetImageItems.value.forEach((item) => {
+      const nextPath = byOldPath.get(item.path)
+      if (!nextPath) return
+      item.path = nextPath
+      item.filename = nextPath.split(/[/\\]/).pop() || item.filename
+      item.txtPath = nextPath.replace(/\.[^.]+$/, '') + '.txt'
+    })
+    saveDatasets()
   }
 
   // ── Tag management ──
@@ -177,14 +249,8 @@ export const useGalleryStore = defineStore('gallery', () => {
   }
 
   // ── Send to Tagger ──
-  function sendToTagger() {
-    const ids = selectedIds.value.size > 0 ? [...selectedIds.value] : (selectedImage.value ? [selectedImage.value.id] : [])
-    if (ids.length === 0) return
-    const imgs = images.value.filter((img) => ids.includes(img.id))
-    if (imgs.length === 0) return
-    const taggerStore = useTaggerStore()
-    taggerStore.importFromGallery(imgs)
-  }
+  // V1 标注界面已移除; 选中图片的跳转改由 Gallery.vue 通过 router.push('/gallery') 处理
+  function sendToTagger() {}
 
   function setActiveRoot(rootId: number | null) {
     activeRootId.value = rootId
@@ -361,7 +427,7 @@ export const useGalleryStore = defineStore('gallery', () => {
     for (const item of items) {
       if (item.hasCaption) continue
       try {
-        const r = await window.fsAPI.readText(item.txtPath)
+        const r = await window.fsAPI.readText(item.txtPath!)
         if (r.success && r.text && r.text.trim()) {
           item.caption = r.text
           item.hasCaption = true
@@ -434,9 +500,11 @@ export const useGalleryStore = defineStore('gallery', () => {
 
   return {
     roots, images, selectedImage, selectedIds, scanProgress, isScanning, isLoading,
-    activeRootId, imageTags, hasMore, selectedCount, selectedImages,
+    activeRootId, searchQuery, tagStateFilter, sortMode, selectionAnchorId,
+    pendingReturnContext, pendingScrollTop, imageTags, hasMore, selectedCount, selectedImages,
     loadRoots, addRoot, removeRoot, scanRoot, loadImages, loadMore,
-    selectImage, toggleSelect, isSelected, clearSelection, selectAll,
+    selectImage, toggleSelect, selectRange, isSelected, clearSelection, selectAll,
+    captureReturnContext, restoreReturnContext, replaceImagePaths,
     fetchTags, fetchBatchTags, saveTags, sendToTagger,
     setActiveRoot, setupScanListener,
     datasets, activeDatasetId, datasetImageItems,

@@ -62,14 +62,20 @@ function updateCurrentTags(tags: TagResult[]) {
 
 async function saveCurrent() {
   saving.value = true
-  await taggerStore.saveCurrent()
-  saving.value = false
+  try {
+    await taggerStore.saveCurrent()
+  } finally {
+    saving.value = false
+  }
 }
 
 async function saveAndNext() {
   saving.value = true
-  await taggerStore.saveAndNext()
-  saving.value = false
+  try {
+    await taggerStore.saveAndNext()
+  } finally {
+    saving.value = false
+  }
 }
 
 function previousImage() {
