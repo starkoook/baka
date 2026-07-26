@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 interface ImageCard {
   id: number
@@ -21,14 +21,14 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  clickCard: [image: ImageCard, index: number, event: MouseEvent]
-  dblClickCard: [image: ImageCard, index: number]
-  checkCard: [image: ImageCard]
+  select: [image: ImageCard]
+  toggle: [image: ImageCard]
+  rangeSelect: [image: ImageCard]
+  openMetadata: [image: ImageCard, index: number]
   scrollEnd: []
   requestThumb: [imageId: number, el: HTMLImageElement]
 }>()
 
-const thumbCache = new Map<number, string>()
 let observer: IntersectionObserver | null = null
 const scrollContainer = ref<HTMLElement | null>(null)
 const gridRef = ref<HTMLElement | null>(null)
@@ -36,159 +36,135 @@ const gridRef = ref<HTMLElement | null>(null)
 onMounted(() => {
   observer = new IntersectionObserver((entries) => {
     for (const entry of entries) {
-      if (entry.isIntersecting) {
-        const el = entry.target as HTMLElement
-        const imageId = Number(el.dataset.imageId)
-        if (imageId && !el.getAttribute('src')) {
-          observer?.unobserve(el)
-          emit('requestThumb', imageId, el as HTMLImageElement)
-        }
-      }
+      if (!entry.isIntersecting) continue
+      const el = entry.target as HTMLImageElement
+      const imageId = Number(el.dataset.imageId)
+      if (!imageId || el.getAttribute('src')) continue
+      observer?.unobserve(el)
+      emit('requestThumb', imageId, el)
     }
-  }, { rootMargin: '300px' })
-  requestAnimationFrame(() => observeCards())
+  }, { root: scrollContainer.value, rootMargin: '320px' })
+  requestAnimationFrame(observeCards)
 })
 
-onBeforeUnmount(() => {
-  observer?.disconnect()
-  observer = null
-})
-
-watch(() => props.images.length, () => {
-  requestAnimationFrame(() => observeCards())
-})
+onBeforeUnmount(() => observer?.disconnect())
+watch(() => props.images.length, () => requestAnimationFrame(observeCards))
 
 function observeCards() {
-  gridRef.value?.querySelectorAll('.card-thumb img[data-image-id]:not([src])').forEach((el) => {
-    observer?.observe(el)
-  })
+  gridRef.value?.querySelectorAll<HTMLImageElement>('img[data-image-id]:not([src])').forEach((el) => observer?.observe(el))
+}
+
+function onCardClick(image: ImageCard, event: MouseEvent) {
+  if (event.shiftKey) emit('rangeSelect', image)
+  else if (event.ctrlKey || event.metaKey) emit('toggle', image)
+  else emit('select', image)
 }
 
 function onScroll() {
   const el = scrollContainer.value
-  if (!el) return
-  if (el.scrollHeight - el.scrollTop - el.clientHeight < 400) {
-    emit('scrollEnd')
-    requestAnimationFrame(() => observeCards())
-  }
-}
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  if (!el || el.scrollHeight - el.scrollTop - el.clientHeight >= 400) return
+  emit('scrollEnd')
+  requestAnimationFrame(observeCards)
 }
 
 function setThumbSrc(imageId: number, src: string) {
-  thumbCache.set(imageId, src)
-  const el = gridRef.value?.querySelector(`img[data-image-id="${imageId}"]`) as HTMLImageElement | null
+  const el = gridRef.value?.querySelector<HTMLImageElement>(`img[data-image-id="${imageId}"]`)
   if (el) el.src = src
 }
-defineExpose({ setThumbSrc })
+
+function getScrollTop() {
+  return scrollContainer.value?.scrollTop ?? 0
+}
+
+function restoreScroll(scrollTop: number) {
+  if (scrollContainer.value) scrollContainer.value.scrollTop = scrollTop
+}
+
+defineExpose({ setThumbSrc, getScrollTop, restoreScroll })
 </script>
 
 <template>
-  <main ref="scrollContainer" class="gg-main" @scroll="onScroll">
-    <!-- Empty state -->
-    <div v-if="!isScanning && images.length === 0" class="gg-empty">
-      <div class="gg-empty-glow"></div>
-      <div class="gg-empty-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.8">
-          <rect x="2" y="2" width="20" height="20" rx="4"/>
-          <circle cx="8.5" cy="8.5" r="2"/>
-          <path d="M22 16l-6-6-4 4-4-4L2 16"/>
-        </svg>
-      </div>
-      <h2>在左侧选择一个文件夹</h2>
-      <p>加载本地图片 · 浏览元数据 · 一键标注</p>
+  <main ref="scrollContainer" class="gallery-grid-scroll" @scroll="onScroll">
+    <div v-if="isScanning" class="gallery-state">
+      <div class="state-spinner"></div>
+      <strong>正在整理图库</strong>
+      <span>图片还在，请稍等一下。</span>
     </div>
 
-    <!-- Grid -->
-    <div ref="gridRef" class="gg-grid" :class="'gg-' + (viewMode || 'small')">
-      <div
-        v-for="(img, idx) in images"
-        :key="img.id"
-        class="gg-card"
-        :class="{ selected: selectedIds.has(img.id) }"
-        @click="emit('checkCard', img)"
-        @dblclick="emit('dblClickCard', img, idx)"
+    <div v-else-if="images.length === 0" class="gallery-state gallery-state--empty">
+      <strong>这里还没有图片</strong>
+      <span>从左侧添加一个图片文件夹，就可以开始整理和标注。</span>
+    </div>
+
+    <div v-else ref="gridRef" class="gallery-grid" :class="`gallery-grid--${viewMode || 'small'}`">
+      <article
+        v-for="(image, index) in images"
+        :key="image.id"
+        class="image-card"
+        :class="{ 'image-card--selected': selectedIds.has(image.id) }"
+        tabindex="0"
+        @click="onCardClick(image, $event)"
+        @dblclick.prevent="emit('openMetadata', image, index)"
+        @keydown.enter="emit('openMetadata', image, index)"
       >
-        <div class="card-thumb">
-          <img :data-image-id="img.id" alt="" />
-          <!-- Tag badges -->
-          <div v-if="imageTags.has(img.id) && imageTags.get(img.id)!.length > 0" class="card-tags">
-            <span v-for="(t, i) in imageTags.get(img.id)!.slice(0, 3)" :key="i" class="card-tag-pill">{{ t.tag }}</span>
-            <span v-if="imageTags.get(img.id)!.length > 3" class="card-tag-more">+{{ imageTags.get(img.id)!.length - 3 }}</span>
-          </div>
-          <button class="card-check" :class="{ checked: selectedIds.has(img.id) }" @click.stop="emit('checkCard', img)">{{ selectedIds.has(img.id) ? '✓' : '' }}</button>
-          <div class="card-overlay">
-            <span class="card-dims">{{ img.width }} × {{ img.height }}</span>
+        <div class="image-card__preview">
+          <img :data-image-id="image.id" :alt="image.filename" draggable="false" />
+          <button
+            class="image-card__check"
+            :class="{ 'image-card__check--active': selectedIds.has(image.id) }"
+            :aria-label="selectedIds.has(image.id) ? '取消选择' : '加入选择'"
+            @click.stop="emit('toggle', image)"
+          >
+            <svg v-if="selectedIds.has(image.id)" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.2 8.2 3 3 6.6-6.6" /></svg>
+          </button>
+          <span class="image-card__dimensions">{{ image.width }} × {{ image.height }}</span>
+          <div v-if="imageTags.get(image.id)?.length" class="image-card__tags">
+            <span v-for="tag in imageTags.get(image.id)!.slice(0, 2)" :key="tag.tag">{{ tag.tag }}</span>
+            <span v-if="imageTags.get(image.id)!.length > 2">+{{ imageTags.get(image.id)!.length - 2 }}</span>
           </div>
         </div>
-        <div class="card-name">{{ img.filename }}</div>
-      </div>
+        <div class="image-card__caption">
+          <span>{{ image.filename }}</span>
+          <small>{{ imageTags.get(image.id)?.length ? `${imageTags.get(image.id)!.length} 个标签` : '未标注' }}</small>
+        </div>
+      </article>
     </div>
 
-    <div v-if="isLoading" class="gg-loading">加载中...</div>
+    <div v-if="isLoading && !isScanning" class="gallery-loading"><span></span>正在加载更多</div>
   </main>
 </template>
 
 <style scoped>
-.gg-main { overflow-y: auto; }
-.gg-grid { display: grid; gap: 10px; padding: 2px; align-content: start; }
-.gg-small { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-.gg-large { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
-.gg-large .card-name { font-size: 12px; padding: 8px 10px; }
-.gg-list { display: flex; flex-direction: column; gap: 2px; }
-.gg-list .gg-card { display: flex; flex-direction: row; align-items: center; height: 56px; border-radius: 8px; }
-.gg-list .card-thumb { width: 56px; height: 56px; aspect-ratio: auto; flex-shrink: 0; }
-.gg-list .card-name { flex: 1; text-align: left; padding: 0 12px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.gg-list .card-check { top: 50%; transform: translateY(-50%); }
-.gg-list .card-tags { display: none; }
-.gg-list .card-overlay { display: none; }
-.gg-empty {
-  height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  position: relative; overflow: hidden;
-}
-.gg-empty-glow {
-  position: absolute; width: 300px; height: 300px; border-radius: 50%;
-  background: radial-gradient(circle, rgba(255,105,180,0.06) 0%, transparent 70%);
-  top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none;
-}
-.gg-empty-icon { width: 80px; height: 80px; color: #ff69b4; opacity: 0.4; margin-bottom: 16px; animation: float 3s ease-in-out infinite; }
-@keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
-.gg-empty h2 { font-size: 20px; background: linear-gradient(135deg, #ff69b4, #ff85c2); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-weight: 700; margin: 0 0 8px; }
-.gg-empty p { font-size: 12px; color: #6b7280; margin: 0; }
-
-.gg-card {
-  background: var(--glass-bg); border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg); overflow: hidden; cursor: pointer;
-  transition: all 0.2s ease;
-}
-.gg-card:hover { border-color: rgba(244,114,182,0.4); transform: translateY(-2px); box-shadow: 0 8px 24px rgba(244,114,182,0.1); }
-.gg-card.selected { border-color: #ff69b4; box-shadow: 0 0 0 2px rgba(244,114,182,0.2); }
-
-.card-thumb { aspect-ratio: 1; overflow: hidden; background: rgba(0,0,0,0.2); position: relative; }
-.card-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
-.gg-card:hover .card-thumb img { transform: scale(1.04); }
-.card-tags { position: absolute; bottom: 4px; left: 4px; right: 4px; display: flex; flex-wrap: wrap; gap: 2px; pointer-events: none; z-index: 2; }
-.card-tag-pill { font-size: 8px; padding: 1px 5px; background: rgba(0,0,0,0.55); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: rgba(255,255,255,0.8); white-space: nowrap; max-width: 80px; overflow: hidden; text-overflow: ellipsis; }
-.card-tag-more { font-size: 8px; padding: 1px 5px; background: rgba(244,114,182,0.2); border-radius: 10px; color: rgba(255,255,255,0.7); }
-.card-select-badge { position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; background: #ff69b4; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; font-weight: 700; z-index: 3; }
-.card-check {
-  position: absolute; top: 6px; left: 6px; width: 22px; height: 22px;
-  border-radius: 6px; border: 2px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.4);
-  color: #fff; font-size: 12px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; z-index: 3; opacity: 0;
-  transition: opacity 0.15s, border-color 0.15s, background 0.15s;
-}
-.gg-card:hover .card-check, .card-check.checked { opacity: 1; }
-.card-check.checked { background: #ff69b4; border-color: #ff69b4; }
-.card-check:hover { border-color: #ff69b4; }
-.card-overlay { position: absolute; bottom: 0; left: 0; right: 0; padding: 6px; background: linear-gradient(transparent, rgba(0,0,0,0.45)); opacity: 0; transition: opacity 0.2s; z-index: 1; }
-.gg-card:hover .card-overlay { opacity: 1; }
-.card-dims { font-size: 9px; color: rgba(255,255,255,0.7); font-family: monospace; }
-.card-name { padding: 6px 8px; font-size: 10px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
-.gg-loading { text-align: center; padding: 20px; color: var(--text-tertiary); font-size: 11px; }
+.gallery-grid-scroll { min-width: 0; min-height: 0; overflow: auto; padding: 4px 8px 104px; scrollbar-gutter: stable; }
+.gallery-grid { display: grid; align-content: start; gap: 12px; }
+.gallery-grid--small { grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); }
+.gallery-grid--large { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+.gallery-grid--list { grid-template-columns: 1fr; gap: 5px; }
+.image-card { min-width: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.075); border-radius: 12px; background: rgba(255,255,255,.025); cursor: default; transition: border-color .16s ease, background .16s ease, transform .16s ease; outline: none; }
+.image-card:hover, .image-card:focus-visible { border-color: rgba(var(--accent-primary-rgb),.45); background: rgba(255,255,255,.045); transform: translateY(-1px); }
+.image-card--selected { border-color: rgba(var(--accent-primary-rgb),.9); box-shadow: inset 0 0 0 1px rgba(var(--accent-primary-rgb),.5); }
+.image-card__preview { position: relative; aspect-ratio: 1; overflow: hidden; background: #16151b; }
+.image-card__preview img { width: 100%; height: 100%; object-fit: cover; user-select: none; }
+.image-card__check { position: absolute; top: 8px; left: 8px; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 1px solid rgba(255,255,255,.45); border-radius: 7px; background: rgba(17,15,21,.72); color: white; opacity: 0; cursor: pointer; backdrop-filter: blur(8px); }
+.image-card:hover .image-card__check, .image-card__check--active { opacity: 1; }
+.image-card__check--active { border-color: var(--accent-primary); background: var(--accent-primary); }
+.image-card__check svg { width: 15px; fill: none; stroke: currentColor; stroke-width: 2.2; }
+.image-card__dimensions { position: absolute; top: 9px; right: 9px; padding: 3px 6px; border-radius: 6px; background: rgba(17,15,21,.68); color: rgba(255,255,255,.72); font: 9px/1.2 ui-monospace, monospace; opacity: 0; }
+.image-card:hover .image-card__dimensions { opacity: 1; }
+.image-card__tags { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; gap: 4px; overflow: hidden; }
+.image-card__tags span { max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 7px; border-radius: 999px; background: rgba(17,15,21,.75); color: rgba(255,255,255,.82); font-size: 9px; backdrop-filter: blur(8px); }
+.image-card__caption { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 10px; }
+.image-card__caption span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-size: 11px; }
+.image-card__caption small { flex: none; color: var(--text-tertiary); font-size: 9px; }
+.gallery-grid--list .image-card { display: grid; grid-template-columns: 64px 1fr; }
+.gallery-grid--list .image-card__preview { aspect-ratio: 1; }
+.gallery-grid--list .image-card__tags, .gallery-grid--list .image-card__dimensions { display: none; }
+.gallery-state { height: 100%; min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; color: var(--text-tertiary); }
+.gallery-state strong { color: var(--text-secondary); font-size: 16px; }
+.gallery-state span { max-width: 340px; font-size: 12px; line-height: 1.7; }
+.state-spinner { width: 28px; height: 28px; border: 2px solid rgba(255,255,255,.08); border-top-color: var(--accent-primary); border-radius: 50%; animation: spin .8s linear infinite; }
+.gallery-loading { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 18px; color: var(--text-tertiary); font-size: 11px; }
+.gallery-loading span { width: 10px; height: 10px; border: 2px solid rgba(255,255,255,.1); border-top-color: var(--accent-primary); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .image-card { transition: none; } .state-spinner, .gallery-loading span { animation-duration: 1.8s; } }
 </style>
