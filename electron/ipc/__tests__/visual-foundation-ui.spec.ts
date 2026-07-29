@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -9,19 +9,57 @@ describe('character-led visual foundation', () => {
     const layout = read('src/layouts/MainLayout.vue')
 
     expect(layout).toContain("import AppSidebar from '@/components/sidebar/AppSidebar.vue'")
-    expect(layout).not.toContain('TopMenuBar')
-    expect(layout).not.toContain('scanlines')
-    expect(layout).not.toContain('sakura-global')
-    expect(layout).not.toContain('sparkles')
+    expect(layout).toContain('<AppSidebar')
+
+    for (const forbiddenPattern of [
+      'TopMenuBar',
+      'scanlines',
+      'sakura-global',
+      'sparkles',
+      'bg-grid',
+      'ambient-glow',
+      'core-glow',
+      'noise-layer',
+      'vignette',
+    ]) {
+      expect(layout).not.toContain(forbiddenPattern)
+    }
   })
 
-  it('keeps character artwork on the dashboard only', () => {
+  it('keeps the brand hero and recent-work components on the dashboard', () => {
     const dashboard = read('src/views/Dashboard.vue')
 
     expect(dashboard).toContain("import BrandHero from '@/components/dashboard/BrandHero.vue'")
-    expect(read('src/views/Gallery.vue')).not.toContain('BrandHero')
-    expect(read('src/views/Tagger.vue')).not.toContain('BrandHero')
-    expect(read('src/views/TrainingTask.vue')).not.toContain('BrandHero')
+    expect(dashboard).toContain("import DashboardRecentWork from '@/components/dashboard/DashboardRecentWork.vue'")
+    expect(dashboard).toContain('<BrandHero')
+    expect(dashboard).toContain('<DashboardRecentWork')
+  })
+
+  it('keeps character artwork on the dashboard only', () => {
+    const viewsDirectory = resolve(process.cwd(), 'src/views')
+    const layout = read('src/layouts/MainLayout.vue')
+
+    expect(layout).not.toContain('BrandHero')
+
+    for (const viewFile of readdirSync(viewsDirectory)) {
+      if (viewFile === 'Dashboard.vue' || !viewFile.endsWith('.vue')) continue
+
+      const viewPath = `src/views/${viewFile}`
+      expect(read(viewPath), `${viewPath} must not contain BrandHero`).not.toContain('BrandHero')
+    }
+  })
+
+  it('keeps the title and status chrome neutral', () => {
+    const titleBar = read('src/components/titlebar/TitleBar.vue')
+    const statusBar = read('src/components/statusbar/StatusBar.vue')
+
+    for (const forbiddenPattern of ['text-gradient', 'titlebar-dots', 'Top accent glow line']) {
+      expect(titleBar).not.toContain(forbiddenPattern)
+    }
+
+    for (const forbiddenPattern of ['pulse-glow', 'statusbar::after', 'Bottom accent dot']) {
+      expect(statusBar).not.toContain(forbiddenPattern)
+    }
   })
 
   it('retires the old horizontal menu and walking mascot', () => {
