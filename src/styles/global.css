@@ -2,10 +2,6 @@
 @import './components.css';
 @import url('https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap');
 
-/* ═══════════════════════════════════════════
-   Global Reset & Base Styles
-   ═══════════════════════════════════════════ */
-
 *,
 *::before,
 *::after {
@@ -14,7 +10,8 @@
   padding: 0;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   overflow: hidden;
 }
@@ -23,94 +20,70 @@ body {
   font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.6;
-  color: var(--text-primary);
-  background-color: var(--bg-primary);
+  color: var(--ink-primary);
+  background-color: var(--app-bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Cat paw cursor trail class — apply to interactive areas */
-.paw-cursor, .card, .nav-item, button, .btn {
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='14' r='6' fill='%23f472b6' opacity='0.7'/%3E%3Ccircle cx='8' cy='10' r='3' fill='%23f472b6' opacity='0.6'/%3E%3Ccircle cx='16' cy='10' r='3' fill='%23f472b6' opacity='0.6'/%3E%3Ccircle cx='6' cy='7' r='2.5' fill='%23f472b6' opacity='0.5'/%3E%3Ccircle cx='18' cy='7' r='2.5' fill='%23f472b6' opacity='0.5'/%3E%3C/svg%3E") 10 10, auto;
-}
-
 #app {
   height: 100%;
+  overflow: hidden;
+  border-radius: var(--radius-panel);
+  box-shadow: var(--surface-shadow);
 }
 
-/* ── Selection ── */
 ::selection {
-  background-color: rgba(var(--accent-primary-rgb), 0.35);
-  color: #fff;
+  background-color: var(--brand-soft);
+  color: var(--ink-primary);
 }
 
-/* ── Scrollbar ── */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
+
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: rgba(var(--accent-primary-rgb), 0.18);
-  border-radius: 4px;
+  background: var(--line-strong);
+  border-radius: var(--radius-control);
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--accent-primary-rgb), 0.35);
+  background: var(--brand-primary);
 }
 
-/* ── Focus ── */
-/* Kill ALL default focus rings — replace with pink glow */
-*:focus {
-  outline: none !important;
-}
 *:focus-visible {
-  outline: none !important;
-  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.35);
-  border-radius: var(--radius-xs);
-}
-/* Chromium-specific */
-*::-webkit-focus-ring-color {
-  outline: none !important;
-}
-/* For non-:focus-visible browsers */
-button:focus,
-a:focus,
-input:focus,
-select:focus,
-textarea:focus,
-[role="button"]:focus {
-  outline: none !important;
+  outline: 2px solid var(--brand-primary);
+  outline-offset: 2px;
 }
 
-/* ── Links ── */
 a {
-  color: var(--accent-primary);
+  color: var(--brand-primary);
   text-decoration: none;
-  transition: all var(--transition-fast);
-}
-a:hover {
-  color: var(--accent-secondary);
+  transition: color 180ms ease;
 }
 
-/* ═══════════════════════════════════════════
-   Utility Classes
-   ═══════════════════════════════════════════ */
+a:hover {
+  color: var(--brand-hover);
+}
 
 .glass {
   background: var(--glass-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-panel);
 }
+
 .glass-hover:hover {
   background: var(--glass-bg-hover);
   border-color: var(--glass-border-hover);
 }
 
-/* Gradient text */
 .text-gradient {
   background: var(--gradient-hero);
   -webkit-background-clip: text;
@@ -118,74 +91,41 @@ a:hover {
   background-clip: text;
 }
 
-/* Background grid pattern */
-.bg-grid {
-  background-image:
-    linear-gradient(rgba(var(--accent-primary-rgb), 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(var(--accent-primary-rgb), 0.03) 1px, transparent 1px);
-  background-size: 32px 32px;
-}
-
-/* Light theme: denser tech grid */
-[data-theme="light"] .bg-grid {
-  background-color: #F6F3F6;
-  background-image:
-    linear-gradient(rgba(255, 142, 190, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 142, 190, 0.04) 1px, transparent 1px);
-  background-size: 20px 20px;
-}
-
-/* Hover scale effect — use on clickable blocks */
 .hover-lift {
-  transition: transform var(--transition-base), box-shadow var(--transition-base);
-}
-.hover-lift:hover {
-  transform: scale(1.03) translateY(-2px);
+  transition: transform 180ms ease, box-shadow 180ms ease;
 }
 
-/* Prevent window drag blocking clicks */
-button, input, select, textarea, a, [role="button"] {
+.hover-lift:hover {
+  transform: translateY(-2px);
+}
+
+button,
+input,
+select,
+textarea,
+a,
+[role="button"] {
   -webkit-app-region: no-drag;
 }
 
-/* ── Window-level softening ── */
-#app {
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow:
-    inset 0 0 0 1px rgba(var(--accent-primary-rgb), 0.08),
-    inset 0 1px 0 rgba(255,255,255,0.03),
-    0 0 0 1px rgba(0,0,0,0.2),
-    0 0 40px rgba(0,0,0,0.4);
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 180ms ease, transform 180ms ease;
 }
 
-/* ── Page transitions (3D cabin style) ── */
-.page-enter-active {
-  transition: opacity 0.4s ease, transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.35s ease;
-}
-.page-leave-active {
-  transition: opacity 0.18s ease, transform 0.2s ease, filter 0.18s ease;
-}
-.page-enter-from {
-  opacity: 0;
-  transform: translateY(30px) scale(0.92) perspective(800px) rotateX(3deg);
-  filter: blur(6px);
-}
+.page-enter-from,
 .page-leave-to {
   opacity: 0;
-  transform: translateY(-16px) scale(0.96) perspective(800px) rotateX(-1deg);
-  filter: blur(3px);
+  transform: translateY(6px);
 }
 
-/* ── Theme wipe scan animation ── */
-html.theme-wiping::after {
-  content: '';
-  position: fixed; inset: 0; z-index: 9999;
-  pointer-events: none;
-  background: linear-gradient(90deg, transparent 0%, rgba(255,0,127,0.12) 45%, rgba(255,0,127,0.25) 50%, rgba(255,0,127,0.12) 55%, transparent 100%);
-  animation: theme-wipe 0.6s cubic-bezier(0.4,0,0.2,1) forwards;
-}
-@keyframes theme-wipe {
-  0% { transform: translateX(-110%); }
-  100% { transform: translateX(110%); }
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }

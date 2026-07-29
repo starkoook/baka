@@ -58,9 +58,6 @@ export const useAppStore = defineStore('app', () => {
   }
 
   function toggleTheme() {
-    // Trigger wipe animation
-    document.documentElement.classList.add('theme-wiping')
-    setTimeout(() => document.documentElement.classList.remove('theme-wiping'), 600)
     setTheme(theme.value === 'dark' ? 'light' : 'dark')
   }
 
