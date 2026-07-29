@@ -9,11 +9,17 @@ export interface DashboardAction {
   route: string
 }
 
+function getActiveTaskName(name: string | null): string | null {
+  return name?.trim() || null
+}
+
 export function getContinueAction(
   input: Pick<DashboardSummaryInput, 'datasetCount' | 'activeTaskName'>,
 ): DashboardAction {
-  if (input.activeTaskName) {
-    return { label: `继续 ${input.activeTaskName}`, route: '/training/run' }
+  const activeTaskName = getActiveTaskName(input.activeTaskName)
+
+  if (activeTaskName) {
+    return { label: `继续 ${activeTaskName}`, route: '/training/run' }
   }
   if (input.datasetCount > 0) {
     return { label: '继续准备训练', route: '/training' }
@@ -22,13 +28,15 @@ export function getContinueAction(
 }
 
 export function getDashboardSnapshot(input: DashboardSummaryInput): Array<DashboardAction & { value: string }> {
+  const activeTaskName = getActiveTaskName(input.activeTaskName)
+
   return [
     { label: '图库', value: `${input.imageCount} 张`, route: '/gallery' },
     { label: '数据集', value: `${input.datasetCount} 个`, route: '/gallery' },
     {
       label: '训练',
-      value: input.activeTaskName ?? (input.datasetCount > 0 ? '可以开始' : '等待开始'),
-      route: input.activeTaskName ? '/training/run' : '/training',
+      value: activeTaskName ?? (input.datasetCount > 0 ? '可以开始' : '等待开始'),
+      route: activeTaskName ? '/training/run' : '/training',
     },
   ]
 }

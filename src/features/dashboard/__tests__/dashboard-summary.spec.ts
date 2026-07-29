@@ -25,4 +25,29 @@ describe('dashboard summary', () => {
         { label: '训练', value: '可以开始', route: '/training' },
       ])
   })
+
+  it('uses a trimmed active task in the training snapshot', () => {
+    expect(getDashboardSnapshot({ imageCount: 428, datasetCount: 3, activeTaskName: '  训练 my_lora  ' }))
+      .toEqual([
+        { label: '图库', value: '428 张', route: '/gallery' },
+        { label: '数据集', value: '3 个', route: '/gallery' },
+        { label: '训练', value: '训练 my_lora', route: '/training/run' },
+      ])
+  })
+
+  it('shows training as waiting when no dataset exists', () => {
+    expect(getDashboardSnapshot({ imageCount: 0, datasetCount: 0, activeTaskName: null }))
+      .toEqual([
+        { label: '图库', value: '0 张', route: '/gallery' },
+        { label: '数据集', value: '0 个', route: '/gallery' },
+        { label: '训练', value: '等待开始', route: '/training' },
+      ])
+  })
+
+  it('treats blank task names as no active task', () => {
+    expect(getContinueAction({ datasetCount: 2, activeTaskName: '' }))
+      .toEqual({ label: '继续准备训练', route: '/training' })
+    expect(getContinueAction({ datasetCount: 0, activeTaskName: '   ' }))
+      .toEqual({ label: '导入第一批素材', route: '/gallery' })
+  })
 })
