@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { APP_NAVIGATION, isNavigationItemActive } from '../app-navigation'
+import { APP_NAVIGATION, isNavigationItemActive, type AppNavigationItem } from '../app-navigation'
+
+if (false) {
+  const firstItem = APP_NAVIGATION[0] as AppNavigationItem
+
+  // @ts-expect-error Navigation items cannot be changed by consumers.
+  firstItem.route = '/other'
+  // @ts-expect-error Navigation matches cannot be changed by consumers.
+  firstItem.matches.push('/other')
+  // @ts-expect-error Navigation collection cannot be changed by consumers.
+  APP_NAVIGATION.push(firstItem)
+}
 
 describe('application navigation', () => {
   it('defines the six application navigation labels in order', () => {
@@ -20,6 +31,7 @@ describe('application navigation', () => {
     expect(isNavigationItemActive(training, '/training/runtime')).toBe(true)
     expect(isNavigationItemActive(training, '/training/run')).toBe(true)
     expect(isNavigationItemActive(training, '/gallery')).toBe(false)
+    expect(isNavigationItemActive(training, '/training-old')).toBe(false)
   })
 
   it('keeps home active only at the root route', () => {
@@ -37,5 +49,6 @@ describe('application navigation', () => {
     expect(isNavigationItemActive(tools, '/generate')).toBe(true)
     expect(isNavigationItemActive(tools, '/console')).toBe(true)
     expect(isNavigationItemActive(tools, '/training')).toBe(false)
+    expect(isNavigationItemActive(tools, '/reverse-engineering')).toBe(false)
   })
 })

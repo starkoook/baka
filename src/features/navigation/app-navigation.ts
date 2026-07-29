@@ -1,13 +1,13 @@
 export type AppNavigationId = 'home' | 'gallery' | 'tagger' | 'training' | 'tools' | 'settings'
 
 export interface AppNavigationItem {
-  id: AppNavigationId
-  label: string
-  route: string
-  matches: string[]
+  readonly id: AppNavigationId
+  readonly label: string
+  readonly route: string
+  readonly matches: readonly string[]
 }
 
-export const APP_NAVIGATION: AppNavigationItem[] = [
+export const APP_NAVIGATION: readonly AppNavigationItem[] = [
   { id: 'home', label: '主页', route: '/', matches: ['/'] },
   { id: 'gallery', label: '图库', route: '/gallery', matches: ['/gallery'] },
   { id: 'tagger', label: '标注', route: '/tagger', matches: ['/tagger'] },
