@@ -72,7 +72,8 @@ const emit = defineEmits<{
 
 .brand-hero__image {
   object-fit: cover;
-  object-position: center;
+  object-position: center 28%;
+  transform-origin: center 28%;
   animation: hero-breathe 12s ease-in-out infinite alternate;
 }
 

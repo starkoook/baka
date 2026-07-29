@@ -39,6 +39,8 @@ describe('dashboard brand hero', () => {
     expect(hero).toContain('aspect-ratio: 8 / 3')
     expect(hero).toContain('width: min(34%, 520px)')
     expect(hero).toContain('width: min(36%, 420px)')
+    expect(hero).toContain('object-position: center 28%')
+    expect(hero).toContain('transform-origin: center 28%')
     expect(hero).toContain('animation: hero-breathe 12s')
     expect(hero).toContain('scale(1.03)')
     expect(hero).toContain('prefers-reduced-motion: reduce')
