@@ -10,183 +10,145 @@ interface SysStats {
 }
 
 const stats = ref<SysStats | null>(null)
-const syncRate = ref(64)
 let timer: ReturnType<typeof setInterval> | null = null
-let syncTimer: ReturnType<typeof setInterval> | null = null
-
-function updateSyncRate() {
-  if (!stats.value) return
-  const gpuUsage = stats.value.gpu?.usage || 0
-  if (gpuUsage > 85) {
-    syncRate.value = Math.min(120, syncRate.value + 8 + Math.random() * 6)
-  } else {
-    syncRate.value = 60 + Math.random() * 8
-  }
-}
 
 async function refresh() {
   if (!window.systemAPI) return
   try { stats.value = await window.systemAPI.getStats() } catch (_) {}
 }
 
-onMounted(() => { refresh(); timer = setInterval(refresh, 2000); syncTimer = setInterval(updateSyncRate, 800) })
-onUnmounted(() => { if (timer) clearInterval(timer); if (syncTimer) clearInterval(syncTimer) })
+onMounted(() => { refresh(); timer = setInterval(refresh, 2000) })
+onUnmounted(() => { if (timer) clearInterval(timer) })
 
-function barColor(percent: number): string {
-  if (percent > 85) return 'var(--accent-danger)'
-  if (percent > 60) return 'var(--accent-warning)'
+function barColor(p: number): string {
+  if (p > 85) return 'var(--accent-danger)'
+  if (p > 60) return 'var(--accent-warning)'
   return 'var(--accent-success)'
 }
-function barClass(percent: number): string {
-  return percent > 85 ? 'pulse-bar' : ''
-}
-
-function formatUptime(s: number): string {
-  const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60)
-  return h > 0 ? `${h}h ${m}m` : `${m}m`
+function fmtMem(mb: number): string {
+  return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb + ' MB'
 }
 </script>
 
 <template>
-  <div class="sys-monitor" v-if="stats">
+  <div class="mon-set" v-if="stats">
     <!-- CPU -->
-    <div class="monitor-row">
-      <div class="monitor-label">
-        <span class="monitor-icon">🧠</span>
-        <span class="monitor-name">CPU</span>
-        <span class="monitor-sub">{{ stats.cpu.cores }} 核 · {{ stats.cpu.usage }}%</span>
-      </div>
-      <div class="monitor-bar">
-        <div class="monitor-fill progress-flow" :class="barClass(stats.cpu.usage)" :style="{ width: stats.cpu.usage + '%', background: barColor(stats.cpu.usage) }"></div>
-      </div>
-    </div>
-
-    <!-- Memory -->
-    <div class="monitor-row">
-      <div class="monitor-label">
-        <span class="monitor-icon">💾</span>
-        <span class="monitor-name">RAM</span>
-        <span class="monitor-sub">{{ stats.memory.used }} / {{ stats.memory.total }} MB</span>
-      </div>
-      <div class="monitor-bar">
-        <div class="monitor-fill progress-flow" :class="barClass(stats.memory.percent)" :style="{ width: stats.memory.percent + '%', background: barColor(stats.memory.percent) }"></div>
+    <div class="mon-card">
+      <div class="mon-ic">🧠</div>
+      <div class="mon-main">
+        <div class="mon-top">
+          <span class="mon-name">CPU</span>
+          <span :key="`cpu-${stats.cpu.usage}`" class="mon-val">{{ stats.cpu.usage }}<i>%</i></span>
+        </div>
+        <div class="mon-bar">
+          <div class="mon-fill"
+               :style="{ width: stats.cpu.usage + '%', background: barColor(stats.cpu.usage) }"></div>
+        </div>
+        <div class="mon-sub">{{ stats.cpu.cores }} 核 · 实时负载</div>
       </div>
     </div>
 
     <!-- GPU -->
-    <div class="monitor-row" v-if="stats.gpu">
-      <div class="monitor-label">
-        <span class="monitor-icon">🎮</span>
-        <span class="monitor-name">GPU</span>
-        <span class="monitor-sub" v-if="stats.gpu.vramTotal > 0">{{ stats.gpu.vramUsed }} / {{ stats.gpu.vramTotal }} MB</span>
-        <span class="monitor-sub" v-else>{{ stats.gpu.name?.slice(0, 20) || 'GPU' }}</span>
-      </div>
-      <div class="monitor-bar" v-if="stats.gpu.vramTotal > 0">
-        <div class="monitor-fill progress-flow" :class="barClass(stats.gpu.vramPercent)" :style="{ width: stats.gpu.vramPercent + '%', background: barColor(stats.gpu.vramPercent) }"></div>
-      </div>
-      <div class="gpu-extras" v-if="stats.gpu.temp > 0 || stats.gpu.usage > 0">
-        <span v-if="stats.gpu.temp > 0">🌡 {{ stats.gpu.temp }}°C</span>
-        <span v-if="stats.gpu.usage > 0">📊 {{ stats.gpu.usage }}%</span>
+    <div class="mon-card" v-if="stats.gpu">
+      <div class="mon-ic">🎮</div>
+      <div class="mon-main">
+        <div class="mon-top">
+          <span class="mon-name">GPU</span>
+          <span :key="`gpu-${stats.gpu.vramTotal > 0 ? stats.gpu.vramPercent : (stats.gpu.usage || 0)}`" class="mon-val">{{ stats.gpu.vramTotal > 0 ? stats.gpu.vramPercent : (stats.gpu.usage || 0) }}<i>%</i></span>
+        </div>
+        <div class="mon-bar" v-if="stats.gpu.vramTotal > 0">
+          <div class="mon-fill"
+               :style="{ width: stats.gpu.vramPercent + '%', background: barColor(stats.gpu.vramPercent) }"></div>
+        </div>
+        <div class="mon-bar" v-else>
+          <div class="mon-fill" :style="{ width: (stats.gpu.usage || 0) + '%', background: barColor(stats.gpu.usage || 0) }"></div>
+        </div>
+        <div class="mon-sub">
+          <template v-if="stats.gpu.vramTotal > 0">{{ fmtMem(stats.gpu.vramUsed) }} / {{ fmtMem(stats.gpu.vramTotal) }} 显存</template>
+          <template v-else>{{ stats.gpu.name?.slice(0, 18) || 'GPU' }}</template>
+          <span v-if="stats.gpu.temp > 0"> · {{ stats.gpu.temp }}°C</span>
+        </div>
       </div>
     </div>
 
-    <!-- Uptime -->
-    <div class="monitor-row uptime-row">
-      <span class="monitor-icon">⏱</span>
-      <span class="monitor-sub">运行时间 {{ formatUptime(stats.uptime) }}</span>
+    <!-- RAM (内存) -->
+    <div class="mon-card">
+      <div class="mon-ic">💾</div>
+      <div class="mon-main">
+        <div class="mon-top">
+          <span class="mon-name">RAM</span>
+          <span :key="`ram-${stats.memory.percent}`" class="mon-val">{{ stats.memory.percent }}<i>%</i></span>
+        </div>
+        <div class="mon-bar">
+          <div class="mon-fill"
+               :style="{ width: stats.memory.percent + '%', background: barColor(stats.memory.percent) }"></div>
+        </div>
+        <div class="mon-sub">{{ fmtMem(stats.memory.used) }} / {{ fmtMem(stats.memory.total) }} 内存</div>
+      </div>
     </div>
+  </div>
 
-    <!-- ═══ SYNC RATE HUD ═══ -->
-    <div class="sync-rate-section" v-if="stats">
-      <div class="sync-header">
-        <span class="sync-icon">⚡</span>
-        <span class="sync-label">SYNC RATE</span>
-        <span class="sync-value" :class="{ overdrive: syncRate > 100 }">{{ syncRate }}%</span>
-        <span class="sync-badge" v-if="syncRate > 100">⚠ OVERLOAD</span>
-      </div>
-      <div class="sync-bar" :class="{ overdrive: syncRate > 100 }">
-        <div class="sync-fill" :style="{ width: Math.min(syncRate, 120) + '%' }"></div>
-        <div class="sync-scan"></div>
-      </div>
-    </div>
+  <div class="mon-empty" v-else>
+    <span class="mon-ic">📡</span>
+    <p>正在连接系统传感器…</p>
   </div>
 </template>
 
 <style scoped>
-.sys-monitor {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.mon-set { display: flex; flex-direction: column; gap: 12px; }
+
+.mon-card {
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 16px;
+  background: var(--glass-bg);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-base), background var(--transition-base), transform var(--transition-base), box-shadow var(--transition-base);
+}
+.mon-card:hover {
+  border-color: var(--border-accent);
+  background: var(--glass-bg-hover);
+  transform: translateY(-2px);
+  box-shadow: var(--elev-1);
 }
 
-.monitor-row {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.mon-ic {
+  width: 44px; height: 44px; flex-shrink: 0;
+  display: grid; place-items: center; font-size: 21px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, rgba(var(--accent-primary-rgb),0.20), rgba(var(--accent-secondary-rgb),0.08));
+  border: 1px solid rgba(var(--accent-primary-rgb),0.20);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06);
 }
 
-.monitor-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.mon-main { flex: 1; min-width: 0; }
+.mon-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.mon-name { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; color: var(--text-secondary); font-family: var(--font-mono); }
+.mon-val { font-size: 20px; font-weight: 800; color: var(--text-primary); font-family: var(--font-mono); font-variant-numeric: tabular-nums; line-height: 1; animation: value-update 260ms ease-out; }
+.mon-val i { font-size: 12px; font-weight: 600; color: var(--text-tertiary); font-style: normal; margin-left: 1px; }
+
+@keyframes value-update {
+  from { color: var(--brand-primary); transform: translateY(-1px) scale(1.035); }
+  to { color: var(--text-primary); transform: translateY(0) scale(1); }
 }
 
-.monitor-icon { font-size: 14px; flex-shrink: 0; }
-.monitor-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
-.monitor-sub { font-size: 11px; color: var(--text-tertiary); margin-left: auto; font-variant-numeric: tabular-nums; font-family: var(--font-mono); }
+.mon-bar { height: 6px; background: rgba(255,255,255,0.06); border-radius: 99px; overflow: hidden; margin: 7px 0 5px; }
+.mon-fill { height: 100%; border-radius: 99px; transition: width 0.6s ease, background 0.4s ease; min-width: 3px; }
 
-.monitor-bar {
-  height: 4px;
-  background: rgba(255,255,255,0.06);
-  border-radius: 2px;
-  overflow: hidden;
+.mon-sub { font-size: 11px; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+
+.mon-empty { display: flex; align-items: center; gap: 12px; padding: 14px 16px; color: var(--text-tertiary); font-size: 12px; }
+.mon-empty .mon-ic { width: 38px; height: 38px; font-size: 18px; }
+
+/* ── Light theme ── */
+[data-theme="light"] .mon-card { background: #fff; border-color: rgba(236,72,153,0.14); box-shadow: var(--shadow-sm); }
+[data-theme="light"] .mon-card:hover { border-color: rgba(236,72,153,0.35); box-shadow: var(--shadow-md); }
+[data-theme="light"] .mon-ic { background: linear-gradient(135deg, rgba(236,72,153,0.12), rgba(249,115,22,0.06)); border-color: rgba(236,72,153,0.22); }
+[data-theme="light"] .mon-name { color: #6b4a60; }
+[data-theme="light"] .mon-val { color: #2a1326; }
+[data-theme="light"] .mon-bar { background: rgba(236,72,153,0.1); }
+
+@media (prefers-reduced-motion: reduce) {
+  .mon-val { animation: none; }
 }
-
-.monitor-fill {
-  height: 100%;
-  border-radius: 2px;
-  transition: width 0.6s ease, background 0.4s ease;
-  min-width: 2px;
-}
-
-.gpu-extras {
-  display: flex;
-  gap: 12px;
-  font-size: 10px;
-  color: var(--text-tertiary);
-}
-
-/* Pulse at high load */
-.pulse-bar {
-  animation: pulse-bar-glow 1s ease-in-out infinite;
-}
-@keyframes pulse-bar-glow {
-  0%, 100% { box-shadow: 0 0 4px currentColor; opacity: 1; }
-  50% { box-shadow: 0 0 12px currentColor; opacity: 0.85; }
-}
-
-.uptime-row {
-  flex-direction: row;
-  align-items: center;
-  gap: 6px;
-  padding-top: 4px;
-  border-top: 1px solid var(--border-subtle);
-}
-
-/* ── SYNC RATE HUD ── */
-.sync-rate-section { margin-top: 6px; }
-.sync-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-.sync-icon { font-size: 13px; }
-.sync-label { font-size: 11px; font-weight: 700; color: var(--text-secondary); letter-spacing: 0.1em; font-family: var(--font-mono); }
-.sync-value { font-size: 13px; font-weight: 800; color: #f472b6; margin-left: auto; font-family: var(--font-mono); transition: color 0.5s; }
-.sync-value.overdrive { color: #FF007F; animation: sync-pulse 0.3s infinite; }
-.sync-badge { font-size: 8px; font-weight: 700; color: #FF007F; background: rgba(255,0,127,0.12); padding: 1px 6px; border-radius: var(--radius-full); animation: sync-pulse 0.4s infinite; }
-@keyframes sync-pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
-
-.sync-bar { height: 4px; background: rgba(255,255,255,0.06); border-radius: 2px; overflow: hidden; position: relative; }
-.sync-fill { height: 100%; background: linear-gradient(90deg, #f472b6, #fb923c); border-radius: 2px; transition: width 0.5s ease, background 0.5s; }
-.sync-bar.overdrive .sync-fill { background: linear-gradient(90deg, #FF007F, #FF69B4, #FF007F); background-size: 200% 100%; animation: overdrive-flow 0.5s linear infinite; }
-@keyframes overdrive-flow { 0%{background-position:0 0} 100%{background-position:200% 0} }
-.sync-scan { position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent); animation: scan-line 2s linear infinite; }
-@keyframes scan-line { 0%{transform:translateX(-100%)} 100%{transform:translateX(100%)} }
 </style>

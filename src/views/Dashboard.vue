@@ -5,21 +5,25 @@ import BrandHero from '@/components/dashboard/BrandHero.vue'
 import DashboardRecentWork from '@/components/dashboard/DashboardRecentWork.vue'
 import SystemMonitor from '@/components/monitor/SystemMonitor.vue'
 import { getContinueAction, getDashboardSnapshot } from '@/features/dashboard/dashboard-summary'
+import { getRememberedWorkspace, loadLastWorkspace } from '@/features/navigation/workspace-history'
 import { useAppStore } from '@/stores/app'
 import { useGalleryStore } from '@/stores/gallery'
 import { usePipelineStore } from '@/stores/pipeline'
+import { useTaggerStore } from '@/stores/tagger'
 
 const router = useRouter()
 const appStore = useAppStore()
 const galleryStore = useGalleryStore()
 const pipelineStore = usePipelineStore()
+const taggerStore = useTaggerStore()
+const rememberedWorkspace = getRememberedWorkspace(loadLastWorkspace())
 
 const summaryInput = computed(() => ({
   imageCount: galleryStore.roots.reduce((sum, root) => sum + (root.image_count ?? 0), 0),
   datasetCount: galleryStore.datasets.length,
-  unfinishedAnnotationCount: 0,
+  unfinishedAnnotationCount: taggerStore.queue.filter((item) => item.status !== 'reviewed').length,
   activeTaskName: pipelineStore.currentTask?.name ?? null,
-  rememberedWorkspace: null,
+  rememberedWorkspace,
 }))
 
 const continueAction = computed(() => getContinueAction(summaryInput.value))
@@ -41,6 +45,7 @@ function navigate(route: string) {
 onMounted(() => {
   galleryStore.loadRoots()
   galleryStore.loadDatasets()
+  taggerStore.restoreSession()
 })
 </script>
 
@@ -54,6 +59,7 @@ onMounted(() => {
 
     <div class="dashboard-sheet">
       <DashboardRecentWork
+        :action="continueAction"
         :items="snapshot"
         :task="displayTask"
         @navigate="navigate"
@@ -81,21 +87,22 @@ onMounted(() => {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
-  gap: clamp(28px, 4vw, 60px);
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  gap: 14px;
   margin-top: -24px;
   margin-inline: clamp(16px, 2.5vw, 36px);
-  padding: clamp(24px, 3vw, 42px);
-  border: 1px solid var(--line-subtle);
-  border-radius: var(--radius-panel);
-  background: var(--surface-primary);
-  box-shadow: var(--surface-shadow);
 }
 
 .system-summary {
+  position: relative;
+  z-index: 1;
   min-width: 0;
-  padding-left: clamp(22px, 3vw, 42px);
-  border-left: 1px solid var(--line-subtle);
+  padding: clamp(22px, 3vw, 36px);
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--surface-primary) 88%, var(--brand-soft));
+  box-shadow: var(--surface-shadow);
+  transform-origin: right center;
+  transition: transform 180ms ease, opacity 180ms ease, filter 180ms ease;
 }
 
 .system-summary header {
@@ -143,24 +150,65 @@ onMounted(() => {
   display: none;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .dashboard-sheet:has(.recent-work:hover) .system-summary,
+  .dashboard-sheet:has(.system-summary:hover) .recent-work {
+    opacity: 0.72;
+    filter: saturate(0.72);
+    transform: scale(0.985);
+  }
+
+  .system-summary:hover {
+    z-index: 4;
+    transform: translateY(-4px) scale(1.018);
+  }
+}
+
+.dashboard-sheet:has(.recent-work:focus-within) .recent-work {
+  opacity: 1;
+  filter: none;
+  z-index: 4;
+  transform: translateY(-4px) scale(1.012);
+}
+
+.dashboard-sheet:has(.recent-work:focus-within) .system-summary {
+  z-index: 1;
+  opacity: 0.72;
+  filter: saturate(0.72);
+  transform: scale(0.985);
+}
+
 @media (max-width: 1160px) {
   .dashboard-sheet {
     grid-template-columns: 1fr;
-    gap: 30px;
+    gap: 14px;
   }
 
   .system-summary {
-    padding-top: 28px;
-    padding-left: 0;
-    border-top: 1px solid var(--line-subtle);
-    border-left: 0;
+    transform-origin: center;
   }
 }
 
 @media (max-width: 760px) {
   .dashboard-sheet {
     margin-inline: 10px;
-    padding: 22px 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .system-summary,
+  .dashboard-sheet .recent-work {
+    transition: none;
+  }
+
+  .dashboard-sheet:has(.recent-work:focus-within) .recent-work,
+  .dashboard-sheet:has(.recent-work:focus-within) .system-summary,
+  .dashboard-sheet:has(.recent-work:hover) .system-summary,
+  .dashboard-sheet:has(.system-summary:hover) .recent-work,
+  .system-summary:hover {
+    opacity: 1;
+    filter: none;
+    transform: none;
   }
 }
 </style>

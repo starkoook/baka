@@ -66,6 +66,37 @@ describe('tagger store', () => {
     expect(store.queue[0].error).toContain('中断')
   })
 
+  it('does not replace an active in-memory queue with an older stored session', () => {
+    const store = useTaggerStore()
+    store.createQueueFromGallery(handoff)
+    store.queue[0].status = 'running'
+
+    localStorage.setItem('baka-tagger-session-v1', JSON.stringify({
+      version: 1,
+      phase: 'running',
+      currentIndex: 0,
+      taskId: 'old-task',
+      queue: [{
+        id: 99,
+        path: 'old-session.png',
+        status: 'running',
+        tags: [],
+        error: '',
+        databaseSaved: false,
+        captionSaved: false,
+      }],
+      returnContext: null,
+      config: { tagSource: 'local', threshold: 0.35, activeModelPath: '' },
+    }))
+
+    const restored = store.restoreSession()
+
+    expect(restored).toBe(false)
+    expect(store.queue.map((item) => item.path)).toEqual(['B.png', 'A.png'])
+    expect(store.queue[0].status).toBe('running')
+    expect(store.queue[0].error).toBe('')
+  })
+
   it('stays in stopping state until cancellation is confirmed', async () => {
     let finishCancel!: (value: { success: boolean }) => void
     const cancel = vi.fn(() => new Promise<{ success: boolean }>((resolve) => { finishCancel = resolve }))

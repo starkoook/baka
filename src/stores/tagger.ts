@@ -97,6 +97,7 @@ export const useTaggerStore = defineStore('tagger', () => {
   }
 
   function restoreSession() {
+    if (queue.value.length > 0) return false
     const raw = localStorage.getItem(SESSION_KEY)
     if (!raw) return false
     try {

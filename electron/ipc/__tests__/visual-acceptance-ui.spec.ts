@@ -31,4 +31,15 @@ describe('dashboard visual acceptance', () => {
     expect(sidebar).toMatch(/watch\(\s*\(\) => route\.path,\s*\(path\) =>/)
     expect(sidebar).toContain('isToolsExpanded.value = isToolsRoute(path)')
   })
+
+  it('wires live dashboard state through the summary helpers', () => {
+    const dashboard = read('src/views/Dashboard.vue')
+
+    expect(dashboard).toContain('const summaryInput = computed(() => ({')
+    expect(dashboard).toContain('galleryStore.roots.reduce')
+    expect(dashboard).toContain('taggerStore.queue.filter')
+    expect(dashboard).toContain("item.status !== 'reviewed'")
+    expect(dashboard).toContain('getContinueAction(summaryInput.value)')
+    expect(dashboard).toContain('getDashboardSnapshot(summaryInput.value)')
+  })
 })
