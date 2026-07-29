@@ -23,4 +23,12 @@ describe('dashboard visual acceptance', () => {
     expect(sidebar).toContain('const isToolsExpanded = ref(isToolsRoute(route.path))')
     expect(sidebar).not.toContain('const isToolsExpanded = ref(true)')
   })
+
+  it('synchronizes the tools flyout when navigation changes routes', () => {
+    const sidebar = read('src/components/sidebar/AppSidebar.vue')
+
+    expect(sidebar).toContain("import { ref, watch } from 'vue'")
+    expect(sidebar).toMatch(/watch\(\s*\(\) => route\.path,\s*\(path\) =>/)
+    expect(sidebar).toContain('isToolsExpanded.value = isToolsRoute(path)')
+  })
 })

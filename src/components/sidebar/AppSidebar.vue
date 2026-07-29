@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/common/AppIcon.vue'
 import { APP_NAVIGATION, isNavigationItemActive } from '@/features/navigation/app-navigation'
@@ -15,6 +15,13 @@ function isToolsRoute(path: string) {
 }
 
 const isToolsExpanded = ref(isToolsRoute(route.path))
+
+watch(
+  () => route.path,
+  (path) => {
+    isToolsExpanded.value = isToolsRoute(path)
+  },
+)
 
 function navigateTo(path: string) {
   router.push(path)
