@@ -89,7 +89,7 @@ const emit = defineEmits<{
 
 .brand-hero__copy {
   align-self: center;
-  width: min(45%, 560px);
+  width: min(34%, 520px);
   margin-left: clamp(28px, 4vw, 64px);
   color: #ffffff;
 }
@@ -134,7 +134,7 @@ const emit = defineEmits<{
 
 @media (max-width: 1200px) {
   .brand-hero__copy {
-    width: 52%;
+    width: min(36%, 420px);
     margin-left: 32px;
   }
 
