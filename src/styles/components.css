@@ -15,7 +15,7 @@
   font-weight: 600;
   font-family: var(--font-sans);
   cursor: pointer;
-  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
   user-select: none;
   white-space: nowrap;
   letter-spacing: 0.02em;
@@ -37,7 +37,6 @@
 .btn-primary:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-  box-shadow: none;
 }
 
 /* ── Secondary Button (Frosted glass cute) ── */
