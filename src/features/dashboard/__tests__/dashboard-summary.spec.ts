@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { getContinueAction, getDashboardSnapshot, type DashboardAction } from '../dashboard-summary'
+import {
+  getContinueAction,
+  getDashboardSnapshot,
+  resolveDashboardRoute,
+  type DashboardAction,
+} from '../dashboard-summary'
 
 describe('dashboard summary', () => {
   it('continues a trimmed active task before annotations and remembered workspace', () => {
@@ -93,5 +98,21 @@ describe('dashboard summary', () => {
       { label: '数据集', value: '0 个', route: '/gallery' },
       { label: '标注', value: '没有待处理', route: '/tagger' },
     ])
+  })
+
+  it('uses the preferred workspace route when the router has registered it', () => {
+    expect(resolveDashboardRoute('/training/run', (route) => route === '/training/run')).toBe('/training/run')
+    expect(resolveDashboardRoute('/tagger', (route) => route === '/tagger')).toBe('/tagger')
+  })
+
+  it('falls back to a registered parent workspace instead of navigating to an unmatched route', () => {
+    const isRegistered = (route: string) => ['/training', '/gallery'].includes(route)
+
+    expect(resolveDashboardRoute('/training/run', isRegistered)).toBe('/training')
+    expect(resolveDashboardRoute('/tagger', isRegistered)).toBe('/gallery')
+  })
+
+  it('falls back to the dashboard for an unknown unmatched route', () => {
+    expect(resolveDashboardRoute('/missing', (route) => route === '/')).toBe('/')
   })
 })

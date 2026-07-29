@@ -11,6 +11,24 @@ export interface DashboardSummaryInput {
   rememberedWorkspace: DashboardAction | null
 }
 
+const dashboardRouteFallbacks: Record<string, string> = {
+  '/training/run': '/training',
+  '/training/runtime': '/training',
+  '/tagger': '/gallery',
+}
+
+export function resolveDashboardRoute(
+  preferredRoute: string,
+  isRegistered: (route: string) => boolean,
+): string {
+  if (isRegistered(preferredRoute)) return preferredRoute
+
+  const fallbackRoute = dashboardRouteFallbacks[preferredRoute]
+  if (fallbackRoute && isRegistered(fallbackRoute)) return fallbackRoute
+
+  return '/'
+}
+
 function getActiveTaskName(name: string | null): string | null {
   return name?.trim() || null
 }

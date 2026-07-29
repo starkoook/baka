@@ -4,7 +4,11 @@ import { useRouter } from 'vue-router'
 import BrandHero from '@/components/dashboard/BrandHero.vue'
 import DashboardRecentWork from '@/components/dashboard/DashboardRecentWork.vue'
 import SystemMonitor from '@/components/monitor/SystemMonitor.vue'
-import { getContinueAction, getDashboardSnapshot } from '@/features/dashboard/dashboard-summary'
+import {
+  getContinueAction,
+  getDashboardSnapshot,
+  resolveDashboardRoute,
+} from '@/features/dashboard/dashboard-summary'
 import { getRememberedWorkspace, loadLastWorkspace } from '@/features/navigation/workspace-history'
 import { useAppStore } from '@/stores/app'
 import { useGalleryStore } from '@/stores/gallery'
@@ -34,12 +38,16 @@ const displayTask = computed(() => {
   return { ...pipelineStore.currentTask, name }
 })
 
+function getRegisteredRoute(route: string) {
+  return resolveDashboardRoute(route, (candidate) => router.resolve(candidate).matched.length > 0)
+}
+
 function continueWork() {
-  void router.push(continueAction.value.route)
+  void router.push(getRegisteredRoute(continueAction.value.route))
 }
 
 function navigate(route: string) {
-  void router.push(route)
+  void router.push(getRegisteredRoute(route))
 }
 
 onMounted(() => {
