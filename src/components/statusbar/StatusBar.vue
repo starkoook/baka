@@ -27,8 +27,8 @@ const appStore = useAppStore()
 </template>
 
 <style scoped>
-.statusbar { display: flex; align-items: center; justify-content: space-between; height: var(--statusbar-height); padding: 0 14px; flex-shrink: 0; background: var(--bg-titlebar); border-top: 1px solid var(--border-subtle); border-radius: 0 0 12px 12px; color: var(--text-secondary); font-size: 11px; user-select: none; }
-.statusbar.has-error { background: var(--danger-bg); border-top-color: rgba(239, 68, 68, .25); }
+.statusbar { display: flex; align-items: center; justify-content: space-between; height: var(--statusbar-height); padding: 0 14px; flex-shrink: 0; background: transparent; border: 0; border-radius: 0 0 12px 12px; color: var(--text-secondary); font-size: 11px; user-select: none; }
+.statusbar.has-error { background: var(--danger-bg); border: 0; }
 .status-left, .status-right { display: flex; align-items: center; gap: 7px; }
 .status-dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; background: var(--accent-success); }
 .status-dot.busy { background: var(--accent-warning); }

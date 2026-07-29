@@ -46,7 +46,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.titlebar { display: flex; align-items: center; justify-content: space-between; height: var(--titlebar-height); flex-shrink: 0; background: var(--bg-titlebar); border-bottom: 1px solid var(--border-subtle); border-radius: 12px 12px 0 0; user-select: none; }
+.titlebar { display: flex; align-items: center; justify-content: space-between; height: var(--titlebar-height); flex-shrink: 0; background: transparent; border: 0; border-radius: 12px 12px 0 0; user-select: none; }
 .titlebar-drag { display: flex; flex: 1; align-items: center; height: 100%; padding-left: 16px; -webkit-app-region: drag; }
 .titlebar-logo { display: flex; align-items: center; gap: 9px; }
 .logo-icon { width: 18px; height: 18px; color: var(--accent-primary); }

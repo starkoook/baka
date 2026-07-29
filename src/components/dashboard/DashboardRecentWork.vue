@@ -140,15 +140,15 @@ const displayProgress = computed(() => {
   min-width: 0;
   min-height: 76px;
   padding: 14px;
-  border: 1px solid var(--line-subtle);
+  border: 0;
   border-radius: var(--radius-control);
   color: var(--ink-primary);
-  background: var(--surface-secondary);
+  background: color-mix(in srgb, var(--surface-secondary) 84%, var(--brand-soft));
   font: inherit;
   text-align: left;
   cursor: pointer;
   transform-origin: center;
-  transition: transform 160ms ease, opacity 160ms ease, filter 160ms ease, border-color 160ms ease;
+  transition: transform 160ms ease, opacity 160ms ease, filter 160ms ease, background 160ms ease;
 }
 
 .status-segment span {
@@ -240,7 +240,7 @@ const displayProgress = computed(() => {
 }
 
 .status-segment:focus-visible {
-  border-color: var(--brand-primary);
+  background: color-mix(in srgb, var(--surface-secondary) 72%, var(--brand-soft));
   transform: translateY(-3px) scale(1.02);
 }
 
@@ -260,7 +260,7 @@ const displayProgress = computed(() => {
   }
 
   .status-strip:not(:has(.status-segment:focus-visible)) .status-segment:hover {
-    border-color: var(--line-strong);
+    background: color-mix(in srgb, var(--surface-secondary) 72%, var(--brand-soft));
     transform: translateY(-3px) scale(1.02);
   }
 

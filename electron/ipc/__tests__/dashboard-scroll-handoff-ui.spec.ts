@@ -4,6 +4,13 @@ import { describe, expect, it } from 'vitest'
 
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
 
+const rule = (source: string, selector: string) => {
+  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const match = source.match(new RegExp(`(?:^|[{}]\\s*|<style[^>]*>\\s*)${escapedSelector}\\s*\\{([^}]*)\\}`, 's'))
+  expect(match, `missing CSS rule for ${selector}`).not.toBeNull()
+  return match![1]
+}
+
 describe('dashboard scroll handoff UI', () => {
   it('connects the dashboard to scroll progress and exposes the handoff variables', () => {
     const dashboard = read('src/views/Dashboard.vue')
@@ -50,5 +57,47 @@ describe('dashboard scroll handoff UI', () => {
     expect(hero).toContain('max-height: none')
     expect(hero).toContain('border: 0')
     expect(hero).toMatch(/@media \(max-height:\s*720px\)[\s\S]*min-height:\s*400px;/s)
+  })
+
+  it('blends the dashboard chrome and utility surfaces into the window', () => {
+    const titlebar = read('src/components/titlebar/TitleBar.vue')
+    const statusbar = read('src/components/statusbar/StatusBar.vue')
+    const recentWork = read('src/components/dashboard/DashboardRecentWork.vue')
+    const dashboard = read('src/views/Dashboard.vue')
+    const globalStyles = read('src/styles/global.css')
+
+    expect(rule(titlebar, '.titlebar')).toMatch(/(?:^|;)\s*border\s*:\s*0\s*(?:;|$)/)
+    expect(rule(titlebar, '.titlebar')).toMatch(/(?:^|;)\s*background\s*:\s*transparent\s*(?:;|$)/)
+    expect(titlebar).toContain('class="titlebar-controls"')
+    expect(titlebar).toContain('@dblclick="onTitlebarDblClick"')
+
+    expect(rule(statusbar, '.statusbar')).toMatch(/(?:^|;)\s*border\s*:\s*0\s*(?:;|$)/)
+    expect(rule(statusbar, '.statusbar')).toMatch(/(?:^|;)\s*background\s*:\s*transparent\s*(?:;|$)/)
+    expect(rule(statusbar, '.statusbar.has-error')).toMatch(/(?:^|;)\s*border\s*:\s*0\s*(?:;|$)/)
+    expect(rule(statusbar, '.statusbar.has-error')).toMatch(/(?:^|;)\s*background\s*:\s*var\(--danger-bg\)\s*(?:;|$)/)
+    expect(statusbar).toContain('class="status-left"')
+    expect(statusbar).toContain('class="status-right"')
+    expect(statusbar).toContain('{{ appStore.status }}')
+    expect(statusbar).toContain('v{{ appStore.version }}')
+
+    const statusSegment = rule(recentWork, '.status-segment')
+    expect(statusSegment).toMatch(/(?:^|;)\s*border\s*:\s*0\s*(?:;|$)/)
+    expect(statusSegment).toMatch(/(?:^|;)\s*background\s*:\s*color-mix\(\s*in\s+srgb\s*,\s*var\(--surface-secondary\)\s+84%\s*,\s*var\(--brand-soft\)\s*\)\s*(?:;|$)/)
+    expect(statusSegment).toMatch(/(?:^|;)\s*transition\s*:[^;]*background\s+160ms\s+ease\s*(?:;|$)/)
+    expect(statusSegment).not.toMatch(/border-color/)
+
+    const focusedStatusSegment = rule(recentWork, '.status-segment:focus-visible')
+    expect(focusedStatusSegment).not.toMatch(/border(?:-color)?\s*:/)
+    expect(focusedStatusSegment).toMatch(/translateY\(\s*-3px\s*\)\s+scale\(\s*1\.02\s*\)/)
+
+    const hoveredStatusSegment = rule(recentWork, '.status-strip:not(:has(.status-segment:focus-visible)) .status-segment:hover')
+    expect(hoveredStatusSegment).toMatch(/(?:^|;)\s*background\s*:\s*color-mix\(/)
+    expect(hoveredStatusSegment).not.toMatch(/border(?:-color)?\s*:/)
+    expect(hoveredStatusSegment).toMatch(/translateY\(\s*-3px\s*\)\s+scale\(\s*1\.02\s*\)/)
+
+    expect(rule(dashboard, '.dashboard-system :deep(.mon-set)')).toMatch(/(?:^|;)\s*gap\s*:\s*14px\s*(?:;|$)/)
+    expect(rule(dashboard, '.dashboard-system :deep(.mon-card)')).toMatch(/(?:^|;)\s*border\s*:\s*0\s*(?:;|$)/)
+    expect(rule(dashboard, '.dashboard-system :deep(.mon-card:hover)')).toMatch(/(?:^|;)\s*border\s*:\s*0\s*(?:;|$)/)
+    expect(rule(globalStyles, '#app')).toMatch(/(?:^|;)\s*box-shadow\s*:\s*none\s*(?:;|$)/)
   })
 })

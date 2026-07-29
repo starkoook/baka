@@ -29,7 +29,7 @@ body {
   height: 100%;
   overflow: hidden;
   border-radius: var(--radius-panel);
-  box-shadow: var(--surface-shadow);
+  box-shadow: none;
 }
 
 ::selection {

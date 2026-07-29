@@ -194,12 +194,12 @@ onMounted(() => {
 }
 
 .dashboard-system :deep(.mon-set) {
-  gap: 10px;
+  gap: 14px;
 }
 
 .dashboard-system :deep(.mon-card) {
   padding: 12px 0;
-  border-width: 0 0 1px;
+  border: 0;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -207,7 +207,7 @@ onMounted(() => {
 }
 
 .dashboard-system :deep(.mon-card:hover) {
-  border-color: var(--line-strong);
+  border: 0;
   background: transparent;
   box-shadow: none;
   transform: none;
