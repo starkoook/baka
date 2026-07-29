@@ -52,7 +52,7 @@ describe('dashboard interaction layers', () => {
     expect(dashboard).not.toContain(':has(.system-summary:focus-within)')
 
     const hoverMedia = dashboard.indexOf('@media (hover: hover) and (pointer: fine)')
-    const recentFocus = dashboard.indexOf('.dashboard-sheet:has(.recent-work:focus-within) .recent-work {')
+    const recentFocus = dashboard.indexOf('.dashboard-workspace-layer:has(.recent-work:focus-within) .recent-work {')
     expect(recentFocus).toBeGreaterThan(hoverMedia)
     expect(dashboard).toMatch(/:has\(\.recent-work:focus-within\) \.recent-work\s*\{[^}]*opacity:\s*1;[^}]*filter:\s*none;[^}]*z-index:\s*4;[^}]*scale\(1\.012\);/s)
     expect(dashboard).toMatch(/:has\(\.recent-work:focus-within\) \.system-summary\s*\{[^}]*z-index:\s*1;[^}]*opacity:\s*0\.72;/s)
@@ -62,10 +62,11 @@ describe('dashboard interaction layers', () => {
     expect(recentWork).not.toContain('.status-strip:has(.status-segment:hover)')
   })
 
-  it('keeps dashboard surfaces content-sized without changing the sheet geometry', () => {
+  it('keeps dashboard surfaces content-sized in the responsive workspace grid', () => {
     const dashboard = read('src/views/Dashboard.vue')
 
-    expect(dashboard).toMatch(/\.dashboard-sheet\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.35fr\)\s+minmax\(300px,\s*0\.65fr\);[^}]*align-items:\s*start;[^}]*gap:\s*14px;[^}]*margin-top:\s*-24px;/s)
+    expect(dashboard).toMatch(/\.dashboard-workspace-layer\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.35fr\)\s+minmax\(300px,\s*0\.65fr\);[^}]*align-items:\s*start;[^}]*gap:\s*14px;/s)
+    expect(dashboard).toMatch(/@media \(max-width:\s*1160px\)[\s\S]*\.dashboard-workspace-layer\s*\{[^}]*grid-template-columns:\s*1fr;/s)
   })
 
   it('keeps pressed status segments above later hover and keyboard declarations', () => {

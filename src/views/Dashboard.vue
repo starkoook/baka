@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import BrandHero from '@/components/dashboard/BrandHero.vue'
 import DashboardRecentWork from '@/components/dashboard/DashboardRecentWork.vue'
@@ -9,6 +9,7 @@ import {
   getDashboardSnapshot,
   resolveDashboardRoute,
 } from '@/features/dashboard/dashboard-summary'
+import { useDashboardScrollHandoff } from '@/features/dashboard/dashboard-scroll-handoff'
 import { getRememberedWorkspace, loadLastWorkspace } from '@/features/navigation/workspace-history'
 import { useAppStore } from '@/stores/app'
 import { useGalleryStore } from '@/stores/gallery'
@@ -21,6 +22,19 @@ const galleryStore = useGalleryStore()
 const pipelineStore = usePipelineStore()
 const taggerStore = useTaggerStore()
 const rememberedWorkspace = getRememberedWorkspace(loadLastWorkspace())
+const dashboardPage = ref<HTMLElement | null>(null)
+const handoffProgress = useDashboardScrollHandoff(dashboardPage)
+
+const handoffStyle = computed(() => ({
+  '--handoff-progress': handoffProgress.value,
+  '--hero-shift': `${-32 * handoffProgress.value}px`,
+  '--hero-scale': 1 - 0.05 * handoffProgress.value,
+  '--hero-opacity': 1 - 0.14 * handoffProgress.value,
+  '--hero-saturation': 1 - 0.12 * handoffProgress.value,
+  '--ambient-opacity': 0.08 + 0.12 * handoffProgress.value,
+  '--workspace-shift': `${48 - 68 * handoffProgress.value}px`,
+  '--workspace-scale': 0.96 + 0.04 * handoffProgress.value,
+}))
 
 const summaryInput = computed(() => ({
   imageCount: galleryStore.roots.reduce((sum, root) => sum + (root.image_count ?? 0), 0),
@@ -58,14 +72,17 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="dashboard-page">
-    <BrandHero
-      :action-label="continueAction.label"
-      :show-artwork="appStore.showMascot"
-      @action="continueWork"
-    />
+  <main ref="dashboardPage" class="dashboard-page" :style="handoffStyle">
+    <div class="dashboard-ambient" aria-hidden="true"></div>
+    <div class="dashboard-hero-layer">
+      <BrandHero
+        :action-label="continueAction.label"
+        :show-artwork="appStore.showMascot"
+        @action="continueWork"
+      />
+    </div>
 
-    <div class="dashboard-sheet">
+    <div class="dashboard-workspace-layer">
       <DashboardRecentWork
         :action="continueAction"
         :items="snapshot"
@@ -81,25 +98,66 @@ onMounted(() => {
         <SystemMonitor class="dashboard-system" />
       </section>
     </div>
+
+    <div class="dashboard-scroll-tail" aria-hidden="true"></div>
   </main>
 </template>
 
 <style scoped>
 .dashboard-page {
+  --handoff-progress: 0;
+  --hero-shift: 0px;
+  --hero-scale: 1;
+  --hero-opacity: 1;
+  --hero-saturation: 1;
+  --ambient-opacity: 0.08;
+  --workspace-shift: 48px;
+  --workspace-scale: 0.96;
+  position: relative;
   width: min(100%, 1400px);
+  min-height: calc(100vh + 240px);
   margin: 0 auto;
   padding-bottom: 28px;
+  perspective: 1200px;
 }
 
-.dashboard-sheet {
-  position: relative;
+.dashboard-ambient {
+  position: absolute;
+  z-index: 0;
+  inset: 44% 8% auto;
+  height: 240px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: var(--ambient-opacity);
+  background: var(--brand-primary);
+  filter: blur(110px);
+}
+
+.dashboard-hero-layer {
+  position: sticky;
   z-index: 1;
+  top: 0;
+  opacity: var(--hero-opacity);
+  transform: translateY(var(--hero-shift)) scale(var(--hero-scale));
+  transform-origin: center top;
+  filter: saturate(var(--hero-saturation));
+  transition: opacity 80ms linear, filter 80ms linear;
+}
+
+.dashboard-workspace-layer {
+  position: relative;
+  z-index: 3;
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
   align-items: start;
   gap: 14px;
-  margin-top: -24px;
-  margin-inline: clamp(16px, 2.5vw, 36px);
+  margin: clamp(-112px, -10vh, -78px) clamp(16px, 2.5vw, 36px) 0;
+  transform: translateY(var(--workspace-shift)) scale(var(--workspace-scale));
+  transform-origin: center top;
+}
+
+.dashboard-scroll-tail {
+  height: clamp(160px, 24vh, 240px);
 }
 
 .system-summary {
@@ -160,8 +218,8 @@ onMounted(() => {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .dashboard-sheet:has(.recent-work:hover) .system-summary,
-  .dashboard-sheet:has(.system-summary:hover) .recent-work {
+  .dashboard-workspace-layer:has(.recent-work:hover) .system-summary,
+  .dashboard-workspace-layer:has(.system-summary:hover) .recent-work {
     opacity: 0.72;
     filter: saturate(0.72);
     transform: scale(0.985);
@@ -173,14 +231,14 @@ onMounted(() => {
   }
 }
 
-.dashboard-sheet:has(.recent-work:focus-within) .recent-work {
+.dashboard-workspace-layer:has(.recent-work:focus-within) .recent-work {
   opacity: 1;
   filter: none;
   z-index: 4;
   transform: translateY(-4px) scale(1.012);
 }
 
-.dashboard-sheet:has(.recent-work:focus-within) .system-summary {
+.dashboard-workspace-layer:has(.recent-work:focus-within) .system-summary {
   z-index: 1;
   opacity: 0.72;
   filter: saturate(0.72);
@@ -188,7 +246,7 @@ onMounted(() => {
 }
 
 @media (max-width: 1160px) {
-  .dashboard-sheet {
+  .dashboard-workspace-layer {
     grid-template-columns: 1fr;
     gap: 14px;
   }
@@ -199,21 +257,48 @@ onMounted(() => {
 }
 
 @media (max-width: 760px) {
-  .dashboard-sheet {
+  .dashboard-workspace-layer {
     margin-inline: 10px;
   }
 }
 
+@media (max-height: 720px) {
+  .dashboard-page {
+    min-height: calc(100vh + 190px);
+  }
+
+  .dashboard-scroll-tail {
+    height: 150px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .system-summary,
-  .dashboard-sheet .recent-work {
+  .dashboard-page {
+    min-height: auto;
+  }
+
+  .dashboard-hero-layer,
+  .dashboard-workspace-layer {
+    position: relative;
+    opacity: 1;
+    filter: none;
+    transform: none;
     transition: none;
   }
 
-  .dashboard-sheet:has(.recent-work:focus-within) .recent-work,
-  .dashboard-sheet:has(.recent-work:focus-within) .system-summary,
-  .dashboard-sheet:has(.recent-work:hover) .system-summary,
-  .dashboard-sheet:has(.system-summary:hover) .recent-work,
+  .dashboard-scroll-tail {
+    display: none;
+  }
+
+  .system-summary,
+  .dashboard-workspace-layer .recent-work {
+    transition: none;
+  }
+
+  .dashboard-workspace-layer:has(.recent-work:focus-within) .recent-work,
+  .dashboard-workspace-layer:has(.recent-work:focus-within) .system-summary,
+  .dashboard-workspace-layer:has(.recent-work:hover) .system-summary,
+  .dashboard-workspace-layer:has(.system-summary:hover) .recent-work,
   .system-summary:hover {
     opacity: 1;
     filter: none;

@@ -36,13 +36,11 @@ describe('dashboard brand hero', () => {
   it('keeps a calm wide composition with reduced-motion support', () => {
     const hero = readHero()
 
-    expect(hero).toContain('aspect-ratio: 8 / 3')
-    expect(hero).toContain('width: min(34%, 520px)')
-    expect(hero).toContain('width: min(36%, 420px)')
+    expect(hero).toContain('min-height: clamp(430px, 62vh, 620px)')
+    expect(hero).toContain('max-height: none')
+    expect(hero).toContain('border: 0')
     expect(hero).toContain('object-position: center 28%')
-    expect(hero).toContain('transform-origin: center 28%')
     expect(hero).toContain('animation: hero-breathe 12s')
-    expect(hero).toContain('scale(1.03)')
     expect(hero).toContain('prefers-reduced-motion: reduce')
 
     for (const forbiddenPattern of ['Math.random', 'speech', 'heart', 'walking']) {

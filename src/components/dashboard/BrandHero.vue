@@ -45,16 +45,15 @@ const emit = defineEmits<{
   isolation: isolate;
   display: flex;
   width: 100%;
-  min-height: 300px;
-  max-height: 380px;
-  aspect-ratio: 8 / 3;
+  min-height: clamp(430px, 62vh, 620px);
+  max-height: none;
   overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 0;
   border-radius: var(--radius-hero);
   background:
     radial-gradient(circle at 78% 24%, rgba(239, 126, 170, 0.3), transparent 28%),
     linear-gradient(120deg, #29233f 0%, #4f467d 56%, #8f82e4 100%);
-  box-shadow: var(--surface-shadow);
+  box-shadow: 0 26px 68px rgba(0, 0, 0, 0.24);
 }
 
 .brand-hero__artwork,
@@ -141,6 +140,12 @@ const emit = defineEmits<{
 
   .brand-hero h1 {
     font-size: clamp(28px, 3.6vw, 40px);
+  }
+}
+
+@media (max-height: 720px) {
+  .brand-hero {
+    min-height: 400px;
   }
 }
 
