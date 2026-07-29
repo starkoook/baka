@@ -62,6 +62,12 @@ describe('dashboard interaction layers', () => {
     expect(recentWork).not.toContain('.status-strip:has(.status-segment:hover)')
   })
 
+  it('keeps dashboard surfaces content-sized without changing the sheet geometry', () => {
+    const dashboard = read('src/views/Dashboard.vue')
+
+    expect(dashboard).toMatch(/\.dashboard-sheet\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1\.35fr\)\s+minmax\(300px,\s*0\.65fr\);[^}]*align-items:\s*start;[^}]*gap:\s*14px;[^}]*margin-top:\s*-24px;/s)
+  })
+
   it('keeps pressed status segments above later hover and keyboard declarations', () => {
     const recentWork = read('src/components/dashboard/DashboardRecentWork.vue')
     const hoverRule = recentWork.indexOf('.status-segment:hover {')

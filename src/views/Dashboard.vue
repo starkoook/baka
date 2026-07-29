@@ -88,6 +88,7 @@ onMounted(() => {
   z-index: 1;
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  align-items: start;
   gap: 14px;
   margin-top: -24px;
   margin-inline: clamp(16px, 2.5vw, 36px);
