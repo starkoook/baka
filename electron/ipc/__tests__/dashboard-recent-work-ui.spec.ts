@@ -27,7 +27,11 @@ describe('dashboard recent work', () => {
   it('composes the dashboard from summary helpers, the hero, recent work, and system monitor', () => {
     const dashboard = read('src/views/Dashboard.vue')
 
-    expect(dashboard).toContain("import { getContinueAction, getDashboardSnapshot } from '@/features/dashboard/dashboard-summary'")
+    expect(dashboard).toContain('getContinueAction,')
+    expect(dashboard).toContain('getDashboardSnapshot,')
+    expect(dashboard).toContain('resolveDashboardRoute,')
+    expect(dashboard).toContain("from '@/features/dashboard/dashboard-summary'")
+    expect(dashboard).toContain('router.resolve(candidate).matched.length > 0')
     expect(dashboard).toContain('const displayTask = computed(() =>')
     expect(dashboard).toContain('pipelineStore.currentTask?.name.trim()')
     expect(dashboard).toContain(':show-artwork="appStore.showMascot"')
