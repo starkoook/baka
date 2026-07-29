@@ -17,7 +17,9 @@ const pipelineStore = usePipelineStore()
 const summaryInput = computed(() => ({
   imageCount: galleryStore.roots.reduce((sum, root) => sum + (root.image_count ?? 0), 0),
   datasetCount: galleryStore.datasets.length,
+  unfinishedAnnotationCount: 0,
   activeTaskName: pipelineStore.currentTask?.name ?? null,
+  rememberedWorkspace: null,
 }))
 
 const continueAction = computed(() => getContinueAction(summaryInput.value))

@@ -1,25 +1,31 @@
-export interface DashboardSummaryInput {
-  imageCount: number
-  datasetCount: number
-  activeTaskName: string | null
-}
-
 export interface DashboardAction {
   label: string
   route: string
+}
+
+export interface DashboardSummaryInput {
+  imageCount: number
+  datasetCount: number
+  unfinishedAnnotationCount: number
+  activeTaskName: string | null
+  rememberedWorkspace: DashboardAction | null
 }
 
 function getActiveTaskName(name: string | null): string | null {
   return name?.trim() || null
 }
 
-export function getContinueAction(
-  input: Pick<DashboardSummaryInput, 'datasetCount' | 'activeTaskName'>,
-): DashboardAction {
+export function getContinueAction(input: DashboardSummaryInput): DashboardAction {
   const activeTaskName = getActiveTaskName(input.activeTaskName)
 
   if (activeTaskName) {
     return { label: `继续 ${activeTaskName}`, route: '/training/run' }
+  }
+  if (input.unfinishedAnnotationCount > 0) {
+    return { label: `继续标注 ${input.unfinishedAnnotationCount} 张素材`, route: '/tagger' }
+  }
+  if (input.rememberedWorkspace) {
+    return { ...input.rememberedWorkspace }
   }
   if (input.datasetCount > 0) {
     return { label: '继续准备训练', route: '/training' }
@@ -28,15 +34,15 @@ export function getContinueAction(
 }
 
 export function getDashboardSnapshot(input: DashboardSummaryInput): Array<DashboardAction & { value: string }> {
-  const activeTaskName = getActiveTaskName(input.activeTaskName)
-
   return [
     { label: '图库', value: `${input.imageCount} 张`, route: '/gallery' },
     { label: '数据集', value: `${input.datasetCount} 个`, route: '/gallery' },
     {
-      label: '训练',
-      value: activeTaskName ?? (input.datasetCount > 0 ? '可以开始' : '等待开始'),
-      route: activeTaskName ? '/training/run' : '/training',
+      label: '标注',
+      value: input.unfinishedAnnotationCount > 0
+        ? `${input.unfinishedAnnotationCount} 张待处理`
+        : '没有待处理',
+      route: '/tagger',
     },
   ]
 }
