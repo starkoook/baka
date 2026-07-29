@@ -7,15 +7,11 @@ const gallery = readFileSync(resolve(process.cwd(), 'src/views/TaggerV2.vue'), '
 const layout = readFileSync(resolve(process.cwd(), 'src/layouts/MainLayout.vue'), 'utf8')
 
 describe('stable workbench UI', () => {
-  it('uses the mascot cabin dashboard instead of a tutorial workflow', () => {
-    expect(dashboard).toContain("import Mascot from '@/components/monitor/Mascot.vue'")
-    expect(dashboard).toContain("import SystemMonitor from '@/components/monitor/SystemMonitor.vue'")
-    expect(dashboard).toContain('图库与标注')
-    expect(dashboard).toContain('提示词反推')
-    expect(dashboard).toContain('训练中心')
-    expect(dashboard).toContain('继续工作')
+  it('uses the approved character-led dashboard instead of a tutorial workflow', () => {
+    expect(dashboard).toContain("import BrandHero from '@/components/dashboard/BrandHero.vue'")
+    expect(dashboard).toContain("import DashboardRecentWork from '@/components/dashboard/DashboardRecentWork.vue'")
     expect(dashboard).not.toContain('workflow-grid')
-    expect(dashboard).not.toContain('var(--text-inverse)')
+    expect(dashboard).not.toContain('cabin-label')
   })
 
   it('keeps a visible inspector beside the gallery', () => {
