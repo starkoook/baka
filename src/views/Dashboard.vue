@@ -22,6 +22,11 @@ const summaryInput = computed(() => ({
 
 const continueAction = computed(() => getContinueAction(summaryInput.value))
 const snapshot = computed(() => getDashboardSnapshot(summaryInput.value))
+const displayTask = computed(() => {
+  const name = pipelineStore.currentTask?.name.trim()
+  if (!name || !pipelineStore.currentTask) return null
+  return { ...pipelineStore.currentTask, name }
+})
 
 function continueWork() {
   void router.push(continueAction.value.route)
@@ -48,7 +53,7 @@ onMounted(() => {
     <div class="dashboard-sheet">
       <DashboardRecentWork
         :items="snapshot"
-        :task="pipelineStore.currentTask"
+        :task="displayTask"
         @navigate="navigate"
       />
 

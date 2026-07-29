@@ -1,12 +1,18 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { DashboardAction } from '@/features/dashboard/dashboard-summary'
 
-defineProps<{
+const props = defineProps<{
   items: Array<DashboardAction & { value: string }>
   task: { name: string; progress: number; eta: string; speed: string } | null
 }>()
 
 const emit = defineEmits<{ navigate: [route: string] }>()
+
+const displayProgress = computed(() => {
+  const taskProgress = props.task?.progress ?? 0
+  return Number.isFinite(taskProgress) ? Math.min(100, Math.max(0, taskProgress)) : 0
+})
 </script>
 
 <template>
@@ -40,7 +46,7 @@ const emit = defineEmits<{ navigate: [route: string] }>()
           <small>正在运行</small>
           <strong>{{ task.name }}</strong>
         </span>
-        <b>{{ task.progress }}%</b>
+        <b>{{ displayProgress }}%</b>
       </div>
       <div
         class="task-track"
@@ -48,9 +54,9 @@ const emit = defineEmits<{ navigate: [route: string] }>()
         :aria-label="task.name"
         aria-valuemin="0"
         aria-valuemax="100"
-        :aria-valuenow="task.progress"
+        :aria-valuenow="displayProgress"
       >
-        <i :style="{ width: `${task.progress}%` }"></i>
+        <i :style="{ width: `${displayProgress}%` }"></i>
       </div>
       <p>{{ task.speed }} · 预计 {{ task.eta }}</p>
     </div>
@@ -148,6 +154,10 @@ const emit = defineEmits<{ navigate: [route: string] }>()
   gap: 16px;
 }
 
+.active-task__summary > span {
+  min-width: 0;
+}
+
 .active-task__summary small,
 .active-task__summary strong {
   display: block;
@@ -163,9 +173,12 @@ const emit = defineEmits<{ navigate: [route: string] }>()
   margin-top: 4px;
   color: var(--ink-primary);
   font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .active-task__summary b {
+  flex-shrink: 0;
   color: var(--brand-primary);
   font-size: 16px;
   font-variant-numeric: tabular-nums;
