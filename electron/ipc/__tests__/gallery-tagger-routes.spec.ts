@@ -24,4 +24,16 @@ describe('gallery and annotation routes', () => {
     expect(sidebar).toContain('APP_NAVIGATION')
     expect(sidebar).not.toContain('图库 & 标注')
   })
+
+  it('exposes every tool route through the sidebar subnavigation', () => {
+    const navigation = read('src/features/navigation/app-navigation.ts')
+    const sidebar = read('src/components/sidebar/AppSidebar.vue')
+
+    for (const route of ['/upscale', '/reverse', '/generate', '/console']) {
+      expect(navigation).toContain(`route: '${route}'`)
+    }
+    expect(sidebar).toContain('item.children')
+    expect(sidebar).toContain('aria-expanded')
+    expect(sidebar).toContain('aria-controls')
+  })
 })

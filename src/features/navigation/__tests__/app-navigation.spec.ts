@@ -8,6 +8,8 @@ if (false) {
   firstItem.route = '/other'
   // @ts-expect-error Navigation matches cannot be changed by consumers.
   firstItem.matches.push('/other')
+  // @ts-expect-error Navigation children cannot be changed by consumers.
+  firstItem.children.push({ label: 'Other', route: '/other' })
   // @ts-expect-error Navigation collection cannot be changed by consumers.
   APP_NAVIGATION.push(firstItem)
 }
@@ -50,5 +52,16 @@ describe('application navigation', () => {
     expect(isNavigationItemActive(tools, '/console')).toBe(true)
     expect(isNavigationItemActive(tools, '/training')).toBe(false)
     expect(isNavigationItemActive(tools, '/reverse-engineering')).toBe(false)
+  })
+
+  it('provides visible child navigation for every tool route', () => {
+    const tools = APP_NAVIGATION.find((item) => item.id === 'tools')!
+
+    expect(tools.children).toEqual([
+      { label: '超分放大', route: '/upscale' },
+      { label: '提示词反推', route: '/reverse' },
+      { label: 'AI 生成', route: '/generate' },
+      { label: '控制台', route: '/console' },
+    ])
   })
 })

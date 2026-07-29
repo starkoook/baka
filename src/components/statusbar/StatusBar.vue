@@ -18,7 +18,7 @@ const appStore = useAppStore()
       </template>
     </div>
     <div class="status-right">
-      <button v-if="appStore.errorCount > 0" class="status-err-badge" type="button" @click="appStore.clearError()">
+      <button v-if="appStore.errorCount > 0" class="status-err-badge" type="button" @click="appStore.clearErrorHistory()">
         {{ appStore.errorCount }} 个错误
       </button>
       <span class="status-item">v{{ appStore.version }}</span>
@@ -34,11 +34,11 @@ const appStore = useAppStore()
 .status-dot.busy { background: var(--accent-warning); }
 .status-dot.error { background: var(--accent-danger); }
 .status-text { color: var(--text-secondary); }
-.status-text.error-text { max-width: 400px; overflow: hidden; color: var(--text-primary); text-overflow: ellipsis; white-space: nowrap; }
+.status-text.error-text { max-width: 400px; overflow: hidden; color: var(--danger-foreground); text-overflow: ellipsis; white-space: nowrap; }
 .status-dismiss, .status-err-badge { border: 0; cursor: pointer; font: inherit; }
-.status-dismiss { padding: 0 4px; background: none; color: var(--accent-danger); }
-.status-dismiss:hover { color: var(--text-primary); }
-.status-err-badge { padding: 2px 8px; border-radius: 10px; background: var(--danger-bg); color: var(--accent-danger); font-size: 10px; }
+.status-dismiss { padding: 0 4px; background: none; color: var(--danger-foreground); }
+.status-dismiss:hover { color: var(--danger-foreground); text-decoration: underline; }
+.status-err-badge { padding: 2px 8px; border-radius: 10px; background: var(--danger-bg); color: var(--danger-foreground); font-size: 10px; }
 .status-err-badge:hover { background: rgba(239, 68, 68, .18); }
-.status-item { color: var(--text-tertiary); }
+.status-item { color: var(--text-secondary); }
 </style>

@@ -47,6 +47,7 @@
   --accent-success: #34d399;
   --accent-warning: #fbbf24;
   --accent-danger: #f87171;
+  --danger-foreground: #fca5a5;
 
   --accent-success-rgb: 52, 211, 153;
   --accent-warning-rgb: 251, 191, 36;
@@ -180,6 +181,7 @@
   --accent-secondary: var(--action-accent);
   --accent-bg: var(--brand-soft);
   --accent-bg-hover: var(--surface-selected);
+  --danger-foreground: #b4233f;
   --accent-glow: 0 0 18px rgba(236, 72, 153, 0.15);
   --accent-glow-strong: 0 0 24px rgba(236, 72, 153, 0.25);
 

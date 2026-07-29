@@ -51,6 +51,11 @@ export const useAppStore = defineStore('app', () => {
     status.value = '就绪'
   }
 
+  function clearErrorHistory() {
+    clearError()
+    errorCount.value = 0
+  }
+
   function setTheme(t: 'dark' | 'light') {
     theme.value = t
     applyTheme(t)
@@ -76,6 +81,7 @@ export const useAppStore = defineStore('app', () => {
     setStatus,
     setError,
     clearError,
+    clearErrorHistory,
     setTheme,
     toggleTheme,
     toggleMascot,

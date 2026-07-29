@@ -63,6 +63,7 @@ const variables = read('src/styles/variables.css')
 const global = read('src/styles/global.css')
 const components = read('src/styles/components.css')
 const appStore = read('src/stores/app.ts')
+const titleBar = read('src/components/titlebar/TitleBar.vue')
 
 describe('editorial visual foundation', () => {
   it('defines semantic editorial tokens while preserving legacy aliases', () => {
@@ -94,6 +95,18 @@ describe('editorial visual foundation', () => {
     }
 
     expect(blockFor(components, '.btn-primary {')).toContain('color: var(--brand-on-primary)')
+  })
+
+  it('keeps danger foreground readable on each theme surface', () => {
+    for (const theme of [
+      blockFor(variables, ':root'),
+      blockFor(variables, '[data-theme="light"]'),
+    ]) {
+      const foreground = hexToken(theme, '--danger-foreground')
+
+      expect(contrastRatio(hexToken(theme, '--app-bg'), foreground)).toBeGreaterThanOrEqual(4.5)
+      expect(contrastRatio(hexToken(theme, '--surface-primary'), foreground)).toBeGreaterThanOrEqual(4.5)
+    }
   })
 
   it('removes decorative global effects while preserving base and motion rules', () => {
@@ -153,5 +166,11 @@ describe('editorial visual foundation', () => {
   it('changes theme directly without a wipe class or timer', () => {
     expect(appStore).not.toContain('theme-wiping')
     expect(appStore).toMatch(/function toggleTheme\(\)\s*{\s*setTheme\(theme\.value === 'dark' \? 'light' : 'dark'\)\s*}/)
+  })
+
+  it('does not maximize the window from a titlebar control double click', () => {
+    expect(titleBar).toContain('function onTitlebarDblClick')
+    expect(titleBar).toContain("closest('.titlebar-controls')")
+    expect(titleBar).toContain('@dblclick="onTitlebarDblClick"')
   })
 })

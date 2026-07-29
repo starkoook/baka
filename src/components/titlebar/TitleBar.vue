@@ -7,6 +7,11 @@ function handleMinimize() { window.windowAPI?.minimize() }
 function handleMaximize() { window.windowAPI?.maximize() }
 function handleClose() { window.windowAPI?.close() }
 
+function onTitlebarDblClick(event: MouseEvent) {
+  if ((event.target as HTMLElement | null)?.closest('.titlebar-controls')) return
+  handleMaximize()
+}
+
 onMounted(() => {
   window.windowAPI?.onMaximizeChange((maximized: boolean) => {
     isMaximized.value = maximized
@@ -15,7 +20,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <header class="titlebar" @dblclick="handleMaximize">
+  <header class="titlebar" @dblclick="onTitlebarDblClick">
     <div class="titlebar-drag">
       <span class="titlebar-logo">
         <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
