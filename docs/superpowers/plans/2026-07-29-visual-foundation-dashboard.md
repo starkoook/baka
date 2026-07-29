@@ -93,7 +93,7 @@ describe('dashboard summary', () => {
       .toEqual([
         { label: '图库', value: '428 张', route: '/gallery' },
         { label: '数据集', value: '3 个', route: '/gallery' },
-        { label: '训练', value: '等待开始', route: '/training' },
+        { label: '训练', value: '可以开始', route: '/training' },
       ])
   })
 })
