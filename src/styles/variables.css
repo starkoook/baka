@@ -13,6 +13,7 @@
   --ink-secondary: #c3b8c6;
   --ink-tertiary: #918694;
   --brand-primary: #9588ec;
+  --brand-on-primary: #18151b;
   --brand-hover: #a79bf4;
   --brand-soft: #302a46;
   --action-accent: #ef7eaa;
@@ -146,8 +147,9 @@
   --ink-primary: #241d28;
   --ink-secondary: #6f6673;
   --ink-tertiary: #918895;
-  --brand-primary: #7669d8;
-  --brand-hover: #6659c8;
+  --brand-primary: #6254bd;
+  --brand-on-primary: #ffffff;
+  --brand-hover: #5548aa;
   --brand-soft: #ebe7fb;
   --action-accent: #d95f8f;
   --line-subtle: rgba(36, 29, 40, 0.1);

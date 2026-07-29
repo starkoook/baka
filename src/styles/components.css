@@ -23,7 +23,7 @@
 
 .btn-primary {
   background: var(--brand-primary);
-  color: #fff;
+  color: var(--brand-on-primary);
   border-color: var(--brand-primary);
 }
 

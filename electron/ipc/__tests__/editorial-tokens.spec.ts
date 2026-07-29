@@ -19,6 +19,25 @@ const blockFor = (source: string, selector: string) => {
   throw new Error(`Unclosed selector: ${selector}`)
 }
 
+const hexToken = (source: string, token: string) => {
+  const match = source.match(new RegExp(`${token}:\\s*(#[0-9a-fA-F]{6})`))
+  if (!match) throw new Error(`Missing hex token: ${token}`)
+  return match[1]
+}
+
+const contrastRatio = (background: string, foreground: string) => {
+  const luminance = (hex: string) => {
+    const channels = hex.slice(1).match(/.{2}/g)!.map((channel) => Number.parseInt(channel, 16) / 255)
+    const linear = channels.map((channel) => channel <= 0.03928
+      ? channel / 12.92
+      : ((channel + 0.055) / 1.055) ** 2.4)
+    return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+  }
+
+  const [lighter, darker] = [luminance(background), luminance(foreground)].sort((a, b) => b - a)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
 const semanticTokens = [
   '--app-bg',
   '--surface-primary',
@@ -28,6 +47,7 @@ const semanticTokens = [
   '--ink-secondary',
   '--ink-tertiary',
   '--brand-primary',
+  '--brand-on-primary',
   '--brand-hover',
   '--brand-soft',
   '--action-accent',
@@ -60,6 +80,20 @@ describe('editorial visual foundation', () => {
     expect(variables).toMatch(/--text-primary:\s*var\(--ink-primary\)/)
     expect(variables).toMatch(/--accent-primary:\s*var\(--brand-primary\)/)
     expect(variables).toMatch(/--border-default:\s*var\(--line-subtle\)/)
+  })
+
+  it('keeps primary button foreground contrast at the WCAG normal-text threshold', () => {
+    for (const theme of [
+      blockFor(variables, ':root'),
+      blockFor(variables, '[data-theme="light"]'),
+    ]) {
+      expect(contrastRatio(
+        hexToken(theme, '--brand-primary'),
+        hexToken(theme, '--brand-on-primary'),
+      )).toBeGreaterThanOrEqual(4.5)
+    }
+
+    expect(blockFor(components, '.btn-primary {')).toContain('color: var(--brand-on-primary)')
   })
 
   it('removes decorative global effects while preserving base and motion rules', () => {
