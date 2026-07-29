@@ -8,7 +8,13 @@ import { useAppStore } from '@/stores/app'
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
-const isToolsExpanded = ref(true)
+
+function isToolsRoute(path: string) {
+  const toolsItem = APP_NAVIGATION.find((item) => item.id === 'tools')
+  return toolsItem ? isNavigationItemActive(toolsItem, path) : false
+}
+
+const isToolsExpanded = ref(isToolsRoute(route.path))
 
 function navigateTo(path: string) {
   router.push(path)
