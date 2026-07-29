@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import { saveLastWorkspace } from '@/features/navigation/workspace-history'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -45,5 +46,7 @@ const router = createRouter({
     },
   ],
 })
+
+router.afterEach((to) => saveLastWorkspace(to.path))
 
 export default router
