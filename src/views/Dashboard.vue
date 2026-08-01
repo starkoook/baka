@@ -193,7 +193,7 @@ onMounted(() => {
   line-height: 1.25;
 }
 
-.dashboard-system :deep(.mon-set) {
+.dashboard-system {
   gap: 14px;
 }
 

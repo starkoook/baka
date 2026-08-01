@@ -95,7 +95,8 @@ describe('dashboard scroll handoff UI', () => {
     expect(hoveredStatusSegment).not.toMatch(/border(?:-color)?\s*:/)
     expect(hoveredStatusSegment).toMatch(/translateY\(\s*-3px\s*\)\s+scale\(\s*1\.02\s*\)/)
 
-    expect(rule(dashboard, '.dashboard-system :deep(.mon-set)')).toMatch(/(?:^|;)\s*gap\s*:\s*14px\s*(?:;|$)/)
+    expect(rule(dashboard, '.dashboard-system')).toMatch(/(?:^|;)\s*gap\s*:\s*14px\s*(?:;|$)/)
+    expect(dashboard).not.toContain('.dashboard-system :deep(.mon-set)')
     expect(rule(dashboard, '.dashboard-system :deep(.mon-card)')).toMatch(/(?:^|;)\s*border\s*:\s*0\s*(?:;|$)/)
     expect(rule(dashboard, '.dashboard-system :deep(.mon-card:hover)')).toMatch(/(?:^|;)\s*border\s*:\s*0\s*(?:;|$)/)
     expect(rule(globalStyles, '#app')).toMatch(/(?:^|;)\s*box-shadow\s*:\s*none\s*(?:;|$)/)
