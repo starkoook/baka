@@ -5,9 +5,11 @@ import { describe, expect, it } from 'vitest'
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), 'utf8')
 const rule = (source: string, selector: string) => {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const topLevel = source.replace(/@media[^\{]+\{(?:[^{}]|\{[^{}]*\})*\}/gs, '')
-  const matches = [...topLevel.matchAll(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`, 'gs'))]
-  return matches[matches.length - 1]?.[1] ?? ''
+  return source.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`, 's'))?.[1] ?? ''
+}
+const mediaRule = (source: string, width: number, selector: string) => {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return source.match(new RegExp(`@media\\s*\\(max-width:\\s*${width}px\\)\\s*\\{\\s*${escaped}\\s*\\{([^}]*)\\}`, 's'))?.[1] ?? ''
 }
 
 describe('annotation workspace UI', () => {
@@ -61,12 +63,19 @@ describe('annotation workspace UI', () => {
 
     expect(page).toContain('class="tagger-layout"')
     expect(page).not.toContain('class="tagger-shell"')
+    expect(page).not.toContain('.tagger-shell')
     expect(rule(page, '.tagger-layout')).toMatch(/gap:\s*14px/)
     expect(rule(page, '.tagger-layout')).toMatch(/border:\s*0/)
     expect(rule(page, '.tagger-layout')).toMatch(/background:\s*transparent/)
     expect(rule(page, '.tagger-layout')).toMatch(/box-shadow:\s*none/)
+    expect(rule(queue, '.tag-queue')).toMatch(/width:\s*184px/)
+    expect(rule(queue, '.tag-queue')).toMatch(/flex:\s*0 0 184px/)
     expect(rule(queue, '.tag-queue')).toMatch(/border:\s*0/)
+    expect(rule(queue, '.tag-queue')).toMatch(/border-radius:\s*12px/)
+    expect(rule(editor, '.tag-editor')).toMatch(/width:\s*300px/)
+    expect(rule(editor, '.tag-editor')).toMatch(/flex:\s*0 0 300px/)
     expect(rule(editor, '.tag-editor')).toMatch(/border:\s*0/)
+    expect(rule(editor, '.tag-editor')).toMatch(/border-radius:\s*12px/)
     expect(rule(page, '.tagger-preview__toolbar')).toMatch(/border:\s*0/)
     expect(rule(page, '.tagger-preview__progress')).toMatch(/border:\s*0/)
   })
@@ -79,14 +88,35 @@ describe('annotation workspace UI', () => {
     expect(page).toContain('先准备一批图片吧')
     expect(queue).not.toContain('<strong>队列是空的</strong>')
     expect(editor).not.toContain('<strong>选择一张图片开始</strong>')
+    expect(editor).toContain('<div v-else class="editor-empty"><span>选择图片后在这里校对标签</span></div>')
   })
 
   it('keeps the workspace usable by overlaying the editor on narrow screens', () => {
     const page = read('src/views/Tagger.vue')
     const editor = read('src/components/tagger/TagEditor.vue')
 
-    expect(page).toMatch(/@media\s*\(max-width:\s*1200px\)\s*\{[\s\S]*?\.tagger-layout/)
-    expect(page).toMatch(/@media\s*\(max-width:\s*760px\)\s*\{[\s\S]*?overflow-x:\s*hidden/)
-    expect(editor).toMatch(/@media\s*\(max-width:\s*980px\)\s*\{[\s\S]*?\.tag-editor\s*\{[\s\S]*?position:\s*absolute/)
+    expect(mediaRule(page, 1200, '.tagger-layout')).toMatch(/gap:\s*10px/)
+    expect(mediaRule(page, 760, '.tagger-page')).toMatch(/overflow-x:\s*hidden/)
+    const overlay = mediaRule(editor, 980, '.tag-editor')
+    expect(overlay).toMatch(/position:\s*absolute/)
+    expect(overlay).toMatch(/z-index:\s*12/)
+    expect(overlay).toMatch(/top:\s*0/)
+    expect(overlay).toMatch(/right:\s*0/)
+    expect(overlay).toMatch(/bottom:\s*0/)
+    expect(overlay).toMatch(/width:\s*min\(300px,\s*calc\(100%\s*-\s*64px\)\)/)
+    expect(overlay).toMatch(/box-shadow:/)
+  })
+
+  it('keeps the queue collapsed and narrows it progressively', () => {
+    const queue = read('src/components/tagger/TagQueue.vue')
+    const collapsed = rule(queue, '.tag-queue--collapsed')
+
+    expect(collapsed).toMatch(/width:\s*48px/)
+    expect(collapsed).toMatch(/flex-basis:\s*48px/)
+    expect(queue).toMatch(/\.tag-queue\s*\{[^}]*width:\s*184px[^}]*\}\s*\.tag-queue--collapsed\s*\{/s)
+    expect(mediaRule(queue, 1200, '.tag-queue:not(.tag-queue--collapsed)')).toMatch(/width:\s*166px/)
+    expect(mediaRule(queue, 1200, '.tag-queue:not(.tag-queue--collapsed)')).toMatch(/flex-basis:\s*166px/)
+    expect(mediaRule(queue, 850, '.tag-queue:not(.tag-queue--collapsed)')).toMatch(/width:\s*154px/)
+    expect(mediaRule(queue, 850, '.tag-queue:not(.tag-queue--collapsed)')).toMatch(/flex-basis:\s*154px/)
   })
 })

@@ -31,13 +31,41 @@ const statusLabel: Record<TagQueueItem['status'], string> = {
 </template>
 
 <style scoped>
-.tag-queue { width: 190px; flex: 0 0 190px; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid rgba(255,255,255,.065); background: rgba(10,9,13,.14); transition: width .16s ease, flex-basis .16s ease; }.tag-queue--collapsed { width: 48px; flex-basis: 48px; }.tag-queue header { height: 44px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-bottom: 1px solid rgba(255,255,255,.055); }.tag-queue header > div { min-width: 0; flex: 1; }.tag-queue header p { margin: 0 0 1px; color: var(--accent-primary); font-size: 6px; font-weight: 750; letter-spacing: .14em; }.tag-queue h2 { margin: 0; font-size: 11px; }.tag-queue header > span { display: grid; place-items: center; min-width: 22px; height: 20px; border-radius: 999px; background: rgba(var(--accent-primary-rgb),.1); color: var(--accent-primary); font-size: 8px; }.queue-collapse { width: 23px; height: 23px; flex: none; padding: 0; border: 1px solid rgba(255,255,255,.07); border-radius: 6px; background: rgba(255,255,255,.025); color: var(--text-tertiary); cursor: pointer; }.tag-queue--collapsed header { height: auto; flex-direction: column; padding: 9px 0; }.tag-queue--collapsed .queue-collapse { order: -1; }.queue-list { flex: 1; min-height: 0; overflow: auto; padding: 6px; }.queue-list > button { width: 100%; min-height: 46px; display: flex; align-items: center; gap: 7px; padding: 6px 7px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-tertiary); cursor: pointer; text-align: left; }.queue-list > button:hover { background: rgba(255,255,255,.035); }.queue-list > button.active { border-color: rgba(var(--accent-primary-rgb),.18); background: rgba(var(--accent-primary-rgb),.075); }.queue-number { color: var(--text-tertiary); font: 8px ui-monospace, monospace; }.queue-file { min-width: 0; flex: 1; display: grid; gap: 3px; }.queue-file strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-size: 9px; font-weight: 550; }.queue-file small { font-size: 7px; }.status-reviewed { color: #79d7a0; }.status-ready, .status-running { color: #78c8ff; }.status-failed, .status-partial { color: #ff9a86; }.queue-list i { width: 6px; height: 6px; flex: none; border-radius: 50%; background: rgba(255,255,255,.15); }.queue-list i.dot-running { background: #78c8ff; box-shadow: 0 0 8px rgba(120,200,255,.5); }.queue-list i.dot-reviewed { background: #79d7a0; }.queue-list i.dot-failed, .queue-list i.dot-partial { background: #ff8975; }.queue-empty { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: var(--text-tertiary); text-align: center; }.queue-empty strong { color: var(--text-secondary); font-size: 11px; }.queue-empty span { max-width: 145px; font-size: 8px; line-height: 1.6; }.queue-retry { padding: 6px; }.queue-retry button { width: 100%; height: 29px; border: 1px solid rgba(255,137,117,.18); border-radius: 7px; background: rgba(255,137,117,.07); color: #ff9a86; cursor: pointer; font-size: 8px; }.tag-queue footer { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 7px; border-top: 1px solid rgba(255,255,255,.055); }.tag-queue footer button { height: 30px; border: 1px solid rgba(255,255,255,.07); border-radius: 7px; background: rgba(255,255,255,.025); color: var(--text-tertiary); cursor: pointer; font-size: 8px; }.tag-queue footer button:first-child { color: var(--accent-primary); }.queue-rail-add { width: 30px; height: 30px; margin: auto auto 9px; border: 1px solid rgba(var(--accent-primary-rgb),.2); border-radius: 7px; background: rgba(var(--accent-primary-rgb),.08); color: var(--accent-primary); cursor: pointer; }
-@media (max-width: 850px) { .tag-queue:not(.tag-queue--collapsed) { width: 172px; flex-basis: 172px; } }
-@media (prefers-reduced-motion: reduce) { .tag-queue { transition: none; } }
-.tag-queue { width: 184px; flex-basis: 184px; overflow: hidden; border: 0; border-radius: 12px; background: linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); }
-.tag-queue header { border: 0; }
-.tag-queue footer { border: 0; }
-.queue-empty { padding: 0 10px; gap: 0; }
+.tag-queue { width: 184px; flex: 0 0 184px; min-height: 0; display: flex; flex-direction: column; overflow: hidden; border: 0; border-radius: 12px; background: linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); transition: width .16s ease, flex-basis .16s ease; }
+.tag-queue--collapsed { width: 48px; flex-basis: 48px; }
+.tag-queue header { height: 44px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px; border: 0; }
+.tag-queue header > div { min-width: 0; flex: 1; }
+.tag-queue header p { margin: 0 0 1px; color: var(--accent-primary); font-size: 6px; font-weight: 750; letter-spacing: .14em; }
+.tag-queue h2 { margin: 0; font-size: 11px; }
+.tag-queue header > span { display: grid; place-items: center; min-width: 22px; height: 20px; border-radius: 999px; background: rgba(var(--accent-primary-rgb),.1); color: var(--accent-primary); font-size: 8px; }
+.queue-collapse { width: 23px; height: 23px; flex: none; padding: 0; border: 1px solid rgba(255,255,255,.07); border-radius: 6px; background: rgba(255,255,255,.025); color: var(--text-tertiary); cursor: pointer; }
+.tag-queue--collapsed header { height: auto; flex-direction: column; padding: 9px 0; }
+.tag-queue--collapsed .queue-collapse { order: -1; }
+.queue-list { flex: 1; min-height: 0; overflow: auto; padding: 6px; }
+.queue-list > button { width: 100%; min-height: 46px; display: flex; align-items: center; gap: 7px; padding: 6px 7px; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--text-tertiary); cursor: pointer; text-align: left; }
+.queue-list > button:hover { background: rgba(255,255,255,.035); }
+.queue-list > button.active { border-color: rgba(var(--accent-primary-rgb),.18); background: rgba(var(--accent-primary-rgb),.075); }
+.queue-number { color: var(--text-tertiary); font: 8px ui-monospace, monospace; }
+.queue-file { min-width: 0; flex: 1; display: grid; gap: 3px; }
+.queue-file strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-size: 9px; font-weight: 550; }
+.queue-file small { font-size: 7px; }
+.status-reviewed { color: #79d7a0; }.status-ready, .status-running { color: #78c8ff; }.status-failed, .status-partial { color: #ff9a86; }
+.queue-list i { width: 6px; height: 6px; flex: none; border-radius: 50%; background: rgba(255,255,255,.15); }
+.queue-list i.dot-running { background: #78c8ff; box-shadow: 0 0 8px rgba(120,200,255,.5); }.queue-list i.dot-reviewed { background: #79d7a0; }.queue-list i.dot-failed, .queue-list i.dot-partial { background: #ff8975; }
+.queue-empty { height: 100%; display: flex; align-items: center; justify-content: center; padding: 0 10px; color: var(--text-tertiary); text-align: center; }
 .queue-empty span { max-width: none; color: var(--text-tertiary); font-size: 7px; line-height: 1.4; white-space: nowrap; }
-@media (max-width: 1200px) { .tag-queue:not(.tag-queue--collapsed) { width: 166px; flex-basis: 166px; } }
+.queue-retry { padding: 6px; }.queue-retry button { width: 100%; height: 29px; border: 1px solid rgba(255,137,117,.18); border-radius: 7px; background: rgba(255,137,117,.07); color: #ff9a86; cursor: pointer; font-size: 8px; }
+.tag-queue footer { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 7px; border: 0; }
+.tag-queue footer button { height: 30px; border: 1px solid rgba(255,255,255,.07); border-radius: 7px; background: rgba(255,255,255,.025); color: var(--text-tertiary); cursor: pointer; font-size: 8px; }
+.tag-queue footer button:first-child { color: var(--accent-primary); }
+.queue-rail-add { width: 30px; height: 30px; margin: auto auto 9px; border: 1px solid rgba(var(--accent-primary-rgb),.2); border-radius: 7px; background: rgba(var(--accent-primary-rgb),.08); color: var(--accent-primary); cursor: pointer; }
+@media (max-width: 1200px) {
+  .tag-queue:not(.tag-queue--collapsed) { width: 166px; flex-basis: 166px; }
+}
+@media (max-width: 850px) {
+  .tag-queue:not(.tag-queue--collapsed) { width: 154px; flex-basis: 154px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tag-queue { transition: none; }
+}
 </style>
