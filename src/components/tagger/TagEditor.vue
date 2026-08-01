@@ -40,7 +40,7 @@ function removeTag(name: string) { localTags.value = localTags.value.filter((tag
         <div><button :disabled="saving" @click="$emit('save')">仅保存</button><button class="primary" :disabled="saving" @click="$emit('saveNext')">{{ saving ? '保存中…' : '保存并下一张' }}</button></div>
       </footer>
     </template>
-    <div v-else class="editor-empty"><strong>选择一张图片开始</strong><span>识别结果会按类别出现在这里。</span></div>
+    <div v-else class="editor-empty"><span>选择图片后在这里校对标签</span></div>
   </aside>
 </template>
 
@@ -51,4 +51,11 @@ function removeTag(name: string) { localTags.value = localTags.value.filter((tag
 .tag-editor__scroll { padding: 11px; }
 .tag-editor > footer { padding: 9px; }
 @media (max-width: 1050px) { .tag-editor { width: 260px; flex-basis: 260px; } }
+.tag-editor { width: 300px; flex-basis: 300px; overflow: hidden; border: 0; border-radius: 12px; background: linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); }
+.tag-editor > header { height: 44px; padding: 0 13px; border: 0; }
+.tag-editor > footer { border: 0; }
+.editor-empty { gap: 0; padding: 0 12px; }
+.editor-empty span { color: var(--text-tertiary); font-size: 8px; white-space: nowrap; }
+@media (max-width: 1200px) { .tag-editor { width: 258px; flex-basis: 258px; } }
+@media (max-width: 980px) { .tag-editor { position: absolute; z-index: 12; top: 0; right: 0; bottom: 0; width: min(300px, calc(100% - 64px)); flex-basis: auto; box-shadow: 0 18px 55px rgba(0,0,0,.28); } }
 </style>
