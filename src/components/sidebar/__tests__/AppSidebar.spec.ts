@@ -30,6 +30,12 @@ describe('AppSidebar route interaction', () => {
       app.mount(host)
       await nextTick()
 
+      expect(host.querySelector('.sidebar-brand')).toBeNull()
+      expect(host.querySelector('.brand-mark')).toBeNull()
+      expect(host.querySelector('.brand-name')).toBeNull()
+      expect(host.querySelectorAll('.nav-item')).toHaveLength(APP_NAVIGATION.length)
+      expect(host.querySelector('.nav-item')?.getAttribute('aria-label')).toBe('主页')
+
       const toolsItem = APP_NAVIGATION.find((item) => item.id === 'tools')!
       const settingsItem = APP_NAVIGATION.find((item) => item.id === 'settings')!
       const sidebarNav = host.querySelector<HTMLElement>('.sidebar-nav')!

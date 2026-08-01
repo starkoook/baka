@@ -104,7 +104,11 @@ describe('dashboard interaction layers', () => {
   it('layers sidebar rail, navigation, submenu, and local-status motion deliberately', () => {
     const sidebar = read('src/components/sidebar/AppSidebar.vue')
 
-    expect(sidebar).toMatch(/\.sidebar-active-rail\s*\{[^}]*position:\s*absolute;[^}]*top:\s*12px;[^}]*left:\s*5px;[^}]*width:\s*3px;[^}]*height:\s*40px;[^}]*border-radius:[^;]+;[^}]*background:\s*var\(--brand-primary\);[^}]*box-shadow:[^;]+;[^}]*transform:\s*translateY\(calc\(var\(--active-navigation-index\) \* 44px\)\);[^}]*transition:\s*transform 240ms cubic-bezier\(\.2, \.8, \.2, 1\);[^}]*pointer-events:\s*none;/s)
+    expect(sidebar).not.toContain('sidebar-brand')
+    expect(sidebar).not.toContain('brand-mark')
+    expect(sidebar).not.toContain('brand-name')
+    expect(sidebar).toMatch(/\.sidebar-nav\s*\{[^}]*padding:\s*16px 10px 12px;/s)
+    expect(sidebar).toMatch(/\.sidebar-active-rail\s*\{[^}]*position:\s*absolute;[^}]*top:\s*16px;[^}]*left:\s*5px;[^}]*width:\s*3px;[^}]*height:\s*40px;[^}]*border-radius:[^;]+;[^}]*background:\s*var\(--brand-primary\);[^}]*box-shadow:[^;]+;[^}]*transform:\s*translateY\(calc\(var\(--active-navigation-index\) \* 44px\)\);[^}]*transition:\s*transform 240ms cubic-bezier\(\.2, \.8, \.2, 1\);[^}]*pointer-events:\s*none;/s)
     expect(sidebar).toMatch(/\.sidebar-active-rail\s*\{[^}]*z-index:\s*2;/s)
     expect(sidebar).toMatch(/\.nav-entry\s*\{[^}]*position:\s*relative;[^}]*z-index:\s*1;/s)
     expect(sidebar).toMatch(/\.nav-item\s*\{[^}]*position:\s*relative;[^}]*z-index:\s*1;/s)

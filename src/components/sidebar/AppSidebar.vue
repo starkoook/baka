@@ -53,11 +53,6 @@ function toggleTools() {
 
 <template>
   <aside class="app-sidebar" aria-label="主导航">
-    <button class="sidebar-brand" type="button" aria-label="Baka TOOLS 首页" title="Baka TOOLS 首页" @click="navigateTo('/')">
-      <span class="brand-mark">B</span>
-      <span class="brand-name">Baka TOOLS</span>
-    </button>
-
     <nav
       class="sidebar-nav"
       :style="activeRailStyle"
@@ -109,12 +104,9 @@ function toggleTools() {
 
 <style scoped>
 .app-sidebar { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 0; border: 0; background: color-mix(in srgb, var(--app-bg) 88%, var(--brand-soft)); }
-.sidebar-brand, .nav-item, .tool-subnav-item { font: inherit; border: 0; cursor: pointer; }
-.sidebar-brand { display: flex; align-items: center; gap: 10px; min-height: 60px; padding: 0 18px; background: transparent; color: var(--text-primary); text-align: left; }
-.brand-mark { display: grid; width: 26px; height: 26px; flex: none; place-items: center; border-radius: 7px; background: var(--brand-primary); color: var(--brand-on-primary); font-size: 12px; font-weight: 750; }
-.brand-name { overflow: hidden; font-size: 12px; font-weight: 700; letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; }
-.sidebar-nav { position: relative; display: grid; gap: 4px; padding: 12px 10px; border: 0; }
-.sidebar-active-rail { position: absolute; z-index: 2; top: 12px; left: 5px; width: 3px; height: 40px; border-radius: 999px; background: var(--brand-primary); box-shadow: 0 0 10px color-mix(in srgb, var(--brand-primary) 72%, transparent); transform: translateY(calc(var(--active-navigation-index) * 44px)); transition: transform 240ms cubic-bezier(.2, .8, .2, 1); pointer-events: none; }
+.nav-item, .tool-subnav-item { font: inherit; border: 0; cursor: pointer; }
+.sidebar-nav { position: relative; display: grid; gap: 4px; padding: 16px 10px 12px; border: 0; }
+.sidebar-active-rail { position: absolute; z-index: 2; top: 16px; left: 5px; width: 3px; height: 40px; border-radius: 999px; background: var(--brand-primary); box-shadow: 0 0 10px color-mix(in srgb, var(--brand-primary) 72%, transparent); transform: translateY(calc(var(--active-navigation-index) * 44px)); transition: transform 240ms cubic-bezier(.2, .8, .2, 1); pointer-events: none; }
 .sidebar-nav.tools-expanded.active-after-tools .sidebar-active-rail { transform: translateY(calc(var(--active-navigation-index) * 44px + var(--tool-subnav-flow-offset))); }
 .nav-entry { position: relative; z-index: 1; }
 .nav-item { position: relative; z-index: 1; display: flex; align-items: center; width: 100%; height: 40px; min-height: 0; gap: 11px; padding: 0 10px; border-radius: var(--radius-control); background: transparent; color: var(--text-secondary); text-align: left; transition: color 160ms ease, background-color 160ms ease, transform 160ms cubic-bezier(.2, .8, .2, 1); }
@@ -148,8 +140,8 @@ function toggleTools() {
 .nav-item:focus-visible .nav-label { transform: translateX(3px); }
 .nav-item:active { transform: scale(.97); }
 @media (max-width: 1200px) {
-  .sidebar-brand, .nav-item { justify-content: center; padding-inline: 0; }
-  .brand-name, .nav-label, .local-status-label, .sidebar-version { display: none; }
+  .nav-item { justify-content: center; padding-inline: 0; }
+  .nav-label, .local-status-label, .sidebar-version { display: none; }
   .sidebar-footer { justify-items: center; padding-inline: 0; }
   .sidebar-nav.tools-expanded.active-after-tools .sidebar-active-rail { transform: translateY(calc(var(--active-navigation-index) * 44px)); }
   .tool-subnav { position: absolute; top: 0; left: calc(100% + 8px); width: 164px; margin: 0; padding: 6px; border: 0; border-radius: var(--radius-control); background: color-mix(in srgb, var(--app-bg) 88%, var(--brand-soft)); box-shadow: var(--surface-shadow); }
