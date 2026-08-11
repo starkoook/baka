@@ -93,6 +93,15 @@ const apiTesting = ref<string | null>(null)
 const apiFetchingModels = ref(false)
 const apiModels = ref<string[]>([])
 const nodeModelCache = ref<Record<string, string[]>>({})
+const gridPopup = ref<number | null>(null)
+const resizePopup = ref<number | null>(null)
+const cropState = ref<{
+  nodeId: number
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+} | null>(null)
 const apiMessage = ref<{ ok: boolean; text: string } | null>(null)
 const apiForm = ref<WorkbenchApiConfig>({ id: '', name: '', provider: 'openai', baseUrl: '', apiKey: '', model: '' })
 const contextMenu = ref<{ x: number; y: number; items: ContextMenuItem[] } | null>(null)
@@ -1106,6 +1115,145 @@ function deriveImageNode(source: WbNode, newSrc: string, label?: string, snap = 
   return node
 }
 
+function canvasToDataUrl(
+  img: HTMLImageElement,
+  w: number,
+  h: number,
+  sx = 0,
+  sy = 0,
+  sw?: number,
+  sh?: number,
+) {
+  const c = document.createElement('canvas')
+  c.width = Math.max(1, Math.round(w))
+  c.height = Math.max(1, Math.round(h))
+  const ctx = c.getContext('2d')
+  if (!ctx) return ''
+  ctx.drawImage(img, sx, sy, sw ?? img.naturalWidth, sh ?? img.naturalHeight, 0, 0, c.width, c.height)
+  return c.toDataURL('image/png')
+}
+
+async function applyCanvasTool(node: WbNode, fn: (img: HTMLImageElement) => string) {
+  if (!node.src || !node.src.startsWith('data:image/')) {
+    appStore.setStatus('节点没有可处理的图片')
+    return
+  }
+  node.execState = 'running'
+  try {
+    const img = new Image()
+    img.src = node.src
+    await img.decode()
+    snapshot()
+    node.src = fn(img)
+    node.execState = 'done'
+    appStore.setStatus('处理完成 ✓')
+  } catch (e) {
+    node.execState = 'error'
+    appStore.setStatus(`处理失败：${(e as Error).message}`)
+  }
+}
+
+function toolRotate(node: WbNode) {
+  void applyCanvasTool(node, (img) => {
+    const c = document.createElement('canvas')
+    c.width = img.naturalHeight
+    c.height = img.naturalWidth
+    const ctx = c.getContext('2d')
+    if (!ctx) return node.src
+    ctx.translate(c.width / 2, c.height / 2)
+    ctx.rotate(Math.PI / 2)
+    ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2)
+    return c.toDataURL('image/png')
+  })
+}
+
+function toolResizeApply(node: WbNode) {
+  const width = Number(node.size || 512)
+  void applyCanvasTool(node, (img) => {
+    const scale = width / img.naturalWidth
+    return canvasToDataUrl(img, width, img.naturalHeight * scale)
+  })
+  resizePopup.value = null
+}
+
+function toolGridApply(node: WbNode, n: number) {
+  if (!node.src) return
+  void (async () => {
+    const img = new Image()
+    img.src = node.src
+    await img.decode()
+    const tw = Math.floor(img.naturalWidth / n)
+    const th = Math.floor(img.naturalHeight / n)
+    if (tw < 1 || th < 1) {
+      appStore.setStatus('图片太小，无法切分')
+      return
+    }
+    snapshot()
+    for (let r = 0; r < n; r++) {
+      for (let c = 0; c < n; c++) {
+        deriveImageNode(node, canvasToDataUrl(img, tw, th, c * tw, r * th, tw, th), `分块 ${r + 1}-${c + 1}`, false)
+      }
+    }
+    appStore.setStatus(`已切分为 ${n * n} 块并派生新节点`)
+  })()
+  gridPopup.value = null
+}
+
+function cropStart(node: WbNode) {
+  cropState.value = { nodeId: node.id, x1: 0, y1: 0, x2: 0, y2: 0 }
+}
+
+function cropConfirm(node: WbNode) {
+  const cs = cropState.value
+  if (!cs) return
+  const x = Math.min(cs.x1, cs.x2)
+  const y = Math.min(cs.y1, cs.y2)
+  const w = Math.abs(cs.x2 - cs.x1)
+  const h = Math.abs(cs.y2 - cs.y1)
+  cropState.value = null
+  if (w < 4 || h < 4) {
+    appStore.setStatus('选框太小，已取消')
+    return
+  }
+  void applyCanvasTool(node, (img) => {
+    const sx = (x / 100) * img.naturalWidth
+    const sy = (y / 100) * img.naturalHeight
+    const sw = (w / 100) * img.naturalWidth
+    const sh = (h / 100) * img.naturalHeight
+    return canvasToDataUrl(img, sw, sh, sx, sy, sw, sh)
+  })
+}
+
+function onCropDown(event: PointerEvent, node: WbNode) {
+  const el = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const x = ((event.clientX - el.left) / el.width) * 100
+  const y = ((event.clientY - el.top) / el.height) * 100
+  cropState.value = { nodeId: node.id, x1: x, y1: y, x2: x, y2: y }
+}
+
+function onCropMove(event: PointerEvent) {
+  const cs = cropState.value
+  if (!cs) return
+  const el = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  cs.x2 = ((event.clientX - el.left) / el.width) * 100
+  cs.y2 = ((event.clientY - el.top) / el.height) * 100
+}
+
+function onCropUp() {
+  /* 保持选框，等待点击“裁剪” */
+}
+
+const cropBoxStyle = computed(() => {
+  const cs = cropState.value
+  if (!cs) return {}
+  return {
+    left: `${Math.min(cs.x1, cs.x2)}%`,
+    top: `${Math.min(cs.y1, cs.y2)}%`,
+    width: `${Math.abs(cs.x2 - cs.x1)}%`,
+    height: `${Math.abs(cs.y2 - cs.y1)}%`,
+  }
+})
+
 function canSaveNode(node: WbNode) {
   if (node.kind === 'text' || node.kind === 'ai-tag' || node.kind === 'ai-text') return true
   if (node.src && node.src.startsWith('data:image/')) return true
@@ -1757,9 +1905,31 @@ onUnmounted(() => {
         </header>
         <div v-if="node.kind !== 'reroute'" class="wb-node__content">
           <div v-if="node.kind === 'image'" class="wb-node__media-gen">
-            <div class="wb-node__media-preview">
+            <div class="wb-node__media-preview" :class="{ cropping: cropState?.nodeId === node.id }">
               <img v-if="node.src" :src="node.src" alt="" draggable="false" />
               <span v-else class="wb-node__media-empty">加载图片后可生成</span>
+              <div
+                v-if="cropState?.nodeId === node.id"
+                class="wb-node__crop"
+                @pointerdown.stop="onCropDown($event, node)"
+                @pointermove.stop="onCropMove($event)"
+                @pointerup.stop="onCropUp"
+              >
+                <div
+                  v-if="cropState && Math.abs(cropState.x2 - cropState.x1) > 0"
+                  class="wb-node__crop-box"
+                  :style="cropBoxStyle"
+                ></div>
+              </div>
+              <button
+                v-if="cropState?.nodeId === node.id"
+                type="button"
+                class="wb-node__crop-confirm"
+                @pointerdown.stop
+                @click.stop="cropConfirm(node)"
+              >
+                裁剪
+              </button>
             </div>
             <div class="wb-node__gen">
               <div class="wb-node__gen-modes">
@@ -1816,6 +1986,37 @@ onUnmounted(() => {
                 >
                   {{ node.execState === 'running' ? '生成中…' : '生成' }}
                 </button>
+              </div>
+              <div class="wb-node__tools">
+                <button type="button" @pointerdown.stop @click.stop="cropStart(node)">裁剪</button>
+                <button type="button" @pointerdown.stop @click.stop="gridPopup = node.id">宫格</button>
+                <button type="button" @pointerdown.stop @click.stop="resizePopup = node.id">缩放</button>
+                <button type="button" @pointerdown.stop @click.stop="toolRotate(node)">旋转</button>
+              </div>
+              <div v-if="gridPopup === node.id" class="wb-node__tool-pop">
+                <label>
+                  切分
+                  <select v-model.number="node.size">
+                    <option :value="2">2×2</option>
+                    <option :value="3">3×3</option>
+                    <option :value="5">5×5</option>
+                  </select>
+                </label>
+                <button type="button" @pointerdown.stop @click.stop="toolGridApply(node, node.size || 2)">
+                  切分
+                </button>
+              </div>
+              <div v-if="resizePopup === node.id" class="wb-node__tool-pop">
+                <label>
+                  宽度
+                  <select v-model.number="node.size">
+                    <option :value="256">256</option>
+                    <option :value="512">512</option>
+                    <option :value="1024">1024</option>
+                    <option :value="1920">1920</option>
+                  </select>
+                </label>
+                <button type="button" @pointerdown.stop @click.stop="toolResizeApply(node)">缩放</button>
               </div>
             </div>
           </div>
@@ -2534,6 +2735,77 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .wb-node__gen-btn:disabled { opacity: 0.6; cursor: wait; }
+.wb-node__tools { display: flex; flex-wrap: wrap; gap: 4px; }
+.wb-node__tools button {
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--brand-primary) 45%, transparent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--brand-primary);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.wb-node__tools button:hover { background: var(--brand-soft); }
+.wb-node__tool-pop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 8px;
+  background: var(--surface-secondary);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+.wb-node__tool-pop label { display: flex; align-items: center; gap: 5px; }
+.wb-node__tool-pop select {
+  height: 24px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 6px;
+  background: var(--surface-primary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 10px;
+}
+.wb-node__tool-pop button {
+  height: 24px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--brand-primary);
+  color: #fff;
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+.wb-node__media-preview.cropping { cursor: crosshair; }
+.wb-node__crop {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+}
+.wb-node__crop-box {
+  position: absolute;
+  border: 1px dashed var(--brand-primary);
+  background: color-mix(in srgb, var(--brand-primary) 14%, transparent);
+  pointer-events: none;
+}
+.wb-node__crop-confirm {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 4;
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--brand-primary);
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
 .wb-node__ai {
   position: relative;
   width: 100%;
