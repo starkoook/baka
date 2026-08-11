@@ -1199,6 +1199,55 @@ function toolGridApply(node: WbNode, n: number) {
   gridPopup.value = null
 }
 
+async function runImageTool(node: WbNode, tool: 'hd' | 'outpaint' | 'inpaint') {
+  const cfg = apiConfigById(node.apiConfigId)
+  if (!cfg) {
+    node.execState = 'error'
+    appStore.setStatus('未选择 API 配置，AI 工具需要配置')
+    return
+  }
+  if (!node.src) {
+    node.execState = 'error'
+    appStore.setStatus('节点没有图片')
+    return
+  }
+  node.execState = 'running'
+  try {
+    const prompt =
+      tool === 'hd'
+        ? 'Upscale this image, keep content identical, 2x resolution, sharp and detailed.'
+        : tool === 'outpaint'
+          ? 'Extend this image outward naturally, fill the surrounding area seamlessly, keep the original center unchanged.'
+          : 'Re-edit this image according to the prompt, keep overall composition.'
+    const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,/.exec(node.src)
+    const res = await window.llmAPI?.image({
+      provider: cfg.provider,
+      baseUrl: cfg.baseUrl,
+      apiKey: cfg.apiKey,
+      model: node.model || cfg.model,
+      prompt: tool === 'inpaint' ? `${prompt} ${node.genPrompt || ''}` : prompt,
+      imageBase64: node.src.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, ''),
+      mimeType: m ? m[1] : 'image/png',
+      size: node.genSize || '1024x1024',
+    })
+    if (!res?.success) throw new Error(res?.error || '工具执行失败')
+    const out = res.images?.[0]
+    if (!out) throw new Error('接口没有返回图片')
+    deriveImageNode(
+      node,
+      out,
+      tool === 'hd' ? '高清放大' : tool === 'outpaint' ? '扩图' : '重绘',
+    )
+    node.execState = 'done'
+    appStore.setStatus('工具完成 ✓ 已派生新节点')
+  } catch (e) {
+    node.execState = 'error'
+    appStore.setStatus(
+      `${tool === 'hd' ? '高清' : tool === 'outpaint' ? '扩图' : '重绘'}失败：${(e as Error).message}`,
+    )
+  }
+}
+
 function cropStart(node: WbNode) {
   cropState.value = { nodeId: node.id, x1: 0, y1: 0, x2: 0, y2: 0 }
 }
@@ -2018,6 +2067,11 @@ onUnmounted(() => {
                 </label>
                 <button type="button" @pointerdown.stop @click.stop="toolResizeApply(node)">缩放</button>
               </div>
+              <div class="wb-node__tools wb-node__tools--ai">
+                <button type="button" @pointerdown.stop @click.stop="runImageTool(node, 'hd')">高清</button>
+                <button type="button" @pointerdown.stop @click.stop="runImageTool(node, 'outpaint')">扩图</button>
+                <button type="button" @pointerdown.stop @click.stop="runImageTool(node, 'inpaint')">重绘</button>
+              </div>
             </div>
           </div>
           <video v-else-if="node.kind === 'video'" :src="node.src" muted loop playsinline autoplay></video>
@@ -2747,6 +2801,10 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .wb-node__tools button:hover { background: var(--brand-soft); }
+.wb-node__tools--ai button {
+  border-color: var(--line-subtle);
+  color: var(--text-tertiary);
+}
 .wb-node__tool-pop {
   display: flex;
   align-items: center;
