@@ -936,6 +936,39 @@ async function runImageGen(node: WbNode) {
   }
 }
 
+async function runTextGen(node: WbNode) {
+  const cfg = apiConfigById(node.apiConfigId)
+  if (!cfg) {
+    node.execState = 'error'
+    appStore.setStatus('未选择 API 配置，请在节点里选择')
+    return
+  }
+  node.execState = 'running'
+  try {
+    const prompt = node.prompt?.trim() || '请根据以下内容处理：\n{{input}}'
+    const srcText = node.text ?? ''
+    const filled = prompt.includes('{{input}}')
+      ? prompt.split('{{input}}').join(srcText)
+      : `${prompt}\n\n${srcText}`
+    const res = await window.llmAPI?.chat({
+      provider: cfg.provider,
+      baseUrl: cfg.baseUrl,
+      apiKey: cfg.apiKey,
+      model: node.model || cfg.model,
+      prompt: filled,
+      temperature: node.temperature ?? 0.5,
+    })
+    if (!res?.success) throw new Error(res?.error || '生成失败')
+    snapshot()
+    node.text = (res.text ?? '').trim()
+    node.execState = 'done'
+    appStore.setStatus('生成完成 ✓')
+  } catch (e) {
+    node.execState = 'error'
+    appStore.setStatus(`生成失败：${(e as Error).message}`)
+  }
+}
+
 async function runNode(node: WbNode, visited = new Set<number>()) {
   if (visited.has(node.id)) return
   visited.add(node.id)
@@ -1787,14 +1820,49 @@ onUnmounted(() => {
             </div>
           </div>
           <video v-else-if="node.kind === 'video'" :src="node.src" muted loop playsinline autoplay></video>
-          <textarea
-            v-else-if="node.kind === 'text'"
-            v-model="node.text"
-            class="wb-node__text"
-            placeholder="输入文本…"
-            @pointerdown.stop
-            @wheel.stop
-          ></textarea>
+          <div v-else-if="node.kind === 'text'" class="wb-node__media-gen">
+            <textarea
+              v-model="node.text"
+              class="wb-node__text wb-node__text--gen"
+              placeholder="输入文本…"
+              @pointerdown.stop
+              @wheel.stop
+            ></textarea>
+            <div class="wb-node__gen">
+              <label class="wb-node__ai-field">
+                <span>配置</span>
+                <select v-model="node.apiConfigId" @change="loadNodeModels(node)">
+                  <option value="">（未选择）</option>
+                  <option v-for="cfg in apiConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
+                </select>
+              </label>
+              <label class="wb-node__ai-field">
+                <span>模型</span>
+                <select v-model="node.model">
+                  <option value="">（用配置默认）</option>
+                  <option v-for="m in nodeModelOptions(node)" :key="m" :value="m">{{ m }}</option>
+                </select>
+              </label>
+              <textarea
+                v-model="node.prompt"
+                class="wb-node__gen-prompt"
+                placeholder="提示词模板，用 {{input}} 引用正文"
+                @pointerdown.stop
+                @wheel.stop
+              ></textarea>
+              <div class="wb-node__gen-row">
+                <button
+                  type="button"
+                  class="wb-node__gen-btn"
+                  :disabled="node.execState === 'running'"
+                  @pointerdown.stop
+                  @click.stop="runTextGen(node)"
+                >
+                  {{ node.execState === 'running' ? '生成中…' : '生成' }}
+                </button>
+              </div>
+            </div>
+          </div>
           <div v-else-if="node.kind === 'resize'" class="wb-node__resize">
             <img v-if="node.src" :src="node.src" alt="" draggable="false" />
             <span v-else class="wb-node__resize-empty">← 连接图片节点</span>
@@ -2279,6 +2347,10 @@ onUnmounted(() => {
   line-height: 1.6;
   pointer-events: auto;
   cursor: text;
+}
+.wb-node__text--gen {
+  flex: 1;
+  min-height: 90px;
 }
 .wb-node__resize {
   position: relative;
