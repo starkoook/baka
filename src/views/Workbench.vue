@@ -42,6 +42,7 @@ interface WbNode {
   genMode?: 'text' | 'image'
   genPrompt?: string
   genSize?: string
+  genOpen?: boolean
 }
 
 interface WbEdge {
@@ -271,7 +272,7 @@ async function addImageNodes(files: string[], pos?: { x: number; y: number } | n
       x: (pos?.x ?? 60) + count * 40,
       y: (pos?.y ?? 60) + count * 40,
       width: NODE_WIDTH,
-      height: TITLE_HEIGHT + contentH,
+      height: TITLE_HEIGHT + Math.max(contentH, 430),
       kind: 'image',
       label: name,
       src: dataUrl,
@@ -284,6 +285,7 @@ async function addImageNodes(files: string[], pos?: { x: number; y: number } | n
       genMode: 'text',
       genPrompt: '',
       genSize: '1024x1024',
+      genOpen: true,
     })
     count++
   }
@@ -322,7 +324,7 @@ function addTextNode(pos?: { x: number; y: number } | null) {
     x: pos?.x ?? 60 + nodes.value.length * 30,
     y: pos?.y ?? 60 + nodes.value.length * 30,
     width: NODE_WIDTH,
-    height: TITLE_HEIGHT + 130,
+    height: TITLE_HEIGHT + 330,
     kind: 'text',
     label: '文本',
     src: '',
@@ -334,6 +336,7 @@ function addTextNode(pos?: { x: number; y: number } | null) {
     outTypes: ['text'],
     model: '',
     temperature: 0.5,
+    genOpen: true,
   })
   appStore.setStatus('已添加文本节点')
   addMenuOpen.value = false
@@ -1149,6 +1152,7 @@ function deriveImageNode(source: WbNode, newSrc: string, label?: string, snap = 
     genMode: 'text',
     genPrompt: '',
     genSize: source.genSize || '1024x1024',
+    genOpen: source.genOpen ?? true,
   }
   nodes.value.push(node)
   edges.value.push({ id: nextId++, from: source.id, to: node.id })
@@ -2039,6 +2043,18 @@ onUnmounted(() => {
               </button>
             </div>
             <div class="wb-node__gen">
+              <div
+                class="wb-node__gen-toggle"
+                role="button"
+                tabindex="0"
+                @pointerdown.stop
+                @click.stop="node.genOpen = !node.genOpen"
+                @keydown.enter.prevent="node.genOpen = !node.genOpen"
+              >
+                <span>✨ 生成器</span>
+                <span>{{ node.genOpen ? '▾' : '▸' }}</span>
+              </div>
+              <template v-if="node.genOpen">
               <div class="wb-node__gen-modes">
                 <button
                   type="button"
@@ -2130,10 +2146,22 @@ onUnmounted(() => {
                 <button type="button" @pointerdown.stop @click.stop="runImageTool(node, 'outpaint')">扩图</button>
                 <button type="button" @pointerdown.stop @click.stop="runImageTool(node, 'inpaint')">重绘</button>
               </div>
+              </template>
             </div>
           </div>
           <video v-else-if="node.kind === 'video'" :src="node.src" muted loop playsinline autoplay></video>
           <div v-else-if="node.kind === 'text'" class="wb-node__media-gen">
+            <div
+              class="wb-node__gen-toggle"
+              role="button"
+              tabindex="0"
+              @pointerdown.stop
+              @click.stop="node.genOpen = !node.genOpen"
+              @keydown.enter.prevent="node.genOpen = !node.genOpen"
+            >
+              <span>✨ 生成器</span>
+              <span>{{ node.genOpen ? '▾' : '▸' }}</span>
+            </div>
             <textarea
               v-model="node.text"
               class="wb-node__text wb-node__text--gen"
@@ -2141,7 +2169,8 @@ onUnmounted(() => {
               @pointerdown.stop
               @wheel.stop
             ></textarea>
-            <div class="wb-node__gen">
+            <template v-if="node.genOpen">
+              <div class="wb-node__gen">
               <label class="wb-node__ai-field">
                 <span>配置</span>
                 <select v-model="node.apiConfigId" @change="loadNodeModels(node)">
@@ -2174,7 +2203,8 @@ onUnmounted(() => {
                   {{ node.execState === 'running' ? '生成中…' : '生成' }}
                 </button>
               </div>
-            </div>
+              </div>
+            </template>
           </div>
           <div v-else-if="node.kind === 'resize'" class="wb-node__resize">
             <img v-if="node.src" :src="node.src" alt="" draggable="false" />
@@ -2787,6 +2817,21 @@ onUnmounted(() => {
   pointer-events: none;
 }
 .wb-node__media-empty { color: var(--text-tertiary); font-size: 11px; }
+.wb-node__gen-toggle {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--brand-soft) 55%, var(--surface-primary));
+  border-bottom: 1px solid var(--line-subtle);
+  color: var(--brand-primary);
+  font-size: 11px;
+  font-weight: 700;
+  user-select: none;
+}
+.wb-node__gen-toggle:hover { background: color-mix(in srgb, var(--brand-soft) 80%, var(--surface-primary)); }
 .wb-node__gen {
   flex: none;
   display: flex;
@@ -2858,6 +2903,19 @@ onUnmounted(() => {
   cursor: pointer;
 }
 .wb-node__gen-btn:disabled { opacity: 0.6; cursor: wait; }
+.wb-node__media-gen::-webkit-scrollbar,
+.wb-node__ai::-webkit-scrollbar {
+  width: 6px;
+}
+.wb-node__media-gen::-webkit-scrollbar-thumb,
+.wb-node__ai::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink-primary) 18%, transparent);
+  border-radius: 999px;
+}
+.wb-node__media-gen::-webkit-scrollbar-track,
+.wb-node__ai::-webkit-scrollbar-track {
+  background: transparent;
+}
 .wb-node__tools { display: flex; flex-wrap: wrap; gap: 4px; }
 .wb-node__tools button {
   padding: 3px 8px;
