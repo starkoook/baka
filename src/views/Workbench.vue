@@ -900,6 +900,42 @@ async function runWorkflow() {
   )
 }
 
+async function runImageGen(node: WbNode) {
+  const cfg = apiConfigById(node.apiConfigId)
+  if (!cfg) {
+    node.execState = 'error'
+    appStore.setStatus('未选择 API 配置，请在节点里选择')
+    return
+  }
+  node.execState = 'running'
+  try {
+    const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,/.exec(node.src || '')
+    const imageBase64 =
+      node.genMode === 'image' && node.src
+        ? node.src.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '')
+        : ''
+    const res = await window.llmAPI?.image({
+      provider: cfg.provider,
+      baseUrl: cfg.baseUrl,
+      apiKey: cfg.apiKey,
+      model: node.model || cfg.model,
+      prompt: node.genPrompt?.trim() || '一张精美的插画',
+      imageBase64: imageBase64 || undefined,
+      mimeType: m ? m[1] : 'image/png',
+      size: node.genSize || '1024x1024',
+    })
+    if (!res?.success) throw new Error(res?.error || '生图失败')
+    const out = res.images?.[0]
+    if (!out) throw new Error('接口没有返回图片')
+    deriveImageNode(node, out)
+    node.execState = 'done'
+    appStore.setStatus('生成完成 ✓ 已派生新节点')
+  } catch (e) {
+    node.execState = 'error'
+    appStore.setStatus(`生图失败：${(e as Error).message}`)
+  }
+}
+
 async function runNode(node: WbNode, visited = new Set<number>()) {
   if (visited.has(node.id)) return
   visited.add(node.id)
@@ -1687,7 +1723,69 @@ onUnmounted(() => {
           </span>
         </header>
         <div v-if="node.kind !== 'reroute'" class="wb-node__content">
-          <img v-if="node.kind === 'image'" :src="node.src" alt="" draggable="false" />
+          <div v-if="node.kind === 'image'" class="wb-node__media-gen">
+            <div class="wb-node__media-preview">
+              <img v-if="node.src" :src="node.src" alt="" draggable="false" />
+              <span v-else class="wb-node__media-empty">加载图片后可生成</span>
+            </div>
+            <div class="wb-node__gen">
+              <div class="wb-node__gen-modes">
+                <button
+                  type="button"
+                  :class="{ on: node.genMode !== 'image' }"
+                  @pointerdown.stop
+                  @click.stop="node.genMode = 'text'"
+                >
+                  文生图
+                </button>
+                <button
+                  type="button"
+                  :class="{ on: node.genMode === 'image' }"
+                  @pointerdown.stop
+                  @click.stop="node.genMode = 'image'"
+                >
+                  图生图
+                </button>
+              </div>
+              <label class="wb-node__ai-field">
+                <span>配置</span>
+                <select v-model="node.apiConfigId" @change="loadNodeModels(node)">
+                  <option value="">（未选择）</option>
+                  <option v-for="cfg in apiConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
+                </select>
+              </label>
+              <label class="wb-node__ai-field">
+                <span>模型</span>
+                <select v-model="node.model">
+                  <option value="">（用配置默认）</option>
+                  <option v-for="m in nodeModelOptions(node)" :key="m" :value="m">{{ m }}</option>
+                </select>
+              </label>
+              <textarea
+                v-model="node.genPrompt"
+                class="wb-node__gen-prompt"
+                :placeholder="node.genMode === 'image' ? '描述想改什么（参考当前图）' : '描述要生成的画面'"
+                @pointerdown.stop
+                @wheel.stop
+              ></textarea>
+              <div class="wb-node__gen-row">
+                <select v-model="node.genSize">
+                  <option value="1024x1024">1:1</option>
+                  <option value="1536x1024">16:9</option>
+                  <option value="1024x1536">9:16</option>
+                </select>
+                <button
+                  type="button"
+                  class="wb-node__gen-btn"
+                  :disabled="node.execState === 'running'"
+                  @pointerdown.stop
+                  @click.stop="runImageGen(node)"
+                >
+                  {{ node.execState === 'running' ? '生成中…' : '生成' }}
+                </button>
+              </div>
+            </div>
+          </div>
           <video v-else-if="node.kind === 'video'" :src="node.src" muted loop playsinline autoplay></video>
           <textarea
             v-else-if="node.kind === 'text'"
@@ -2155,6 +2253,7 @@ onUnmounted(() => {
 .wb-node__resize-control,
 .wb-node__save,
 .wb-node__ai,
+.wb-node__media-gen,
 .wb-node__text {
   border-radius: 0 0 11px 11px;
 }
@@ -2266,6 +2365,103 @@ onUnmounted(() => {
 }
 .wb-node__save-btn:hover:not(:disabled) { background: #27814b; }
 .wb-node__save-btn:disabled { opacity: 0.6; cursor: wait; }
+.wb-node__media-gen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  background: var(--surface-primary);
+}
+.wb-node__media-preview {
+  position: relative;
+  flex: none;
+  height: 120px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-secondary);
+  overflow: hidden;
+}
+.wb-node__media-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+.wb-node__media-empty { color: var(--text-tertiary); font-size: 11px; }
+.wb-node__gen {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+}
+.wb-node__gen-modes {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--surface-secondary);
+}
+.wb-node__gen-modes button {
+  flex: 1;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-tertiary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.wb-node__gen-modes button.on {
+  background: var(--surface-primary);
+  color: var(--brand-primary);
+  font-weight: 700;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+.wb-node__gen-prompt {
+  min-height: 52px;
+  resize: none;
+  padding: 6px 8px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 8px;
+  outline: none;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.wb-node__gen-row { display: flex; gap: 6px; align-items: center; }
+.wb-node__gen-row select {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 6px;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 11px;
+}
+.wb-node__gen-btn {
+  flex: none;
+  height: 28px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 8px;
+  background: #2e9e5b;
+  color: #fff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.wb-node__gen-btn:disabled { opacity: 0.6; cursor: wait; }
 .wb-node__ai {
   position: relative;
   width: 100%;
