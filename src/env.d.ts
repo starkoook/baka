@@ -433,6 +433,7 @@ declare global {
     id: string
     label: string
     kind?: string
+    category?: string
     inputs?: (string | NodeInputDef)[]
     outputs?: (string | NodeInputDef)[]
     inputCount?: number

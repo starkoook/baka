@@ -85,6 +85,7 @@ const edges = ref<WbEdge[]>([])
 const selectedNodeIds = ref<number[]>([])
 const selectedEdgeId = ref<number | null>(null)
 const addMenuOpen = ref(false)
+const addSearch = ref('')
 const miniCanvas = ref<HTMLCanvasElement | null>(null)
 const savingId = ref<number | null>(null)
 const apiConfigs = ref<WorkbenchApiConfig[]>([])
@@ -104,7 +105,7 @@ const cropState = ref<{
 } | null>(null)
 const apiMessage = ref<{ ok: boolean; text: string } | null>(null)
 const apiForm = ref<WorkbenchApiConfig>({ id: '', name: '', provider: 'openai', baseUrl: '', apiKey: '', model: '' })
-const contextMenu = ref<{ x: number; y: number; items: ContextMenuItem[] } | null>(null)
+const contextMenu = ref<{ x: number; y: number; items: ContextMenuItem[]; searchable?: boolean } | null>(null)
 const customNodes = ref<NodeDefinition[]>([])
 const enabledCustomNodes = computed(() => customNodes.value.filter((def) => def._enabled !== false))
 const managerOpen = ref(false)
@@ -509,27 +510,67 @@ function kindLabel(node: WbNode) {
   return node.defId || node.kind || '节点'
 }
 
-function buildAddItems(pos?: { x: number; y: number } | null): ContextMenuItem[] {
-  const items: ContextMenuItem[] = BUILTIN_NODES.map((b) => ({
-    label: `${b.icon} ${b.label}`,
-    action: () => addBuiltinNode(b.kind, pos),
-  }))
-  for (const def of enabledCustomNodes.value) {
-    items.push({ label: `▣ ${def.label}`, action: () => addCustomNode(def, pos) })
-  }
-  return items
+const NODE_CATEGORY: Record<string, string> = {
+  image: '素材',
+  video: '素材',
+  text: '素材',
+  resize: '处理',
+  save: '处理',
+  reroute: '处理',
+  'ai-tag': 'AI',
+  'ai-text': 'AI',
 }
 
-function addMenuItems() {
+function nodeCategory(kind: string, defCategory?: string) {
+  return NODE_CATEGORY[kind] || defCategory || '自定义'
+}
+
+interface AddMenuEntry {
+  icon: string
+  label: string
+  group: string
+  action: () => void
+}
+
+function buildAddItems(pos?: { x: number; y: number } | null): ContextMenuItem[] {
   return [
-    ...BUILTIN_NODES.map((b) => ({ icon: b.icon, label: b.label, action: () => addBuiltinNode(b.kind) })),
+    ...BUILTIN_NODES.map((b) => ({
+      label: `${b.icon} ${b.label}`,
+      group: nodeCategory(b.kind),
+      action: () => addBuiltinNode(b.kind, pos),
+    })),
     ...enabledCustomNodes.value.map((def) => ({
-      icon: '▣',
-      label: def.label,
-      action: () => addCustomNode(def),
+      label: `▣ ${def.label}`,
+      group: nodeCategory(def.kind ?? 'generic', def.category),
+      action: () => addCustomNode(def, pos),
     })),
   ]
 }
+
+function addMenuItems(filter = ''): AddMenuEntry[] {
+  const list: AddMenuEntry[] = [
+    ...BUILTIN_NODES.map((b) => ({
+      icon: b.icon,
+      label: b.label,
+      group: nodeCategory(b.kind),
+      action: () => addBuiltinNode(b.kind),
+    })),
+    ...enabledCustomNodes.value.map((def) => ({
+      icon: '▣',
+      label: def.label,
+      group: nodeCategory(def.kind ?? 'generic', def.category),
+      action: () => addCustomNode(def),
+    })),
+  ]
+  const q = filter.trim().toLowerCase()
+  return q
+    ? list.filter(
+        (item) => item.label.toLowerCase().includes(q) || item.group.toLowerCase().includes(q),
+      )
+    : list
+}
+
+const addMenuList = computed(() => addMenuItems(addSearch.value))
 
 // ---------- 节点管理器 ----------
 async function loadCustomNodes() {
@@ -1669,6 +1710,7 @@ function onContextMenu(event: MouseEvent) {
     x: Math.max(0, x),
     y: Math.max(0, y),
     items,
+    searchable: true,
   }
 }
 
@@ -2261,9 +2303,19 @@ onUnmounted(() => {
       <div class="wb-add">
         <button class="wb-btn wb-btn--primary" type="button" @click="addMenuOpen = !addMenuOpen">＋ 添加节点 ▾</button>
         <div v-if="addMenuOpen" class="wb-add__menu">
-          <button v-for="item in addMenuItems()" :key="item.label" type="button" @click="item.action(); addMenuOpen = false">
-            {{ item.icon }} {{ item.label }}
-          </button>
+          <input v-model="addSearch" class="wb-add__search" placeholder="搜索节点…" @pointerdown.stop />
+          <template v-for="(item, index) in addMenuList" :key="item.label">
+            <div v-if="index === 0 || addMenuList[index - 1].group !== item.group" class="wb-add__group">
+              {{ item.group }}
+            </div>
+            <button
+              type="button"
+              @click="item.action(); addMenuOpen = false; addSearch = ''"
+            >
+              {{ item.icon }} {{ item.label }}
+            </button>
+          </template>
+          <p v-if="!addMenuList.length" class="wb-add__empty">没有匹配的节点</p>
         </div>
       </div>
       <button class="wb-btn" type="button" @click="managerOpen = !managerOpen">管理器</button>
@@ -2402,6 +2454,7 @@ onUnmounted(() => {
       :x="contextMenu.x"
       :y="contextMenu.y"
       :items="contextMenu.items"
+      :searchable="contextMenu.searchable"
       @close="contextMenu = null"
     />
   </main>
@@ -3168,6 +3221,35 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 .wb-add__menu button:hover { background: var(--brand-soft); color: var(--brand-primary); }
+.wb-add__search {
+  display: block;
+  width: 100%;
+  height: 30px;
+  margin-bottom: 4px;
+  padding: 0 10px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 7px;
+  outline: none;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+}
+.wb-add__group {
+  padding: 7px 12px 3px;
+  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  user-select: none;
+}
+.wb-add__empty {
+  margin: 0;
+  padding: 10px 12px;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  text-align: center;
+}
 .wb-btn {
   height: 30px;
   padding: 0 11px;
