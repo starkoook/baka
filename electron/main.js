@@ -10,26 +10,46 @@ if (process.env.ELECTRON_RUN_AS_NODE) {
 }
 
 const { join } = require('path')
-const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, protocol, net } = require('electron')
 const { registerLLMHandlers } = require('./ipc/llm')
 const { registerUpdaterHandlers } = require('./ipc/updater')
 const { registerCacheHandlers } = require('./ipc/cache')
 const { registerTaggerHandlers } = require('./ipc/tagger')
 const { registerTrainingHandlers } = require('./ipc/training')
+const { registerRuntimeManagerHandlers } = require('./ipc/runtime-manager')
+const { registerComponentManagerHandlers } = require('./ipc/component-manager')
+const { registerTrainingHttpHandlers } = require('./ipc/training-http-bridge')
 const { registerGalleryHandlers } = require('./ipc/gallery')
 const { registerTaggerV2Handlers, shutdownWorker } = require('./ipc/tagger-v2')
 const { registerModelHandlers } = require('./ipc/tagger-models')
 const { registerVocabHandlers } = require('./ipc/tagger-vocab')
+const { registerNodeHandlers } = require('./ipc/nodes')
+const { startMcpServer, stopMcpServer } = require('./mcp/mcp-server')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { execSync } = require('child_process')
+
+// ── Custom scheme for local media (images/videos) in the renderer ──
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'media',
+    privileges: { stream: true, bypassCSP: true, supportFetchAPI: true },
+  },
+])
 
 // Disable Chromium's built-in focus ring (the black rectangle on click)
 app.commandLine.appendSwitch('disable-features', 'FocusRingEnabled')
 
 let mainWindow = null
 const isDev = !app.isPackaged
+
+// ── userData 重定向到 D 盘(与 paths.js 的 DATA_ROOT 同处),避免 Electron 默认写 C 盘 ──
+// 所有用 app.getPath('userData') 的代码(runtime-manager/training/cache/渲染端 localStorage)自动落到 D
+try {
+  const { getDataRoot } = require('./ipc/paths')
+  app.setPath('userData', path.join(getDataRoot(), 'userdata'))
+} catch (e) { console.error('[main] userData 重定向失败:', e.message) }
 
 // Register LLM IPC handlers
 registerLLMHandlers()
@@ -65,20 +85,6 @@ function createWindow() {
   })
   mainWindow.on('closed', () => {
     mainWindow = null
-  })
-
-  // Clear cache on close, keep user config (theme etc)
-  mainWindow.on('close', () => {
-    try {
-      mainWindow?.webContents.executeJavaScript(`
-        (function(){
-          var config = localStorage.getItem('baka-tools-config');
-          localStorage.clear();
-          if (config) localStorage.setItem('baka-tools-config', config);
-          sessionStorage.clear();
-        })()
-      `)
-    } catch (_) {}
   })
 
   if (isDev) {
@@ -230,16 +236,20 @@ ipcMain.handle('fs:moveImages', async (_event, { filePaths, destFolder, keepOrig
       // Handle duplicate filenames
       let finalDest = dest
       let n = 1
-      while (fs.existsSync(finalDest)) {
+      while (fs.existsSync(finalDest) || fs.existsSync(finalDest.replace(/\.[^.]+$/, '') + '.txt')) {
         const ext = path.extname(filename)
         const base = filename.replace(ext, '')
         finalDest = path.join(destFolder, `${base}_${n}${ext}`)
         n++
       }
+      const captionSrc = src.replace(/\.[^.]+$/, '') + '.txt'
+      const captionDest = finalDest.replace(/\.[^.]+$/, '') + '.txt'
       if (keepOriginal) {
         fs.copyFileSync(src, finalDest)
+        if (fs.existsSync(captionSrc)) fs.copyFileSync(captionSrc, captionDest)
       } else {
         fs.renameSync(src, finalDest)
+        if (fs.existsSync(captionSrc)) fs.renameSync(captionSrc, captionDest)
       }
       destPaths.push(finalDest)
       moved++
@@ -342,6 +352,16 @@ ipcMain.handle('system:stats', async () => {
 })
 
 app.whenReady().then(() => {
+  const { pathToFileURL } = require('url')
+  protocol.handle('media', (request) => {
+    const url = new URL(request.url)
+    const filePath = decodeURIComponent(url.pathname.replace(/^\//, ''))
+    if (!filePath || !fs.existsSync(filePath)) {
+      return new Response('Not found', { status: 404 })
+    }
+    return net.fetch(pathToFileURL(filePath).toString())
+  })
+
   createWindow()
 
   // ── Folder selection dialog ──
@@ -365,14 +385,157 @@ app.whenReady().then(() => {
     return result.filePaths
   })
 
+  // ── Single image selection (for custom tool previews) ──
+  ipcMain.handle('dialog:selectImage', async () => {
+    const result = await dialog.showOpenDialog(null, {
+      properties: ['openFile'],
+      title: '选择预览图片',
+      filters: [{ name: '图片', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp'] }],
+    })
+    if (result.canceled || !result.filePaths.length) return null
+    return result.filePaths[0]
+  })
+
+  // ── Media selection (images + videos) for the node workbench ──
+  ipcMain.handle('dialog:selectMedia', async () => {
+    const result = await dialog.showOpenDialog(null, {
+      properties: ['openFile', 'multiSelections'],
+      title: '选择素材（图片 / 视频）',
+      filters: [{ name: '素材', extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif', 'mp4', 'mov', 'webm', 'mkv'] }],
+    })
+    if (result.canceled || !result.filePaths.length) return []
+    return result.filePaths
+  })
+
+  // ── Video selection for the node workbench ──
+  ipcMain.handle('dialog:selectVideos', async () => {
+    const result = await dialog.showOpenDialog(null, {
+      properties: ['openFile', 'multiSelections'],
+      title: '选择视频',
+      filters: [{ name: '视频', extensions: ['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v'] }],
+    })
+    if (result.canceled || !result.filePaths.length) return []
+    return result.filePaths
+  })
+
+  // ── Model file selection dialog ──
+  ipcMain.handle('dialog:selectModels', async () => {
+    const result = await dialog.showOpenDialog(null, {
+      properties: ['openFile', 'multiSelections'],
+      title: '选择模型文件',
+      filters: [{ name: '模型文件', extensions: ['safetensors', 'ckpt', 'pt', 'pth', 'bin'] }],
+    })
+    if (result.canceled || !result.filePaths.length) return []
+    return result.filePaths
+  })
+
+  // ── Save image (node workbench output) ──
+  ipcMain.handle('dialog:saveImage', async (_event, params) => {
+    const dataUrl = params?.dataUrl || ''
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl)
+    if (!match) return { success: false, error: '不是有效的图片数据' }
+    const result = await dialog.showSaveDialog(null, {
+      title: '保存图片',
+      defaultPath: params?.defaultName || 'output.png',
+      filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+    })
+    if (result.canceled || !result.filePath) return { success: false, canceled: true }
+    try {
+      fs.writeFileSync(result.filePath, Buffer.from(match[2], 'base64'))
+      return { success: true, path: result.filePath }
+    } catch (err) {
+      return { success: false, error: String((err && err.message) || err) }
+    }
+  })
+
+  // ── Save / copy an existing file (node workbench video output) ──
+  ipcMain.handle('dialog:saveFile', async (_event, params) => {
+    const sourcePath = params?.sourcePath || ''
+    const result = await dialog.showSaveDialog(null, {
+      title: '保存文件',
+      defaultPath: params?.defaultName || 'output',
+    })
+    if (result.canceled || !result.filePath) return { success: false, canceled: true }
+    try {
+      fs.copyFileSync(sourcePath, result.filePath)
+      return { success: true, path: result.filePath }
+    } catch (err) {
+      return { success: false, error: String((err && err.message) || err) }
+    }
+  })
+
+  // ── Save text (node workbench text output) ──
+  ipcMain.handle('dialog:saveText', async (_event, params) => {
+    const result = await dialog.showSaveDialog(null, {
+      title: '保存文本',
+      defaultPath: params?.defaultName || 'output.txt',
+      filters: [{ name: '文本', extensions: ['txt'] }],
+    })
+    if (result.canceled || !result.filePath) return { success: false, canceled: true }
+    try {
+      fs.writeFileSync(result.filePath, params?.text ?? '', 'utf8')
+      return { success: true, path: result.filePath }
+    } catch (err) {
+      return { success: false, error: String((err && err.message) || err) }
+    }
+  })
+
+  // ── Workflow save / open (node workbench canvas) ──
+  ipcMain.handle('dialog:saveWorkflow', async (_event, params) => {
+    const content = params?.content || ''
+    const result = await dialog.showSaveDialog(null, {
+      title: '保存画布',
+      defaultPath: params?.defaultName || '工作流.bakaflow.json',
+      filters: [{ name: '工作流', extensions: ['json'] }],
+    })
+    if (result.canceled || !result.filePath) return { success: false, canceled: true }
+    try {
+      fs.writeFileSync(result.filePath, content, 'utf-8')
+      return { success: true, path: result.filePath }
+    } catch (err) {
+      return { success: false, error: String((err && err.message) || err) }
+    }
+  })
+
+  ipcMain.handle('dialog:saveWorkflowTo', async (_event, params) => {
+    const filePath = params?.filePath || ''
+    const content = params?.content || ''
+    if (!filePath) return { success: false, error: '没有保存路径' }
+    try {
+      fs.writeFileSync(filePath, content, 'utf-8')
+      return { success: true, path: filePath }
+    } catch (err) {
+      return { success: false, error: String((err && err.message) || err) }
+    }
+  })
+
+  ipcMain.handle('dialog:openWorkflow', async () => {
+    const result = await dialog.showOpenDialog(null, {
+      properties: ['openFile'],
+      title: '打开画布',
+      filters: [{ name: '工作流', extensions: ['json'] }],
+    })
+    if (result.canceled || !result.filePaths.length) return { success: false, canceled: true }
+    try {
+      const content = fs.readFileSync(result.filePaths[0], 'utf-8')
+      return { success: true, content, path: result.filePaths[0] }
+    } catch (err) {
+      return { success: false, error: String((err && err.message) || err) }
+    }
+  })
+
   registerUpdaterHandlers(mainWindow)
   registerCacheHandlers()
   registerTaggerHandlers()
   registerTrainingHandlers(mainWindow)
+  registerRuntimeManagerHandlers(mainWindow)
+  registerComponentManagerHandlers(mainWindow)
+  registerTrainingHttpHandlers(mainWindow)
   registerGalleryHandlers(mainWindow)
   registerModelHandlers()
   registerVocabHandlers()
   registerTaggerV2Handlers(mainWindow)
+  registerNodeHandlers()
 
   // ── Open file in Explorer ──
   ipcMain.handle('shell:openFolder', async (_event, filePath) => {
@@ -387,9 +550,13 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+
+  // ── MCP server ──
+  startMcpServer().catch(e => console.error('[main] MCP start failed:', e.message))
 })
 
 app.on('window-all-closed', () => {
   shutdownWorker()
+  stopMcpServer().catch(e => console.error('[main] MCP stop failed:', e.message))
   if (process.platform !== 'darwin') app.quit()
 })

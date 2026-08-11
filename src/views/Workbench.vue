@@ -107,6 +107,7 @@ const cropState = ref<{
 const apiMessage = ref<{ ok: boolean; text: string } | null>(null)
 const apiForm = ref<WorkbenchApiConfig>({ id: '', name: '', provider: 'openai', baseUrl: '', apiKey: '', model: '' })
 const contextMenu = ref<{ x: number; y: number; items: ContextMenuItem[]; searchable?: boolean } | null>(null)
+const currentWorkflowFile = ref<string | null>(null)
 const customNodes = ref<NodeDefinition[]>([])
 const enabledCustomNodes = computed(() => customNodes.value.filter((def) => def._enabled !== false))
 const managerOpen = ref(false)
@@ -1795,7 +1796,82 @@ function clearCanvas() {
   snapshot()
   nodes.value = []
   edges.value = []
+  currentWorkflowFile.value = null
   setSelection([])
+}
+
+// ---------- 画布保存 / 打开 ----------
+function workflowPayload() {
+  const nodesData = nodes.value.map((n) => ({ ...n, execState: undefined }))
+  return JSON.stringify(
+    {
+      version: 1,
+      nodes: nodesData,
+      edges: edges.value,
+      view: { pan: pan.value, zoom: zoom.value },
+      snapGrid: snapGrid.value,
+    },
+    null,
+    2,
+  )
+}
+
+async function saveWorkflow() {
+  const content = workflowPayload()
+  if (currentWorkflowFile.value) {
+    const res = await window.fsAPI?.saveWorkflowTo?.({
+      filePath: currentWorkflowFile.value,
+      content,
+    })
+    if (res?.success) appStore.setStatus(`已保存：${res.path}`)
+    else if (res) appStore.setStatus(`保存失败：${res.error ?? '未知错误'}`)
+    return
+  }
+  const res = await window.fsAPI?.saveWorkflow?.({
+    content,
+    defaultName: '工作流.bakaflow.json',
+  })
+  if (res?.success) {
+    currentWorkflowFile.value = res.path ?? null
+    appStore.setStatus(`已保存：${res.path}`)
+  } else if (res && !res.canceled) {
+    appStore.setStatus(`保存失败：${res.error ?? '未知错误'}`)
+  }
+}
+
+async function openWorkflow() {
+  if (nodes.value.length || edges.value.length) {
+    const ok = window.confirm('打开画布会替换当前内容，确定继续吗？')
+    if (!ok) return
+  }
+  const res = await window.fsAPI?.openWorkflow?.()
+  if (!res || res.canceled) return
+  if (!res.success || !res.content) {
+    appStore.setStatus(`打开失败：${res?.error ?? '未知错误'}`)
+    return
+  }
+  try {
+    const data = JSON.parse(res.content)
+    if (!Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
+      throw new Error('文件格式不正确')
+    }
+    snapshot()
+    nodes.value = data.nodes
+    edges.value = data.edges
+    if (data.view) {
+      pan.value = { x: data.view.pan?.x ?? pan.value.x, y: data.view.pan?.y ?? pan.value.y }
+      zoom.value = data.view.zoom ?? zoom.value
+    }
+    if (typeof data.snapGrid === 'boolean') snapGrid.value = data.snapGrid
+    const maxId = nodes.value.reduce((m, n) => Math.max(m, n.id), 0)
+    nextId = maxId + 1
+    currentWorkflowFile.value = res.path ?? null
+    setSelection([])
+    selectedEdgeId.value = null
+    appStore.setStatus(`已打开：${res.path}`)
+  } catch (e) {
+    appStore.setStatus(`打开失败：${(e as Error).message}`)
+  }
 }
 
 // ---------- 复制 / 剪切 / 粘贴 / 复制 ----------
@@ -1876,6 +1952,12 @@ function onKeyDown(event: KeyboardEvent) {
     if (key === 'enter') {
       event.preventDefault()
       void runWorkflow()
+    } else if (key === 's') {
+      event.preventDefault()
+      void saveWorkflow()
+    } else if (key === 'o') {
+      event.preventDefault()
+      void openWorkflow()
     } else if (key === 'z') {
       event.preventDefault()
       if (event.shiftKey) redo()
@@ -2370,6 +2452,8 @@ onUnmounted(() => {
           <p v-if="!addMenuList.length" class="wb-add__empty">没有匹配的节点</p>
         </div>
       </div>
+      <button class="wb-btn" type="button" title="保存画布 (Ctrl+S)" @click="saveWorkflow">保存</button>
+      <button class="wb-btn" type="button" title="打开画布 (Ctrl+O)" @click="openWorkflow">打开</button>
       <button class="wb-btn" type="button" @click="managerOpen = !managerOpen">管理器</button>
       <button class="wb-btn" type="button" @click="apiPanelOpen = !apiPanelOpen">API 配置</button>
       <span class="workbench__divider"></span>

@@ -117,6 +117,9 @@ declare global {
     saveImage: (params: { dataUrl: string; defaultName?: string }) => Promise<{ success: boolean; path?: string; canceled?: boolean; error?: string }>
     saveFile: (params: { sourcePath: string; defaultName?: string }) => Promise<{ success: boolean; path?: string; canceled?: boolean; error?: string }>
     saveText: (params: { text: string; defaultName?: string }) => Promise<{ success: boolean; path?: string; canceled?: boolean; error?: string }>
+    saveWorkflow: (params: { content: string; defaultName?: string }) => Promise<{ success: boolean; path?: string; canceled?: boolean; error?: string }>
+    saveWorkflowTo: (params: { filePath: string; content: string }) => Promise<{ success: boolean; path?: string; error?: string }>
+    openWorkflow: () => Promise<{ success: boolean; content?: string; path?: string; canceled?: boolean; error?: string }>
   }
 
   interface GalleryImage {
