@@ -1623,8 +1623,12 @@ function onEdgePointerDown(event: MouseEvent, edge: WbEdge) {
 
 // ---------- 右键菜单 ----------
 function onContextMenu(event: MouseEvent) {
+  const target = event.target as HTMLElement
+  if (target.closest('textarea, input, select, [contenteditable="true"]')) {
+    return // 输入控件里右键用系统原生菜单（复制/粘贴文字）
+  }
   event.preventDefault()
-  const nodeEl = (event.target as HTMLElement).closest('.wb-node')
+  const nodeEl = target.closest('.wb-node')
   if (nodeEl) {
     const id = Number((nodeEl as HTMLElement).dataset.id)
     const node = nodes.value.find((item) => item.id === id)
@@ -1642,7 +1646,9 @@ function onContextMenu(event: MouseEvent) {
             },
           ]
         : []),
-      { label: '复制节点', action: () => duplicateSelected() },
+      { label: '复制', action: () => copySelected() },
+      { label: '剪切', action: () => cutSelected() },
+      ...(clipboard.value?.nodes.length ? [{ label: '粘贴', action: () => pasteNodes() }] : []),
       { label: '删除节点', danger: true, action: () => removeSelected() },
     ]
     const menuHeight = items.length * 33 + 10
@@ -1652,7 +1658,10 @@ function onContextMenu(event: MouseEvent) {
     return
   }
   const pos = screenToWorld(event.clientX, event.clientY)
-  const items = buildAddItems(pos)
+  const pasteItems = clipboard.value?.nodes.length
+    ? [{ label: '粘贴', action: () => pasteNodes(pos) }]
+    : []
+  const items = [...pasteItems, ...buildAddItems(pos)]
   const menuHeight = items.length * 33 + 10
   const x = Math.min(event.clientX, window.innerWidth - 190)
   const y = Math.min(event.clientY, window.innerHeight - menuHeight - 8)
@@ -1737,16 +1746,23 @@ function cutSelected() {
   removeSelected()
 }
 
-function pasteNodes() {
+function pasteNodes(pos?: { x: number; y: number } | null) {
   if (!clipboard.value?.nodes.length) return
   snapshot()
   pasteSeq += 1
-  const offset = 24 * pasteSeq
+  let baseX = 24 * pasteSeq
+  let baseY = 24 * pasteSeq
+  if (pos) {
+    const xs = clipboard.value.nodes.map((n) => n.x)
+    const ys = clipboard.value.nodes.map((n) => n.y)
+    baseX = pos.x - Math.min(...xs)
+    baseY = pos.y - Math.min(...ys)
+  }
   const idMap = new Map<number, number>()
   const newNodes = clipboard.value.nodes.map((n) => {
     const newId = nextId++
     idMap.set(n.id, newId)
-    return { ...n, id: newId, x: n.x + offset, y: n.y + offset }
+    return { ...n, id: newId, x: n.x + baseX, y: n.y + baseY }
   })
   const newEdges = clipboard.value.edges
     .filter((e) => idMap.has(e.from) && idMap.has(e.to))
