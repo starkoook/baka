@@ -158,6 +158,27 @@ function nodeStyle(node: WbNode) {
   }
 }
 
+function minNodeSize(node: WbNode) {
+  if (node.kind === 'reroute') return { w: 30, h: 30 }
+  const w = NODE_WIDTH
+  switch (node.kind) {
+    case 'image':
+      return { w, h: node.genOpen ? TITLE_HEIGHT + 430 : TITLE_HEIGHT + 160 }
+    case 'text':
+      return { w, h: node.genOpen ? TITLE_HEIGHT + 330 : TITLE_HEIGHT + 130 }
+    case 'ai-tag':
+    case 'ai-text':
+      return { w, h: TITLE_HEIGHT + 280 }
+    case 'save':
+      return { w, h: TITLE_HEIGHT + 220 }
+    case 'video':
+      return { w, h: TITLE_HEIGHT + 130 }
+    case 'resize':
+    default:
+      return { w, h: TITLE_HEIGHT + 130 }
+  }
+}
+
 function portStyle(node: WbNode, index: number, total: number) {
   const t = total <= 1 ? 50 : ((index + 1) * 100) / (total + 1)
   return { top: `${t}%` }
@@ -1588,8 +1609,9 @@ function onPointerMove(event: MouseEvent) {
     const node = nodes.value.find((item) => item.id === state.nodeId)
     if (!node || !state.startNodes?.length) return
     if (state.kind === 'resize' && state.startWidth !== undefined && state.startHeight !== undefined) {
-      node.width = Math.max(160, Math.round(state.startWidth + dx / zoom.value))
-      node.height = Math.max(80, Math.round(state.startHeight + dy / zoom.value))
+      const min = minNodeSize(node)
+      node.width = Math.max(min.w, Math.round(state.startWidth + dx / zoom.value))
+      node.height = Math.max(min.h, Math.round(state.startHeight + dy / zoom.value))
     } else {
       const dxw = dx / zoom.value
       const dyw = dy / zoom.value
