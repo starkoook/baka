@@ -60,6 +60,22 @@ function configPath() {
   return getConfigPath()
 }
 
+function apiConfigsPath() {
+  const { getDataRoot } = require('./paths')
+  return path.join(getDataRoot(), 'workbench-api-configs.json')
+}
+
+function loadApiConfigs() {
+  try {
+    if (fs.existsSync(apiConfigsPath())) {
+      const raw = fs.readFileSync(apiConfigsPath(), 'utf-8')
+      const list = JSON.parse(raw)
+      return Array.isArray(list) ? list : []
+    }
+  } catch (_) {}
+  return []
+}
+
 // Load config
 function loadConfig() {
   try {
@@ -136,6 +152,115 @@ async function callLLM(params) {
 
   // Parse structured output
   return parseOutput(result.raw || '', format)
+}
+
+// ── Generic chat completion (workbench AI nodes) ──
+async function chatCompletion(params) {
+  const config = loadConfig()
+  const provider = params.provider || config.provider
+  const baseUrl = params.baseUrl || config.baseUrl
+  const apiKey = params.apiKey || config.apiKey
+  const model = params.model || config.model
+  if (!apiKey) throw new Error('API Key 未配置，请在设置或 API 配置中填写')
+  const temperature = Math.max(0, Math.min(2, params.temperature ?? config.temperature ?? 0.5))
+  const maxTokens = params.maxTokens ?? config.maxTokens ?? 1024
+  let imageBase64 = params.imageBase64
+  const mimeType = params.mimeType || 'image/jpeg'
+  if (imageBase64) imageBase64 = await resizeBase64(imageBase64, 1024)
+  const prompt = params.prompt || ''
+  const result =
+    provider === 'gemini'
+      ? await callGemini(baseUrl, apiKey, model, prompt, imageBase64, mimeType, temperature)
+      : await callOpenAI(baseUrl, apiKey, model, prompt, imageBase64, mimeType, temperature, maxTokens)
+  return result.raw || ''
+}
+
+// ── Generic image generation (workbench image nodes) ──
+async function imageGeneration(params) {
+  try {
+    const config = loadConfig()
+    const provider = params.provider || config.provider
+    const baseUrl = params.baseUrl || config.baseUrl
+    const apiKey = params.apiKey || config.apiKey
+    const model = params.model || config.model
+    if (!apiKey) throw new Error('API Key 未配置，请在设置或 API 配置中填写')
+    const prompt = params.prompt || ''
+    const size = params.size || '1024x1024'
+    const imageBase64 = params.imageBase64
+    const mimeType = params.mimeType || 'image/png'
+
+    if (provider === 'gemini') {
+      const url = baseUrl.replace(/\/$/, '') + '/v1beta/models/' + model + ':generateContent?key=' + apiKey
+      const parts = []
+      if (imageBase64) parts.push({ inlineData: { mimeType, data: imageBase64 } })
+      parts.push({ text: prompt })
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts }],
+          generationConfig: { responseModalities: ['IMAGE'] },
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.text()
+        throw new Error('API ' + res.status + ': ' + err.slice(0, 200))
+      }
+      const data = await res.json()
+      const images = []
+      for (const cand of data.candidates || []) {
+        for (const part of (cand.content && cand.content.parts) || []) {
+          if (part.inlineData && part.inlineData.data) {
+            images.push('data:' + (part.inlineData.mimeType || mimeType) + ';base64,' + part.inlineData.data)
+          }
+        }
+      }
+      if (!images.length) throw new Error('模型没有返回图片（可能不支持生图）')
+      return { success: true, images }
+    }
+
+    if (imageBase64) {
+      const url = baseUrl.replace(/\/$/, '') + '/images/edits'
+      const buffer = Buffer.from(imageBase64, 'base64')
+      const form = new FormData()
+      form.append('image', new Blob([buffer], { type: mimeType }), 'reference.png')
+      form.append('prompt', prompt)
+      form.append('model', model)
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + apiKey },
+        body: form,
+      })
+      if (!res.ok) {
+        const err = await res.text()
+        throw new Error('图生图不受支持：API ' + res.status + ' ' + err.slice(0, 120))
+      }
+      const data = await res.json()
+      const images = (data.data || []).map((d) =>
+        d.b64_json ? 'data:image/png;base64,' + d.b64_json : d.url,
+      )
+      return { success: true, images }
+    }
+
+    const url = baseUrl.replace(/\/$/, '') + '/images/generations'
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
+      body: JSON.stringify({ model, prompt, n: 1, size, response_format: 'b64_json' }),
+    })
+    if (!res.ok) {
+      const err = await res.text()
+      throw new Error('API ' + res.status + ': ' + err.slice(0, 200))
+    }
+    const data = await res.json()
+    const images = (data.data || []).map((d) =>
+      d.b64_json ? 'data:image/png;base64,' + d.b64_json : d.url,
+    )
+    if (!images.length) throw new Error('接口没有返回图片')
+    return { success: true, images }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
 }
 
 // ── OpenAI-compatible API ──
@@ -378,6 +503,64 @@ function registerLLMHandlers() {
       return { success: false, error: e.message }
     }
   })
+
+  // ── Generic chat completion (workbench AI nodes) ──
+  ipcMain.handle('llm:chat', async (_event, params) => {
+    try {
+      const text = await chatCompletion(params)
+      return { success: true, text }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle('llm:image', async (_event, params) => {
+    try {
+      return await imageGeneration(params)
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  // ── Workbench API credential library ──
+  ipcMain.handle('llm:listApiConfigs', async () => {
+    return loadApiConfigs()
+  })
+
+  ipcMain.handle('llm:saveApiConfig', async (_event, cfg) => {
+    if (!cfg || !cfg.name || !String(cfg.name).trim()) {
+      return { success: false, error: '配置名称不能为空' }
+    }
+    const list = loadApiConfigs()
+    const id = cfg.id || 'cfg_' + Date.now().toString(36)
+    const entry = {
+      id,
+      name: String(cfg.name).trim(),
+      provider: cfg.provider || 'openai',
+      baseUrl: cfg.baseUrl || '',
+      apiKey: cfg.apiKey || '',
+      model: cfg.model || '',
+    }
+    const idx = list.findIndex((c) => c.id === id)
+    if (idx >= 0) list[idx] = entry
+    else list.push(entry)
+    try {
+      fs.writeFileSync(apiConfigsPath(), JSON.stringify(list, null, 2), 'utf-8')
+      return { success: true, config: entry }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle('llm:deleteApiConfig', async (_event, id) => {
+    const list = loadApiConfigs().filter((c) => c.id !== id)
+    try {
+      fs.writeFileSync(apiConfigsPath(), JSON.stringify(list, null, 2), 'utf-8')
+      return { success: true }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
 }
 
-module.exports = { registerLLMHandlers }
+module.exports = { registerLLMHandlers, imageGeneration }

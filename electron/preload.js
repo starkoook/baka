@@ -28,11 +28,23 @@ contextBridge.exposeInMainWorld('llmAPI', {
   saveProfile: (profile) => ipcRenderer.invoke('llm:saveProfile', profile),
   switchProfile: (name) => ipcRenderer.invoke('llm:switchProfile', name),
   deleteProfile: (name) => ipcRenderer.invoke('llm:deleteProfile', name),
+  chat: (params) => ipcRenderer.invoke('llm:chat', params),
+  image: (params) => ipcRenderer.invoke('llm:image', params),
+  listApiConfigs: () => ipcRenderer.invoke('llm:listApiConfigs'),
+  saveApiConfig: (cfg) => ipcRenderer.invoke('llm:saveApiConfig', cfg),
+  deleteApiConfig: (id) => ipcRenderer.invoke('llm:deleteApiConfig', id),
 })
 
 contextBridge.exposeInMainWorld('fsAPI', {
   selectFolder: () => ipcRenderer.invoke('dialog:selectFolder'),
   selectImages: () => ipcRenderer.invoke('dialog:selectImages'),
+  selectImage: () => ipcRenderer.invoke('dialog:selectImage'),
+  selectMedia: () => ipcRenderer.invoke('dialog:selectMedia'),
+  selectVideos: () => ipcRenderer.invoke('dialog:selectVideos'),
+  selectModels: () => ipcRenderer.invoke('dialog:selectModels'),
+  saveImage: (params) => ipcRenderer.invoke('dialog:saveImage', params),
+  saveFile: (params) => ipcRenderer.invoke('dialog:saveFile', params),
+  saveText: (params) => ipcRenderer.invoke('dialog:saveText', params),
   listImages: (folderPath) => ipcRenderer.invoke('fs:listImages', folderPath),
   readImageBase64: (filePath) => ipcRenderer.invoke('fs:readImageBase64', filePath),
   listDataset: (folderPath) => ipcRenderer.invoke('fs:listDataset', folderPath),
@@ -104,6 +116,8 @@ contextBridge.exposeInMainWorld('taggerV2API', {
 
 contextBridge.exposeInMainWorld('galleryAPI', {
   getFilePath: (file) => webUtils.getPathForFile(file),
+  inspectDroppedPaths: (paths) => ipcRenderer.invoke('gallery:inspectDroppedPaths', paths),
+  importFiles: (paths) => ipcRenderer.invoke('gallery:importFiles', paths),
   addRoot: (folderPath) => ipcRenderer.invoke('gallery:addRoot', folderPath),
   getRoots: () => ipcRenderer.invoke('gallery:getRoots'),
   removeRoot: (rootId, deleteImages) => ipcRenderer.invoke('gallery:removeRoot', { rootId, deleteImages }),
@@ -114,6 +128,8 @@ contextBridge.exposeInMainWorld('galleryAPI', {
   getImageTags: (imageId) => ipcRenderer.invoke('gallery:getImageTags', imageId),
   batchGetTags: (imageIds) => ipcRenderer.invoke('gallery:batchGetTags', imageIds),
   setImageTags: (imageId, tags) => ipcRenderer.invoke('gallery:setImageTags', { imageId, tags }),
+  saveAnnotation: (params) => ipcRenderer.invoke('gallery:saveAnnotation', params),
+  updateImagePaths: (mappings) => ipcRenderer.invoke('gallery:updateImagePaths', mappings),
   batchSetTags: (entries) => ipcRenderer.invoke('gallery:batchSetTags', { entries }),
   getMetadata: (imageId) => ipcRenderer.invoke('gallery:getMetadata', imageId),
   readFileMeta: (filePath) => ipcRenderer.invoke('gallery:readFileMeta', filePath),
@@ -129,4 +145,76 @@ contextBridge.exposeInMainWorld('updaterAPI', {
   onProgress: (cb) => { ipcRenderer.on('updater:progress', (_, d) => cb(d)) },
   onDownloaded: (cb) => { ipcRenderer.on('updater:downloaded', (_, d) => cb(d)) },
   onError: (cb) => { ipcRenderer.on('updater:error', (_, e) => cb(e)) },
+})
+
+contextBridge.exposeInMainWorld('trainingHttpAPI', {
+  submitTraining: (config) => ipcRenderer.invoke('thttp:submitTraining', config),
+  preflight: (config) => ipcRenderer.invoke('thttp:preflight', config),
+  getTasks: () => ipcRenderer.invoke('thttp:getTasks'),
+  getTaskOutput: (taskId, tail) => ipcRenderer.invoke('thttp:getTaskOutput', taskId, tail),
+  stopTask: (taskId) => ipcRenderer.invoke('thttp:stopTask', taskId),
+  systemMonitor: () => ipcRenderer.invoke('thttp:systemMonitor'),
+  gpuStatus: () => ipcRenderer.invoke('thttp:gpuStatus'),
+  backendStatus: () => ipcRenderer.invoke('thttp:backendStatus'),
+  getSchemas: () => ipcRenderer.invoke('thttp:getSchemas'),
+  getSchemaHashes: () => ipcRenderer.invoke('thttp:getSchemaHashes'),
+  getPresets: () => ipcRenderer.invoke('thttp:getPresets'),
+  getScripts: () => ipcRenderer.invoke('thttp:getScripts'),
+  runScript: (payload) => ipcRenderer.invoke('thttp:runScript', payload),
+})
+
+contextBridge.exposeInMainWorld('runtimeAPI', {
+  defs: () => ipcRenderer.invoke('runtime:defs'),
+  scan: () => ipcRenderer.invoke('runtime:scan'),
+  setRepoPath: (folderPath) => ipcRenderer.invoke('runtime:setRepoPath', folderPath),
+  systemInfo: () => ipcRenderer.invoke('runtime:systemInfo'),
+  recommendation: () => ipcRenderer.invoke('runtime:recommendation'),
+  health: (runtimeId) => ipcRenderer.invoke('runtime:health', runtimeId),
+  install: (runtimeId) => ipcRenderer.invoke('runtime:install', runtimeId),
+  cancelInstall: () => ipcRenderer.invoke('runtime:cancelInstall'),
+  launch: (params) => ipcRenderer.invoke('runtime:launch', params),
+  stop: () => ipcRenderer.invoke('runtime:stop'),
+  guiStatus: () => ipcRenderer.invoke('runtime:guiStatus'),
+  getConfig: () => ipcRenderer.invoke('runtime:getConfig'),
+  updateConfig: (partial) => ipcRenderer.invoke('runtime:updateConfig', partial),
+  distribution: () => ipcRenderer.invoke('runtime:distribution'),
+  rollbackTrainer: () => ipcRenderer.invoke('runtime:rollbackTrainer'),
+  autoClone: () => ipcRenderer.invoke('runtime:autoClone'),
+  onLog: (cb) => {
+    const listener = (_, data) => cb(data)
+    ipcRenderer.on('runtime:log', listener)
+    return () => ipcRenderer.removeListener('runtime:log', listener)
+  },
+  onStatusChange: (cb) => {
+    const listener = (_, data) => cb(data)
+    ipcRenderer.on('runtime:statusChange', listener)
+    return () => ipcRenderer.removeListener('runtime:statusChange', listener)
+  },
+})
+
+contextBridge.exposeInMainWorld('trainingComponentsAPI', {
+  inspect: () => ipcRenderer.invoke('components:inspect'),
+  recommendation: () => ipcRenderer.invoke('components:recommendation'),
+  install: (runtimeId) => ipcRenderer.invoke('components:install', runtimeId),
+  pause: () => ipcRenderer.invoke('components:pause'),
+  resume: (runtimeId) => ipcRenderer.invoke('components:resume', runtimeId),
+  cancel: () => ipcRenderer.invoke('components:cancel'),
+  repair: (runtimeId) => ipcRenderer.invoke('components:repair', runtimeId),
+  rollback: (componentId) => ipcRenderer.invoke('components:rollback', componentId),
+  clearCache: () => ipcRenderer.invoke('components:clearCache'),
+  exportCache: (options) => ipcRenderer.invoke('components:exportCache', options),
+  importCache: (options) => ipcRenderer.invoke('components:importCache', options),
+  onProgress: (cb) => {
+    const listener = (_, data) => cb(data)
+    ipcRenderer.on('components:progress', listener)
+    return () => ipcRenderer.removeListener('components:progress', listener)
+  },
+})
+
+contextBridge.exposeInMainWorld('nodesAPI', {
+  list: () => ipcRenderer.invoke('nodes:list'),
+  importFromGithub: (url) => ipcRenderer.invoke('nodes:importFromGithub', url),
+  update: (file) => ipcRenderer.invoke('nodes:update', file),
+  remove: (file) => ipcRenderer.invoke('nodes:remove', file),
+  setEnabled: (file, enabled) => ipcRenderer.invoke('nodes:setEnabled', file, enabled),
 })
