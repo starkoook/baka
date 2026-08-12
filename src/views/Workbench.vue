@@ -108,6 +108,11 @@ const apiMessage = ref<{ ok: boolean; text: string } | null>(null)
 const apiForm = ref<WorkbenchApiConfig>({ id: '', name: '', provider: 'openai', baseUrl: '', apiKey: '', model: '' })
 const contextMenu = ref<{ x: number; y: number; items: ContextMenuItem[]; searchable?: boolean } | null>(null)
 const currentWorkflowFile = ref<string | null>(null)
+const autosaveTimer = ref<number | null>(null)
+const runningRef = ref(false)
+const recentProjects = ref<{ path: string; name: string; updatedAt: number }[]>([])
+const toast = ref<{ text: string } | null>(null)
+let toastTimer: number | null = null
 const customNodes = ref<NodeDefinition[]>([])
 const enabledCustomNodes = computed(() => customNodes.value.filter((def) => def._enabled !== false))
 const managerOpen = ref(false)
@@ -1800,6 +1805,87 @@ function clearCanvas() {
   setSelection([])
 }
 
+// ---------- 自动保存 / 最近项目 ----------
+function fileNameOf(filePath: string) {
+  return filePath.split(/[/\\]/).pop() || filePath
+}
+
+function showToast(text: string) {
+  toast.value = { text }
+  if (toastTimer) window.clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => { toast.value = null }, 2200)
+}
+
+function scheduleAutosave() {
+  if (runningRef.value) return
+  if (autosaveTimer.value) window.clearTimeout(autosaveTimer.value)
+  autosaveTimer.value = window.setTimeout(() => { void performAutosave() }, 1500)
+}
+
+async function performAutosave() {
+  try {
+    const res = await window.workflowAPI?.saveAutosave?.(workflowPayload())
+    if (res?.success) showToast('已自动保存')
+  } catch {
+    /* 自动保存失败不打断编辑 */
+  }
+}
+
+function applyWorkflowData(data: any, filePath: string | null) {
+  if (!Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
+    throw new Error('文件格式不正确')
+  }
+  snapshot()
+  nodes.value = data.nodes
+  edges.value = data.edges
+  if (data.view) {
+    pan.value = { x: data.view.pan?.x ?? pan.value.x, y: data.view.pan?.y ?? pan.value.y }
+    zoom.value = data.view.zoom ?? zoom.value
+  }
+  if (typeof data.snapGrid === 'boolean') snapGrid.value = data.snapGrid
+  const maxId = nodes.value.reduce((m, n) => Math.max(m, n.id), 0)
+  nextId = maxId + 1
+  currentWorkflowFile.value = filePath
+  setSelection([])
+  selectedEdgeId.value = null
+}
+
+async function restoreAutosave() {
+  const res = await window.workflowAPI?.loadAutosave?.()
+  if (!res?.success || !res.content) return
+  try {
+    applyWorkflowData(JSON.parse(res.content), null)
+    appStore.setStatus('已恢复上次的画布')
+  } catch {
+    /* 自动保存文件损坏时忽略 */
+  }
+}
+
+async function loadRecentProjects() {
+  const res = await window.workflowAPI?.listRecent?.()
+  recentProjects.value = res?.list ?? []
+}
+
+async function openProjectFile(filePath: string) {
+  if (nodes.value.length || edges.value.length) {
+    const ok = window.confirm('打开画布会替换当前内容，确定继续吗？')
+    if (!ok) return
+  }
+  const content = await window.fsAPI?.readText?.(filePath)
+  if (!content?.success || !content.text) {
+    appStore.setStatus('打开失败：文件不存在或不可读')
+    return
+  }
+  try {
+    applyWorkflowData(JSON.parse(content.text), filePath)
+    await window.workflowAPI?.recordRecent?.({ path: filePath, name: fileNameOf(filePath) })
+    await loadRecentProjects()
+    appStore.setStatus(`已打开：${filePath}`)
+  } catch (e) {
+    appStore.setStatus(`打开失败：${(e as Error).message}`)
+  }
+}
+
 // ---------- 画布保存 / 打开 ----------
 function workflowPayload() {
   const nodesData = nodes.value.map((n) => ({ ...n, execState: undefined }))
@@ -1823,7 +1909,11 @@ async function saveWorkflow() {
       filePath: currentWorkflowFile.value,
       content,
     })
-    if (res?.success) appStore.setStatus(`已保存：${res.path}`)
+    if (res?.success) {
+      appStore.setStatus(`已保存：${res.path}`)
+      await window.workflowAPI?.recordRecent?.({ path: res.path ?? '', name: fileNameOf(res.path ?? '') })
+      await loadRecentProjects()
+    }
     else if (res) appStore.setStatus(`保存失败：${res.error ?? '未知错误'}`)
     return
   }
@@ -1834,6 +1924,8 @@ async function saveWorkflow() {
   if (res?.success) {
     currentWorkflowFile.value = res.path ?? null
     appStore.setStatus(`已保存：${res.path}`)
+    await window.workflowAPI?.recordRecent?.({ path: res.path ?? '', name: fileNameOf(res.path ?? '') })
+    await loadRecentProjects()
   } else if (res && !res.canceled) {
     appStore.setStatus(`保存失败：${res.error ?? '未知错误'}`)
   }
@@ -1852,22 +1944,9 @@ async function openWorkflow() {
   }
   try {
     const data = JSON.parse(res.content)
-    if (!Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
-      throw new Error('文件格式不正确')
-    }
-    snapshot()
-    nodes.value = data.nodes
-    edges.value = data.edges
-    if (data.view) {
-      pan.value = { x: data.view.pan?.x ?? pan.value.x, y: data.view.pan?.y ?? pan.value.y }
-      zoom.value = data.view.zoom ?? zoom.value
-    }
-    if (typeof data.snapGrid === 'boolean') snapGrid.value = data.snapGrid
-    const maxId = nodes.value.reduce((m, n) => Math.max(m, n.id), 0)
-    nextId = maxId + 1
-    currentWorkflowFile.value = res.path ?? null
-    setSelection([])
-    selectedEdgeId.value = null
+    applyWorkflowData(data, res.path ?? null)
+    await window.workflowAPI?.recordRecent?.({ path: res.path ?? '', name: fileNameOf(res.path ?? '') })
+    await loadRecentProjects()
     appStore.setStatus(`已打开：${res.path}`)
   } catch (e) {
     appStore.setStatus(`打开失败：${(e as Error).message}`)
@@ -2013,6 +2092,7 @@ function resizeObserver() {
 }
 
 watch([nodes, edges], () => drawMinimap(), { deep: true, flush: 'post' })
+watch([nodes, edges, pan, zoom], () => scheduleAutosave(), { deep: true })
 
 watch(
   () => {
@@ -2029,6 +2109,8 @@ watch(
 onMounted(() => {
   void loadCustomNodes()
   void loadApiConfigs()
+  void restoreAutosave()
+  void loadRecentProjects()
   resizeObserver()
   drawMinimap()
   window.addEventListener('keydown', onKeyDown)
