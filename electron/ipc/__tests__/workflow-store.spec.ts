@@ -23,6 +23,28 @@ describe('workflow-store autosave', () => {
   })
 })
 
+describe('workflow & assets IPC wiring', () => {
+  it('registers both modules in main and exposes APIs in preload', () => {
+    const { readFileSync } = require('node:fs')
+    const { resolve } = require('node:path')
+    const main = readFileSync(resolve(process.cwd(), 'electron/main.js'), 'utf8')
+    expect(main).toContain("require('./ipc/workflow-store')")
+    expect(main).toContain("require('./ipc/assets')")
+    expect(main).toContain('registerWorkflowHandlers()')
+    expect(main).toContain('registerAssetHandlers()')
+
+    const preload = readFileSync(resolve(process.cwd(), 'electron/preload.js'), 'utf8')
+    expect(preload).toContain("exposeInMainWorld('workflowAPI'")
+    expect(preload).toContain("exposeInMainWorld('assetsAPI'")
+
+    const env = readFileSync(resolve(process.cwd(), 'src/env.d.ts'), 'utf8')
+    expect(env).toContain('interface WorkflowAPI')
+    expect(env).toContain('interface AssetsAPI')
+    expect(env).toContain('workflowAPI: WorkflowAPI')
+    expect(env).toContain('assetsAPI: AssetsAPI')
+  })
+})
+
 describe('workflow-store recent', () => {
   it('records newest first and caps at 20', () => {
     for (let i = 0; i < 25; i++) recordRecent({ path: `C:/flows/${i}.json`, name: `flow ${i}` }, root)

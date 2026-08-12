@@ -457,6 +457,41 @@ declare global {
     setEnabled: (file: string, enabled: boolean) => Promise<{ success: boolean; error?: string }>
   }
 
+  interface WorkflowRecentEntry {
+    path: string
+    name: string
+    updatedAt: number
+  }
+
+  interface WorkflowAPI {
+    saveAutosave: (content: string) => Promise<{ success: boolean; path?: string; error?: string }>
+    loadAutosave: () => Promise<{ success: boolean; content?: string; path?: string; error?: string }>
+    listRecent: () => Promise<{ success: boolean; list?: WorkflowRecentEntry[] }>
+    recordRecent: (entry: { path: string; name: string }) => Promise<{ success: boolean; list?: WorkflowRecentEntry[]; error?: string }>
+    removeRecent: (filePath: string) => Promise<{ success: boolean; list?: WorkflowRecentEntry[] }>
+  }
+
+  interface AssetRecord {
+    id: string
+    type: 'image' | 'text' | 'video'
+    file: string
+    meta: { node?: string; prompt?: string }
+    createdAt: number
+  }
+
+  interface AssetsAPI {
+    list: () => Promise<{ success: boolean; list?: AssetRecord[] }>
+    add: (entry: {
+      type: AssetRecord['type']
+      dataUrl?: string
+      text?: string
+      sourcePath?: string
+      meta?: AssetRecord['meta']
+    }) => Promise<{ success: boolean; asset?: AssetRecord; error?: string }>
+    remove: (id: string) => Promise<{ success: boolean; list?: AssetRecord[] }>
+    clear: () => Promise<{ success: boolean }>
+  }
+
   interface Window {
     windowAPI: WindowAPI
     appAPI: AppAPI
@@ -472,6 +507,8 @@ declare global {
     runtimeAPI?: RuntimeAPI
     trainingComponentsAPI?: TrainingComponentsAPI
     nodesAPI?: NodesAPI
+    workflowAPI: WorkflowAPI
+    assetsAPI: AssetsAPI
     trainingHttpAPI: TrainingHttpAPI
     updaterAPI: {
       check: () => Promise<{ available: boolean; compatible?: boolean; version?: string | null; currentVersion?: string; error?: string }>

@@ -62,6 +62,21 @@ contextBridge.exposeInMainWorld('fsAPI', {
   writeBase64: (params) => ipcRenderer.invoke('fs:writeBase64', params),
 })
 
+contextBridge.exposeInMainWorld('workflowAPI', {
+  saveAutosave: (content) => ipcRenderer.invoke('workflow:saveAutosave', content),
+  loadAutosave: () => ipcRenderer.invoke('workflow:loadAutosave'),
+  listRecent: () => ipcRenderer.invoke('workflow:listRecent'),
+  recordRecent: (entry) => ipcRenderer.invoke('workflow:recordRecent', entry),
+  removeRecent: (filePath) => ipcRenderer.invoke('workflow:removeRecent', filePath),
+})
+
+contextBridge.exposeInMainWorld('assetsAPI', {
+  list: () => ipcRenderer.invoke('assets:list'),
+  add: (entry) => ipcRenderer.invoke('assets:add', entry),
+  remove: (id) => ipcRenderer.invoke('assets:delete', id),
+  clear: () => ipcRenderer.invoke('assets:clear'),
+})
+
 contextBridge.exposeInMainWorld('systemAPI', {
   getStats: () => ipcRenderer.invoke('system:stats'),
 })

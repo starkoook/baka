@@ -24,6 +24,8 @@ const { registerTaggerV2Handlers, shutdownWorker } = require('./ipc/tagger-v2')
 const { registerModelHandlers } = require('./ipc/tagger-models')
 const { registerVocabHandlers } = require('./ipc/tagger-vocab')
 const { registerNodeHandlers } = require('./ipc/nodes')
+const { registerWorkflowHandlers } = require('./ipc/workflow-store')
+const { registerAssetHandlers } = require('./ipc/assets')
 const { startMcpServer, stopMcpServer } = require('./mcp/mcp-server')
 const fs = require('fs')
 const path = require('path')
@@ -53,6 +55,8 @@ try {
 
 // Register LLM IPC handlers
 registerLLMHandlers()
+registerWorkflowHandlers()
+registerAssetHandlers()
 
 function createWindow() {
   mainWindow = new BrowserWindow({
