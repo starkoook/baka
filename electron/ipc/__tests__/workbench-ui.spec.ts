@@ -68,4 +68,10 @@ describe('infinite canvas workbench', () => {
     expect(workbench).toContain('workflowAPI?.recordRecent')
     expect(workbench).toContain('recentProjects')
   })
+
+  it('shows run progress and supports cancel', () => {
+    expect(workbench).toContain('runProgress')
+    expect(workbench).toContain('cancelRequested')
+    expect(workbench).toContain('function cancelRun')
+  })
 })

@@ -110,6 +110,8 @@ const contextMenu = ref<{ x: number; y: number; items: ContextMenuItem[]; search
 const currentWorkflowFile = ref<string | null>(null)
 const autosaveTimer = ref<number | null>(null)
 const runningRef = ref(false)
+const cancelRequested = ref(false)
+const runProgress = ref<{ done: number; total: number; current: string } | null>(null)
 const recentProjects = ref<{ path: string; name: string; updatedAt: number }[]>([])
 const toast = ref<{ text: string } | null>(null)
 let toastTimer: number | null = null
@@ -940,6 +942,7 @@ async function recomputeFlow() {
 }
 
 async function runWorkflow() {
+  if (runningRef.value) return
   const targets = nodes.value.filter((n) => isExecutable(n))
   for (const n of nodes.value) n.execState = undefined
   if (!targets.length) {
@@ -952,19 +955,25 @@ async function runWorkflow() {
     appStore.setStatus(`有 ${missing.length} 个处理节点缺少输入，请先连线`)
     return
   }
+  runningRef.value = true
+  cancelRequested.value = false
+  runProgress.value = { done: 0, total: targets.length, current: '' }
   appStore.setStatus('开始运行…')
   const done = new Set<number>()
   for (let guard = 0; guard <= targets.length; guard++) {
     let progressed = false
     for (const node of targets) {
+      if (cancelRequested.value) break
       if (done.has(node.id)) continue
       const source = resolveInputSource(node.id)
       if (!source || (isExecutable(source) && !done.has(source.id))) continue
       node.execState = 'running'
+      runProgress.value = { done: done.size, total: targets.length, current: node.label }
       await new Promise((r) => setTimeout(r, 150))
       try {
         const ok = await executeNode(node)
         node.execState = ok ? 'done' : 'error'
+        if (ok) await collectAssetFromNode(node)
       } catch (e) {
         node.execState = 'error'
         appStore.setStatus(`运行出错（${node.label}）：${(e as Error).message}`)
@@ -972,12 +981,26 @@ async function runWorkflow() {
       done.add(node.id)
       progressed = true
     }
+    if (cancelRequested.value) break
     if (!progressed) break
   }
   const failed = targets.filter((n) => n.execState === 'error').length
-  appStore.setStatus(
-    failed ? `运行完成，有 ${failed} 个节点出错` : `运行完成 ✓（${done.size}/${targets.length} 个节点）`,
-  )
+  if (cancelRequested.value) {
+    appStore.setStatus(`已取消（完成 ${done.size}/${targets.length} 个节点）`)
+  } else {
+    appStore.setStatus(
+      failed ? `运行完成，有 ${failed} 个节点出错` : `运行完成 ✓（${done.size}/${targets.length} 个节点）`,
+    )
+  }
+  runProgress.value = null
+  runningRef.value = false
+  cancelRequested.value = false
+  void performAutosave()
+}
+
+function cancelRun() {
+  cancelRequested.value = true
+  appStore.setStatus('正在取消…')
 }
 
 async function runImageGen(node: WbNode) {
