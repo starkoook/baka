@@ -1,102 +1,96 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/common/AppIcon.vue'
 import { APP_NAVIGATION, isNavigationItemActive } from '@/features/navigation/app-navigation'
 import { useAppStore } from '@/stores/app'
-import { createSidebarLayout } from './sidebar-layout'
+import { useWorkbenchStore } from '@/stores/workbench'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
-const toolsItem = APP_NAVIGATION.find((item) => item.id === 'tools')
+const wbStore = useWorkbenchStore()
 
-function isToolsRoute(path: string) {
-  return toolsItem ? isNavigationItemActive(toolsItem, path) : false
-}
+const isWorkbench = computed(() => route.path === '/workbench')
 
-const isToolsExpanded = ref(isToolsRoute(route.path))
 const activeNavigationIndex = computed(() => {
   const index = APP_NAVIGATION.findIndex((item) => isNavigationItemActive(item, route.path))
   return index >= 0 ? index : 0
 })
-const toolsIndex = toolsItem ? APP_NAVIGATION.indexOf(toolsItem) : -1
-const toolSubnavChildCount = toolsItem?.children?.length ?? 0
-const { flowOffset: toolSubnavFlowOffset, style: sidebarLayoutStyle } = createSidebarLayout(toolSubnavChildCount)
-const activeRailAfterExpandedTools = computed(
-  () =>
-    toolSubnavFlowOffset > 0
-    && isToolsExpanded.value
-    && toolsIndex >= 0
-    && activeNavigationIndex.value > toolsIndex,
-)
 const activeRailStyle = computed(() => ({
   '--active-navigation-index': String(activeNavigationIndex.value),
-  ...sidebarLayoutStyle,
 }))
-
-watch(
-  () => route.path,
-  (path) => {
-    isToolsExpanded.value = isToolsRoute(path)
-  },
-)
 
 function navigateTo(path: string) {
   router.push(path)
-}
-
-function toggleTools() {
-  isToolsExpanded.value = !isToolsExpanded.value
 }
 </script>
 
 <template>
   <aside class="app-sidebar" aria-label="主导航">
-    <nav
-      class="sidebar-nav"
-      :style="activeRailStyle"
-      :class="{ 'tools-expanded': isToolsExpanded, 'active-after-tools': activeRailAfterExpandedTools }"
-      aria-label="应用页面"
-    >
+    <nav class="sidebar-nav" :style="activeRailStyle" aria-label="应用页面">
       <span class="sidebar-active-rail" aria-hidden="true"></span>
       <div v-for="item in APP_NAVIGATION" :key="item.id" class="nav-entry">
         <button
           class="nav-item"
           :class="{ active: isNavigationItemActive(item, route.path) }"
           :aria-current="isNavigationItemActive(item, route.path) ? 'page' : undefined"
-          :aria-expanded="item.children?.length ? isToolsExpanded : undefined"
-          :aria-controls="item.children?.length ? 'tools-subnavigation' : undefined"
           :aria-label="item.label"
           :title="item.label"
           type="button"
-          @click="item.children?.length ? toggleTools() : navigateTo(item.route)"
+          @click="navigateTo(item.route)"
         >
           <AppIcon :name="item.id" />
           <span class="nav-label">{{ item.label }}</span>
         </button>
-
-        <div v-if="item.children?.length && isToolsExpanded" id="tools-subnavigation" class="tool-subnav" aria-label="工具子导航">
-          <button
-            v-for="child in item.children"
-            :key="child.route"
-            class="tool-subnav-item"
-            :class="{ active: route.path === child.route }"
-            :aria-current="route.path === child.route ? 'page' : undefined"
-            type="button"
-            @click="navigateTo(child.route)"
-          >
-            {{ child.label }}
-          </button>
-        </div>
       </div>
     </nav>
 
+    <div v-if="isWorkbench" class="sidebar-workbench">
+      <span class="sidebar-workbench__label">工作台</span>
+      <template v-if="!wbStore.activeNode">
+        <button class="sidebar-workbench__btn" type="button" aria-label="运行画布 (Ctrl+Enter)" @click="wbStore.issueAction('run')">▶</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="添加节点" @click="wbStore.toggleRail('nodes')">＋</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="保存画布 (Ctrl+S)" @click="wbStore.issueAction('save')">💾</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="打开画布 (Ctrl+O)" @click="wbStore.issueAction('open')">📂</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="撤销 (Ctrl+Z)" @click="wbStore.issueAction('undo')">↶</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="重做" @click="wbStore.issueAction('redo')">↷</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="项目" @click="wbStore.toggleRail('projects')">▤</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="结果" @click="wbStore.toggleRail('assets')">◫</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="队列" @click="wbStore.toggleRail('queue')">≣</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="引擎" @click="wbStore.toggleRail('engine')">⚡</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="设置" @click="wbStore.toggleRail('settings')">…</button>
+      </template>
+      <template v-else>
+        <button class="sidebar-workbench__btn" type="button" aria-label="运行此节点" @click="wbStore.issueAction('run-node')">▶</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="复制" @click="wbStore.issueAction('copy')">⧉</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="粘贴" @click="wbStore.issueAction('paste')">📋</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="删除" @click="wbStore.issueAction('delete-selected')">✕</button>
+        <button class="sidebar-workbench__btn" type="button" aria-label="保存内容" @click="wbStore.issueAction('save-node-content')">💾</button>
+        <button
+          v-if="wbStore.activeNode.genOpen !== undefined"
+          class="sidebar-workbench__btn"
+          type="button"
+          :aria-label="wbStore.activeNode.genOpen ? '收起生成器' : '展开生成器'"
+          @click="wbStore.issueAction('toggle-gen')"
+        >
+          ⇅
+        </button>
+      </template>
+    </div>
+
     <div class="sidebar-footer">
-      <div class="local-status" role="status">
-        <span class="local-status-dot" aria-hidden="true"></span>
-        <span class="local-status-label">本地模式</span>
-      </div>
+      <button
+        class="tool-picker-toggle"
+        :class="{ active: appStore.toolPickerOpen }"
+        type="button"
+        aria-label="工具选择"
+        :aria-expanded="appStore.toolPickerOpen"
+        @click="appStore.toggleToolPicker()"
+      >
+        <AppIcon name="tools" />
+        <span class="nav-label">工具选择</span>
+      </button>
       <span class="sidebar-version">v{{ appStore.version }}</span>
     </div>
   </aside>
@@ -104,30 +98,113 @@ function toggleTools() {
 
 <style scoped>
 .app-sidebar { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 0; border: 0; background: color-mix(in srgb, var(--app-bg) 88%, var(--brand-soft)); }
-.nav-item, .tool-subnav-item { font: inherit; border: 0; cursor: pointer; }
+.nav-item { font: inherit; border: 0; cursor: pointer; }
 .sidebar-nav { position: relative; display: grid; gap: 4px; padding: 16px 10px 12px; border: 0; }
 .sidebar-active-rail { position: absolute; z-index: 2; top: 16px; left: 5px; width: 3px; height: 40px; border-radius: 999px; background: var(--brand-primary); box-shadow: 0 0 10px color-mix(in srgb, var(--brand-primary) 72%, transparent); transform: translateY(calc(var(--active-navigation-index) * 44px)); transition: transform 240ms cubic-bezier(.2, .8, .2, 1); pointer-events: none; }
-.sidebar-nav.tools-expanded.active-after-tools .sidebar-active-rail { transform: translateY(calc(var(--active-navigation-index) * 44px + var(--tool-subnav-flow-offset))); }
 .nav-entry { position: relative; z-index: 1; }
-.nav-item { position: relative; z-index: 1; display: flex; align-items: center; width: 100%; height: 40px; min-height: 0; gap: 11px; padding: 0 10px; border-radius: var(--radius-control); background: transparent; color: var(--text-secondary); text-align: left; transition: color 160ms ease, background-color 160ms ease, transform 160ms cubic-bezier(.2, .8, .2, 1); }
+.nav-item { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; width: 100%; height: 40px; min-height: 0; gap: 0; padding: 0; border-radius: var(--radius-control); background: transparent; color: var(--text-secondary); text-align: left; transition: color 160ms ease, background-color 160ms ease, transform 160ms cubic-bezier(.2, .8, .2, 1); }
 .nav-item.active { background: var(--brand-soft); color: var(--brand-primary); font-weight: 650; }
 .nav-item :deep(svg) { flex: none; transition: transform 160ms cubic-bezier(.2, .8, .2, 1); }
-.nav-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: transform 160ms cubic-bezier(.2, .8, .2, 1); }
-.tool-subnav { display: grid; grid-auto-rows: var(--tool-subnav-row-height); gap: var(--tool-subnav-gap); margin: var(--tool-subnav-margin-top) 0 var(--tool-subnav-margin-bottom) 21px; padding-left: 10px; border: 0; white-space: nowrap; animation: tool-subnav-enter 180ms ease-out; transform-origin: top left; }
-.tool-subnav-item { min-height: var(--tool-subnav-row-height); padding: 0 8px; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 11px; text-align: left; }
-.tool-subnav-item:hover { background: var(--surface-secondary); color: var(--text-primary); }
-.tool-subnav-item.active { color: var(--brand-primary); font-weight: 650; }
-.sidebar-footer { display: grid; gap: 7px; margin-top: auto; padding: 13px 18px; border: 0; color: var(--text-secondary); font-size: 10px; }
-.local-status { display: flex; align-items: center; gap: 6px; }
-.local-status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent-success); animation: local-status-breathe 3.6s ease-in-out infinite; }
-.sidebar-version { padding-left: 13px; }
-@keyframes tool-subnav-enter {
-  from { opacity: 0; transform: translateY(-4px) scale(.98); }
-  to { opacity: 1; transform: none; }
+.nav-label { display: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; transition: transform 160ms cubic-bezier(.2, .8, .2, 1); }
+.sidebar-footer { display: grid; justify-items: center; gap: 10px; margin-top: auto; padding: 12px 0; border: 0; color: var(--text-secondary); font-size: 10px; }
+.tool-picker-toggle { position: relative; display: flex; align-items: center; justify-content: center; gap: 0; width: 100%; height: 38px; padding: 0; border: 0; border-radius: var(--radius-control); background: transparent; color: var(--text-secondary); font: inherit; cursor: pointer; transition: background-color 160ms ease, color 160ms ease; }
+.tool-picker-toggle:hover, .tool-picker-toggle.active { background: var(--brand-soft); color: var(--brand-primary); }
+.tool-picker-toggle :deep(svg) { flex: none; }
+.tool-picker-toggle .nav-label { display: none; }
+.sidebar-version { display: none; padding-left: 10px; }
+
+.sidebar-workbench {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding: 10px 10px 12px;
+  box-shadow: inset 0 1px 0 var(--line-subtle);
+  animation: sidebar-workbench-in 0.2s ease-out;
 }
-@keyframes local-status-breathe {
-  0%, 100% { opacity: .68; box-shadow: 0 0 0 color-mix(in srgb, var(--accent-success) 0%, transparent); }
-  50% { opacity: 1; box-shadow: 0 0 10px color-mix(in srgb, var(--accent-success) 58%, transparent); }
+.sidebar-workbench__label {
+  padding-left: 4px;
+  color: var(--text-tertiary);
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+}
+.sidebar-workbench__btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 38px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms cubic-bezier(.2, .8, .2, 1);
+}
+.sidebar-workbench__btn:hover {
+  background: var(--surface-secondary);
+  color: var(--brand-primary);
+  transform: translateX(2px) scale(1.018);
+}
+.sidebar-workbench__btn:active { transform: scale(.97); }
+.sidebar-workbench__btn::after {
+  content: attr(aria-label);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  padding: 6px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: var(--surface-shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease, transform 150ms ease;
+  z-index: 60;
+}
+.sidebar-workbench__btn:hover::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
+}
+@keyframes sidebar-workbench-in {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+/* icon-mode tooltips */
+.nav-item::after,
+.tool-picker-toggle::after {
+  content: attr(aria-label);
+  position: absolute;
+  left: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  padding: 6px 11px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--surface-secondary);
+  color: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: var(--surface-shadow);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease, transform 150ms ease;
+  z-index: 60;
+}
+.nav-item:hover::after,
+.tool-picker-toggle:hover::after,
+.tool-picker-toggle.active::after {
+  opacity: 1;
+  transform: translateY(-50%) translateX(0);
 }
 @media (hover: hover) and (pointer: fine) {
   .sidebar-nav:not(:has(:focus-visible)) .nav-item:hover { background: var(--surface-secondary); color: var(--text-primary); transform: translateX(2px) scale(1.018); }
@@ -139,20 +216,12 @@ function toggleTools() {
 .nav-item:focus-visible :deep(svg) { transform: translateY(-1px) rotate(-3deg) scale(1.07); }
 .nav-item:focus-visible .nav-label { transform: translateX(3px); }
 .nav-item:active { transform: scale(.97); }
-@media (max-width: 1200px) {
-  .nav-item { justify-content: center; padding-inline: 0; }
-  .nav-label, .local-status-label, .sidebar-version { display: none; }
-  .sidebar-footer { justify-items: center; padding-inline: 0; }
-  .sidebar-nav.tools-expanded.active-after-tools .sidebar-active-rail { transform: translateY(calc(var(--active-navigation-index) * 44px)); }
-  .tool-subnav { position: absolute; top: 0; left: calc(100% + 8px); width: 164px; margin: 0; padding: 6px; border: 0; border-radius: var(--radius-control); background: color-mix(in srgb, var(--app-bg) 88%, var(--brand-soft)); box-shadow: var(--surface-shadow); }
-  .tool-subnav-item { padding: 0 10px; }
-}
 @media (prefers-reduced-motion: reduce) {
   .sidebar-active-rail { transition: none; }
+  .sidebar-workbench { animation: none !important; }
+  .sidebar-workbench__btn { transition: none !important; transform: none !important; }
   .nav-item,
   .nav-item :deep(svg),
   .nav-label { animation: none !important; transition: none !important; transform: none !important; }
-  .tool-subnav { animation: none; transition: none; transform: none; }
-  .local-status-dot { animation: none; }
 }
 </style>

@@ -75,14 +75,14 @@ describe('infinite canvas workbench', () => {
     expect(workbench).toContain('function cancelRun')
   })
 
-  it('provides a comfyui-style left rail with panels and animations', () => {
-    expect(workbench).toContain('wb-rail')
-    expect(workbench).toContain('railTab')
-    expect(workbench).toContain('toggleRail')
-    expect(workbench).toContain('wb-rail__dynamic')
+  it('provides light-theme drawers driven by the shared workbench store', () => {
+    expect(workbench).toContain('useWorkbenchStore')
+    expect(workbench).toContain('wbStore.railOpen')
+    expect(workbench).toContain('wb-rail__panel')
     expect(workbench).toContain('wb-progress')
     expect(workbench).toContain('@keyframes wb-slide-in')
     expect(workbench).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(workbench).not.toContain('wb-rail__dynamic')
   })
 
   it('collects generated results into an asset panel with drag-back', () => {
@@ -90,5 +90,32 @@ describe('infinite canvas workbench', () => {
     expect(workbench).toContain('collectAssetFromNode')
     expect(workbench).toContain('onAssetDragStart')
     expect(workbench).toContain('wb-assets')
+  })
+})
+
+describe('workbench dynamic left taskbar', () => {
+  const sidebar = read('src/components/sidebar/AppSidebar.vue')
+  const store = read('src/stores/workbench.ts')
+
+  it('adds workbench buttons to the outermost taskbar when on the canvas', () => {
+    expect(sidebar).toContain('useWorkbenchStore')
+    expect(sidebar).toContain('sidebar-workbench')
+    expect(sidebar).toContain("route.path === '/workbench'")
+    expect(sidebar).toContain('wbStore.issueAction')
+    expect(sidebar).toContain('wbStore.toggleRail')
+  })
+
+  it('switches to node actions when a node is selected', () => {
+    expect(sidebar).toContain('wbStore.activeNode')
+    expect(sidebar).toContain('run-node')
+    expect(sidebar).toContain('save-node-content')
+    expect(sidebar).toContain('toggle-gen')
+  })
+
+  it('keeps panel state and command bus in the shared store', () => {
+    expect(store).toContain('railTab')
+    expect(store).toContain('function toggleRail')
+    expect(store).toContain('issueAction')
+    expect(store).toContain('setActiveNode')
   })
 })
