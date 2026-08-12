@@ -84,4 +84,11 @@ describe('infinite canvas workbench', () => {
     expect(workbench).toContain('@keyframes wb-slide-in')
     expect(workbench).toContain('@media (prefers-reduced-motion: reduce)')
   })
+
+  it('collects generated results into an asset panel with drag-back', () => {
+    expect(workbench).toContain('assetsAPI?.list')
+    expect(workbench).toContain('collectAssetFromNode')
+    expect(workbench).toContain('onAssetDragStart')
+    expect(workbench).toContain('wb-assets')
+  })
 })

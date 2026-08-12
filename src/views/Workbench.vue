@@ -115,6 +115,8 @@ const autosaveTimer = ref<number | null>(null)
 const runningRef = ref(false)
 const cancelRequested = ref(false)
 const runProgress = ref<{ done: number; total: number; current: string } | null>(null)
+const assets = ref<AssetRecord[]>([])
+const assetPreview = ref<AssetRecord | null>(null)
 const recentProjects = ref<{ path: string; name: string; updatedAt: number }[]>([])
 const toast = ref<{ text: string } | null>(null)
 let toastTimer: number | null = null
@@ -1055,6 +1057,7 @@ async function runImageGen(node: WbNode) {
     if (!out) throw new Error('接口没有返回图片')
     deriveImageNode(node, out)
     node.execState = 'done'
+    await collectAssetFromNode(node)
     appStore.setStatus('生成完成 ✓ 已派生新节点')
   } catch (e) {
     node.execState = 'error'
@@ -1088,6 +1091,7 @@ async function runTextGen(node: WbNode) {
     snapshot()
     node.text = (res.text ?? '').trim()
     node.execState = 'done'
+    await collectAssetFromNode(node)
     appStore.setStatus('生成完成 ✓')
   } catch (e) {
     node.execState = 'error'
@@ -1113,6 +1117,7 @@ async function runNode(node: WbNode, visited = new Set<number>()) {
   try {
     const ok = await executeNode(node)
     node.execState = ok ? 'done' : 'error'
+    if (ok) await collectAssetFromNode(node)
   } catch (e) {
     node.execState = 'error'
     appStore.setStatus(`运行出错（${node.label}）：${(e as Error).message}`)
@@ -1912,6 +1917,131 @@ async function loadRecentProjects() {
   recentProjects.value = res?.list ?? []
 }
 
+async function loadAssets() {
+  const res = await window.assetsAPI?.list?.()
+  assets.value = res?.list ?? []
+}
+
+async function collectAssetFromNode(node: WbNode) {
+  if (node.kind === 'image' || node.kind === 'resize' || node.kind === 'save') {
+    if (node.src?.startsWith('data:image/')) {
+      const res = await window.assetsAPI?.add?.({
+        type: 'image',
+        dataUrl: node.src,
+        meta: { node: node.label },
+      })
+      if (res?.success) await loadAssets()
+      return
+    }
+  }
+  if (node.kind === 'text' || node.kind === 'ai-tag' || node.kind === 'ai-text') {
+    if (node.text) {
+      const res = await window.assetsAPI?.add?.({
+        type: 'text',
+        text: node.text,
+        meta: { node: node.label },
+      })
+      if (res?.success) await loadAssets()
+      return
+    }
+  }
+  if (node.kind === 'video' && node.src?.startsWith('media://')) {
+    const filePath = decodeURI(node.src.slice('media:///'.length))
+    const res = await window.assetsAPI?.add?.({
+      type: 'video',
+      sourcePath: filePath,
+      meta: { node: node.label },
+    })
+    if (res?.success) await loadAssets()
+  }
+}
+
+function onAssetDragStart(event: DragEvent, asset: AssetRecord) {
+  event.dataTransfer?.setData('application/x-baka-asset', asset.id)
+  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy'
+}
+
+async function onCanvasDrop(event: DragEvent) {
+  const id = event.dataTransfer?.getData('application/x-baka-asset')
+  if (!id) return
+  event.preventDefault()
+  const asset = assets.value.find((a) => a.id === id)
+  if (!asset) return
+  const pos = screenToWorld(event.clientX, event.clientY)
+  if (!pos) return
+  if (asset.type === 'image') {
+    const res = await window.fsAPI?.readImageBase64?.(asset.file)
+    if (res?.success && res.base64) {
+      const dataUrl = `data:${res.mime || 'image/png'};base64,${res.base64}`
+      nodes.value.push({
+        id: nextId++,
+        x: pos.x,
+        y: pos.y,
+        width: NODE_WIDTH,
+        height: TITLE_HEIGHT + 240,
+        kind: 'image',
+        label: fileNameOf(asset.file),
+        src: dataUrl,
+        contentH: 240,
+        rotation: 0,
+        inputCount: 1,
+        outputCount: 1,
+        inTypes: ['image'],
+        outTypes: ['image'],
+        genMode: 'text',
+        genPrompt: '',
+        genSize: '1024x1024',
+        genOpen: true,
+      })
+    }
+  } else if (asset.type === 'video') {
+    addVideoNodes([asset.file], pos)
+  } else if (asset.type === 'text') {
+    const res = await window.fsAPI?.readText?.(asset.file)
+    nodes.value.push({
+      id: nextId++,
+      x: pos.x,
+      y: pos.y,
+      width: NODE_WIDTH,
+      height: TITLE_HEIGHT + 160,
+      kind: 'text',
+      label: fileNameOf(asset.file),
+      src: '',
+      text: res?.success ? res.text : '',
+      contentH: 160,
+      rotation: 0,
+      inputCount: 1,
+      outputCount: 1,
+      inTypes: ['text'],
+      outTypes: ['text'],
+      genOpen: false,
+    })
+  }
+  appStore.setStatus('已从结果拖入画布')
+}
+
+function previewAsset(asset: AssetRecord) {
+  assetPreview.value = asset
+}
+
+async function saveAsset(asset: AssetRecord) {
+  await window.fsAPI?.saveFile?.({
+    sourcePath: asset.file,
+    defaultName: `${asset.meta?.node || asset.type}-${new Date(asset.createdAt).toLocaleDateString('zh-CN')}`,
+  })
+}
+
+async function removeAsset(id: string) {
+  const res = await window.assetsAPI?.remove?.(id)
+  assets.value = res?.list ?? assets.value
+}
+
+async function clearAllAssets() {
+  if (!window.confirm('确定清空全部结果吗？')) return
+  await window.assetsAPI?.clear?.()
+  await loadAssets()
+}
+
 async function openProjectFile(filePath: string) {
   if (nodes.value.length || edges.value.length) {
     const ok = window.confirm('打开画布会替换当前内容，确定继续吗？')
@@ -2157,6 +2287,7 @@ onMounted(() => {
   void loadApiConfigs()
   void restoreAutosave()
   void loadRecentProjects()
+  void loadAssets()
   resizeObserver()
   drawMinimap()
   window.addEventListener('keydown', onKeyDown)
@@ -2187,6 +2318,8 @@ onUnmounted(() => {
     @pointerup="onPointerUp"
     @pointerleave="onPointerUp"
     @contextmenu="onContextMenu"
+    @dragover.prevent
+    @drop="onCanvasDrop"
   >
     <!-- 连线层 -->
     <svg class="workbench__edges" :width="viewSize.w" :height="viewSize.h">
@@ -2801,6 +2934,15 @@ onUnmounted(() => {
     </Transition>
 
     <div v-if="toast" class="wb-toast">{{ toast.text }}</div>
+
+    <div v-if="assetPreview" class="wb-asset-modal" @click.self="assetPreview = null">
+      <div class="wb-asset-modal__body">
+        <img v-if="assetPreview.type === 'image'" :src="mediaUrl(assetPreview.file)" alt="" />
+        <video v-else-if="assetPreview.type === 'video'" :src="mediaUrl(assetPreview.file)" controls autoplay></video>
+        <p v-else class="wb-asset-modal__text">{{ assetPreview.meta?.node || '文本结果' }}</p>
+        <button class="wb-btn" type="button" @click="assetPreview = null">关闭</button>
+      </div>
+    </div>
 
     <ContextMenu
       v-if="contextMenu"
@@ -4192,5 +4334,39 @@ onUnmounted(() => {
   .wb-toast {
     animation: none !important;
   }
+}
+.wb-asset-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  animation: wb-pop 0.18s ease-out;
+}
+.wb-asset-modal__body {
+  max-width: 80%;
+  max-height: 84%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  background: rgba(30, 41, 59, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 16px;
+}
+.wb-asset-modal__body img,
+.wb-asset-modal__body video {
+  max-width: 100%;
+  max-height: 70vh;
+  border-radius: 10px;
+}
+.wb-asset-modal__text {
+  color: #fff;
+  white-space: pre-wrap;
+  max-height: 50vh;
+  overflow: auto;
 }
 </style>
