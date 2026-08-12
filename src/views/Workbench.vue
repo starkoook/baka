@@ -2750,8 +2750,17 @@ onUnmounted(() => {
       <span v-else class="wb-minimap__empty">暂无节点</span>
     </div>
 
-    <!-- 工具栏（操作按钮在左侧任务栏） -->
+    <!-- 顶部工具栏（基础操作） -->
     <div class="workbench__toolbar">
+      <button class="wb-btn wb-btn--run" type="button" :title="runningRef ? '停止运行' : '运行画布 (Ctrl+Enter)'" @click="runningRef ? cancelRun() : runWorkflow()">
+        {{ runningRef ? '■ 停止' : '▶ 运行' }}
+      </button>
+      <button class="wb-btn wb-btn--primary" type="button" title="添加节点" @click="wbStore.toggleRail('nodes')">＋ 添加节点</button>
+      <button class="wb-btn" type="button" title="保存画布 (Ctrl+S)" @click="saveWorkflow">保存</button>
+      <button class="wb-btn" type="button" title="打开画布 (Ctrl+O)" @click="openWorkflow">打开</button>
+      <span class="workbench__divider"></span>
+      <button class="wb-btn wb-btn--icon" type="button" title="撤销 (Ctrl+Z)" :disabled="undoStack.length === 0" @click="undo">↶</button>
+      <button class="wb-btn wb-btn--icon" type="button" title="重做 (Ctrl+Shift+Z)" :disabled="redoStack.length === 0" @click="redo">↷</button>
       <span class="workbench__hint">右键添加节点 · 左键拖动平移 · 空格+左键框选 · Ctrl+D 复制 · Ctrl+Z 撤销</span>
     </div>
 

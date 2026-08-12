@@ -49,20 +49,9 @@ function navigateTo(path: string) {
     <div v-if="isWorkbench" class="sidebar-workbench">
       <span class="sidebar-workbench__label">工作台</span>
       <template v-if="!wbStore.activeNode">
-        <button
-          class="sidebar-workbench__btn"
-          type="button"
-          :aria-label="wbStore.running ? '停止运行' : '运行画布 (Ctrl+Enter)'"
-          @click="wbStore.issueAction(wbStore.running ? 'cancel' : 'run')"
-        >
-          {{ wbStore.running ? '■' : '▶' }}
-        </button>
-        <button class="sidebar-workbench__btn" type="button" aria-label="节点库" @click="wbStore.toggleRail('nodes')">＋</button>
         <button class="sidebar-workbench__btn" type="button" aria-label="项目" @click="wbStore.toggleRail('projects')">▤</button>
         <button class="sidebar-workbench__btn" type="button" aria-label="结果" @click="wbStore.toggleRail('assets')">◫</button>
         <button class="sidebar-workbench__btn" type="button" aria-label="设置" @click="wbStore.toggleRail('settings')">…</button>
-        <button class="sidebar-workbench__btn" type="button" aria-label="撤销 (Ctrl+Z)" @click="wbStore.issueAction('undo')">↶</button>
-        <button class="sidebar-workbench__btn" type="button" aria-label="重做" @click="wbStore.issueAction('redo')">↷</button>
       </template>
       <template v-else>
         <button class="sidebar-workbench__btn" type="button" aria-label="运行此节点" @click="wbStore.issueAction('run-node')">▶</button>

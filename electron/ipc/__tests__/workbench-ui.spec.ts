@@ -87,6 +87,13 @@ describe('infinite canvas workbench', () => {
     expect(workbench).not.toContain("railTab === 'engine'")
   })
 
+  it('keeps basic canvas actions in the top toolbar', () => {
+    expect(workbench).toContain('workbench__toolbar')
+    expect(workbench).toContain('wb-btn--run')
+    expect(workbench).toContain('添加节点')
+    expect(workbench).toContain('保存画布 (Ctrl+S)')
+  })
+
   it('collects generated results into an asset panel with drag-back', () => {
     expect(workbench).toContain('assetsAPI?.list')
     expect(workbench).toContain('collectAssetFromNode')
@@ -103,8 +110,9 @@ describe('workbench dynamic left taskbar', () => {
     expect(sidebar).toContain('useWorkbenchStore')
     expect(sidebar).toContain('sidebar-workbench')
     expect(sidebar).toContain("route.path === '/workbench'")
-    expect(sidebar).toContain('wbStore.issueAction')
     expect(sidebar).toContain('wbStore.toggleRail')
+    expect(sidebar).not.toContain("issueAction('run')")
+    expect(sidebar).not.toContain("issueAction('undo')")
   })
 
   it('switches to node actions when a node is selected', () => {
