@@ -1,13 +1,16 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
-import { useAppStore } from '@/stores/app'
+import { ref, onMounted, computed, watch } from 'vue'
+import { useAppStore, type ToolPosterKey } from '@/stores/app'
+import { setSoundEnabled } from '@/composables/useSound'
+import TrainingComponentsPanel from '@/components/settings/TrainingComponentsPanel.vue'
 
 const appStore = useAppStore()
 
 // ── Tab state ──
-type TabId = 'api' | 'appearance' | 'cache' | 'about'
+type TabId = 'api' | 'appearance' | 'components' | 'cache' | 'about'
 const activeTab = ref<TabId>('api')
 const tabs: { id: TabId; label: string; icon: string }[] = [
+  { id: 'components', label: '训练组件', icon: 'Lo' },
   { id: 'api', label: 'API', icon: '☁' },
   { id: 'appearance', label: '外观', icon: '🎨' },
   { id: 'cache', label: '缓存', icon: '🗂' },
@@ -35,6 +38,52 @@ const cacheTotal = ref('')
 
 // ── Theme ──
 const isLight = computed(() => appStore.theme === 'light')
+const soundEnabled = ref(localStorage.getItem('baka-sound-enabled') !== 'off')
+watch(soundEnabled, (value) => {
+  localStorage.setItem('baka-sound-enabled', value ? 'on' : 'off')
+  setSoundEnabled(value)
+})
+onMounted(() => setSoundEnabled(soundEnabled.value))
+
+// ── Tool preview posters ──
+const TOOL_PREVIEWS: { key: ToolPosterKey; label: string; default: string }[] = [
+  { key: 'gallery', label: '图库', default: '/tools/gallery.jpg' },
+  { key: 'tagger', label: '标注', default: '/tools/tagger.jpg' },
+  { key: 'training', label: '训练', default: '/tools/train.jpg' },
+  { key: 'upscale', label: '放大', default: '/tools/upscale.jpg' },
+  { key: 'workbench', label: '工作台', default: '/tools/workbench.jpg' },
+]
+const posterPreviews = ref<Record<string, string>>({})
+
+async function refreshPosterPreviews() {
+  for (const tool of TOOL_PREVIEWS) {
+    const path = appStore.toolPosters[tool.key]
+    if (path && window.fsAPI) {
+      const result = await window.fsAPI.readImageBase64(path)
+      if (result.success) {
+        posterPreviews.value[tool.key] = `data:${result.mime};base64,${result.base64}`
+        continue
+      }
+    }
+    posterPreviews.value[tool.key] = tool.default
+  }
+}
+
+async function pickToolPoster(key: ToolPosterKey) {
+  if (!window.fsAPI) return
+  const path = await window.fsAPI.selectImage()
+  if (path) {
+    appStore.setToolPoster(key, path)
+    await refreshPosterPreviews()
+    const label = TOOL_PREVIEWS.find((t) => t.key === key)?.label ?? key
+    appStore.setStatus(`${label}预览图已更新`)
+  }
+}
+
+function resetToolPoster(key: ToolPosterKey) {
+  appStore.setToolPoster(key, null)
+  void refreshPosterPreviews()
+}
 
 async function loadConfig() {
   if (!window.llmAPI) return
@@ -121,7 +170,10 @@ async function clearCache(target: string) {
   }
 }
 
-onMounted(loadConfig)
+onMounted(() => {
+  void loadConfig()
+  void refreshPosterPreviews()
+})
 </script>
 
 <template>
@@ -272,6 +324,22 @@ onMounted(loadConfig)
       </div>
 
       <div class="cabin-panel sk-card">
+        <span class="cabin-label">/// SOUND</span>
+        <div class="cabin-panel-br"></div>
+        <div class="sk-card-header">
+          <span class="sk-card-icon">🔊</span>
+          <div>
+            <div class="sk-card-title">界面音效</div>
+            <div class="sk-card-sub">二次元风点击音（piko♪）</div>
+          </div>
+        </div>
+        <label class="sk-sound-toggle">
+          <input v-model="soundEnabled" type="checkbox" />
+          <span>开启点击音效</span>
+        </label>
+      </div>
+
+      <div class="cabin-panel sk-card">
         <span class="cabin-label">/// MASCOT</span>
         <div class="cabin-panel-br"></div>
         <div class="sk-card-header">
@@ -289,9 +357,45 @@ onMounted(loadConfig)
           <span class="sk-toggle-label">{{ appStore.showMascot ? '显示中' : '已隐藏' }}</span>
         </label>
       </div>
+
+      <div class="cabin-panel sk-card">
+        <span class="cabin-label">/// TOOL PREVIEWS</span>
+        <div class="cabin-panel-br"></div>
+        <div class="sk-card-header">
+          <span class="sk-card-icon">🖼</span>
+          <div>
+            <div class="sk-card-title">工具预览图</div>
+            <div class="sk-card-sub">自定义工具选择页的背景大图</div>
+          </div>
+        </div>
+        <div class="sk-poster-list">
+          <div v-for="tool in TOOL_PREVIEWS" :key="tool.key" class="sk-poster-row">
+            <span class="sk-poster-thumb">
+              <img v-if="posterPreviews[tool.key]" :src="posterPreviews[tool.key]" alt="" />
+            </span>
+            <span class="sk-poster-info">
+              <strong>{{ tool.label }}</strong>
+              <small>{{ appStore.toolPosters[tool.key] ? '已自定义' : '使用默认' }}</small>
+            </span>
+            <button class="btn btn-ghost btn-sm" type="button" @click="pickToolPoster(tool.key)">选择图片</button>
+            <button
+              v-if="appStore.toolPosters[tool.key]"
+              class="btn btn-ghost btn-sm"
+              type="button"
+              @click="resetToolPoster(tool.key)"
+            >
+              重置
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- ───────────── 缓存 ───────────── -->
+    <div v-if="activeTab === 'components'" class="sk-panel">
+      <TrainingComponentsPanel />
+    </div>
+
     <div v-if="activeTab === 'cache'" class="sk-panel">
       <div class="cabin-panel sk-card">
         <span class="cabin-label">/// CACHE</span>
@@ -531,6 +635,21 @@ onMounted(loadConfig)
   color: var(--accent-primary);
   font-weight: 700;
 }
+.sk-sound-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+}
+.sk-sound-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-primary);
+  cursor: pointer;
+}
 
 /* ═══ TOGGLE ═══ */
 .sk-toggle {
@@ -580,12 +699,56 @@ onMounted(loadConfig)
 }
 .sk-cache-name { flex: 1; font-size: 12px; color: var(--text-primary); font-family: var(--font-mono); }
 .sk-cache-size { font-size: 11px; color: var(--text-tertiary); font-family: var(--font-mono); }
-.sk-empty-state {
-  text-align: center;
-  padding: 30px;
-  color: var(--text-tertiary);
-  font-size: 13px;
-}
+  .sk-empty-state {
+    text-align: center;
+    padding: 30px;
+    color: var(--text-tertiary);
+    font-size: 13px;
+  }
+
+  /* ═══ TOOL PREVIEWS ═══ */
+  .sk-poster-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .sk-poster-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 10px;
+    border-radius: var(--radius-control);
+    background: var(--surface-secondary);
+  }
+  .sk-poster-thumb {
+    width: 64px;
+    height: 40px;
+    flex: 0 0 64px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid var(--line-subtle);
+    background: var(--surface-primary);
+  }
+  .sk-poster-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .sk-poster-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .sk-poster-info strong {
+    display: block;
+    font-size: 12.5px;
+    color: var(--text-primary);
+  }
+  .sk-poster-info small {
+    display: block;
+    margin-top: 3px;
+    font-size: 10.5px;
+    color: var(--text-tertiary);
+  }
 
 /* ═══ ABOUT ═══ */
 .sk-about-icon {
