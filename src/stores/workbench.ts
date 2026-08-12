@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
-export type WorkbenchRailTab = 'projects' | 'nodes' | 'queue' | 'assets' | 'engine' | 'settings'
+export type WorkbenchRailTab = 'projects' | 'nodes' | 'assets' | 'settings'
 
 export type WorkbenchAction =
   | 'run'
@@ -9,6 +9,7 @@ export type WorkbenchAction =
   | 'open'
   | 'undo'
   | 'redo'
+  | 'cancel'
   | 'run-node'
   | 'copy'
   | 'paste'
@@ -28,6 +29,7 @@ export const useWorkbenchStore = defineStore('workbench', () => {
   const railOpen = ref(false)
   const railTab = ref<WorkbenchRailTab>('projects')
   const reduceMotion = ref(false)
+  const running = ref(false)
   const activeNode = ref<WorkbenchActiveNode | null>(null)
   const action = ref<WorkbenchAction | null>(null)
 
@@ -44,9 +46,13 @@ export const useWorkbenchStore = defineStore('workbench', () => {
     activeNode.value = node
   }
 
+  function setRunning(value: boolean) {
+    running.value = value
+  }
+
   function issueAction(name: WorkbenchAction) {
     action.value = name
   }
 
-  return { railOpen, railTab, reduceMotion, activeNode, action, toggleRail, setActiveNode, issueAction }
+  return { railOpen, railTab, reduceMotion, running, activeNode, action, toggleRail, setActiveNode, setRunning, issueAction }
 })

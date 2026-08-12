@@ -1023,6 +1023,9 @@ async function handleWorkbenchAction(name: WorkbenchAction) {
     case 'open':
       await openWorkflow()
       break
+    case 'cancel':
+      cancelRun()
+      break
     case 'undo':
       undo()
       break
@@ -2323,6 +2326,8 @@ watch(
   },
 )
 
+watch(runningRef, (value) => wbStore.setRunning(value))
+
 watch(
   () => {
     const conns = edges.value.map((e) => `${e.from}>${e.to}`).join(',')
@@ -2785,19 +2790,6 @@ onUnmounted(() => {
         <p v-if="!addMenuList.length" class="wb-rail__empty">没有匹配的节点</p>
       </template>
 
-      <template v-else-if="wbStore.railTab === 'queue'">
-        <h3 class="wb-rail__panel-title">队列</h3>
-        <button class="wb-btn wb-btn--run" type="button" @click="runWorkflow" :disabled="runningRef">▶ 运行</button>
-        <div v-if="runProgress" class="wb-progress">
-          <div class="wb-progress__bar">
-            <div class="wb-progress__fill" :style="{ width: `${runProgress.total ? Math.round((runProgress.done / runProgress.total) * 100) : 0}%` }"></div>
-          </div>
-          <p>正在跑 第 {{ runProgress.done + 1 }}/{{ runProgress.total }} 个节点：{{ runProgress.current || '…' }}</p>
-          <button class="wb-btn wb-btn--danger" type="button" @click="cancelRun">取消运行</button>
-        </div>
-        <p v-else class="wb-rail__empty">还没有运行任务</p>
-      </template>
-
       <template v-else-if="wbStore.railTab === 'assets'">
         <h3 class="wb-rail__panel-title">结果</h3>
         <div v-if="assets.length" class="wb-assets">
@@ -2821,14 +2813,13 @@ onUnmounted(() => {
         <p v-else class="wb-rail__empty">运行节点后，结果会出现在这里</p>
       </template>
 
-      <template v-else-if="wbStore.railTab === 'engine'">
-        <h3 class="wb-rail__panel-title">引擎</h3>
-        <p class="wb-rail__empty">云端 API（默认）</p>
-        <p class="wb-rail__empty">本地引擎接入将在下一阶段提供</p>
-      </template>
-
       <template v-else>
         <h3 class="wb-rail__panel-title">设置</h3>
+        <div class="wb-rail__engine">
+          <b>引擎</b>
+          <p>云端 API（默认）</p>
+          <p>本地引擎接入将在下一阶段提供</p>
+        </div>
         <label class="wb-rail__switch">
           <input v-model="wbStore.reduceMotion" type="checkbox" />
           减弱动画
@@ -2839,6 +2830,15 @@ onUnmounted(() => {
         </div>
       </template>
     </section>
+
+    <!-- 运行进度（画布底部） -->
+    <div v-if="runProgress" class="wb-run-progress">
+      <div class="wb-run-progress__bar">
+        <div class="wb-run-progress__fill" :style="{ width: `${runProgress.total ? Math.round((runProgress.done / runProgress.total) * 100) : 0}%` }"></div>
+      </div>
+      <span>正在跑 第 {{ runProgress.done + 1 }}/{{ runProgress.total }} 个节点：{{ runProgress.current || '…' }}</span>
+      <button class="wb-btn wb-btn--danger" type="button" @click="cancelRun">取消</button>
+    </div>
 
     <!-- 节点管理器 -->
     <div v-if="managerOpen" class="workbench__manager">
@@ -4162,6 +4162,64 @@ onUnmounted(() => {
   font-size: 13px;
   margin-bottom: 12px;
 }
+.wb-rail__engine {
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 10px;
+  background: var(--surface-secondary);
+}
+.wb-rail__engine b {
+  display: block;
+  color: var(--text-primary);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.wb-rail__engine p {
+  margin: 2px 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.wb-run-progress {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 320px;
+  max-width: min(560px, calc(100% - 240px));
+  padding: 8px 12px;
+  border: 1px solid var(--line-subtle);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface-primary) 94%, transparent);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--surface-shadow);
+  animation: wb-pop 0.18s ease-out;
+}
+.wb-run-progress__bar {
+  flex: 1;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface-secondary);
+  border: 1px solid var(--line-subtle);
+  overflow: hidden;
+}
+.wb-run-progress__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--brand-primary), #a78bfa);
+  transition: width 0.25s ease;
+}
+.wb-run-progress span {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  white-space: nowrap;
+}
 .wb-progress {
   margin-top: 12px;
 }
@@ -4290,7 +4348,8 @@ onUnmounted(() => {
 @media (prefers-reduced-motion: reduce) {
   .wb-rail__panel,
   .wb-toast,
-  .wb-asset-modal {
+  .wb-asset-modal,
+  .wb-run-progress {
     animation: none !important;
   }
 }

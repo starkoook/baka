@@ -79,10 +79,12 @@ describe('infinite canvas workbench', () => {
     expect(workbench).toContain('useWorkbenchStore')
     expect(workbench).toContain('wbStore.railOpen')
     expect(workbench).toContain('wb-rail__panel')
-    expect(workbench).toContain('wb-progress')
+    expect(workbench).toContain('wb-run-progress')
     expect(workbench).toContain('@keyframes wb-slide-in')
     expect(workbench).toContain('@media (prefers-reduced-motion: reduce)')
     expect(workbench).not.toContain('wb-rail__dynamic')
+    expect(workbench).not.toContain("railTab === 'queue'")
+    expect(workbench).not.toContain("railTab === 'engine'")
   })
 
   it('collects generated results into an asset panel with drag-back', () => {
