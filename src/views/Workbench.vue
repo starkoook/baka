@@ -108,6 +108,9 @@ const apiMessage = ref<{ ok: boolean; text: string } | null>(null)
 const apiForm = ref<WorkbenchApiConfig>({ id: '', name: '', provider: 'openai', baseUrl: '', apiKey: '', model: '' })
 const contextMenu = ref<{ x: number; y: number; items: ContextMenuItem[]; searchable?: boolean } | null>(null)
 const currentWorkflowFile = ref<string | null>(null)
+const railOpen = ref(false)
+const railTab = ref<'projects' | 'nodes' | 'queue' | 'assets' | 'engine' | 'settings'>('projects')
+const reduceMotion = ref(false)
 const autosaveTimer = ref<number | null>(null)
 const runningRef = ref(false)
 const cancelRequested = ref(false)
@@ -1001,6 +1004,26 @@ async function runWorkflow() {
 function cancelRun() {
   cancelRequested.value = true
   appStore.setStatus('正在取消…')
+}
+
+function toggleRail(tab: typeof railTab.value) {
+  if (railOpen.value && railTab.value === tab) {
+    railOpen.value = false
+  } else {
+    railTab.value = tab
+    railOpen.value = true
+  }
+}
+
+const selectedSingleNode = computed(() =>
+  selectedNodeIds.value.length === 1
+    ? nodes.value.find((n) => n.id === selectedNodeIds.value[0]) ?? null
+    : null,
+)
+
+async function removeRecentItem(filePath: string) {
+  const res = await window.workflowAPI?.removeRecent?.(filePath)
+  recentProjects.value = res?.list ?? recentProjects.value
 }
 
 async function runImageGen(node: WbNode) {
@@ -2536,54 +2559,141 @@ onUnmounted(() => {
       <span v-else class="wb-minimap__empty">暂无节点</span>
     </div>
 
-    <!-- 工具栏 -->
+    <!-- 工具栏（只留运行） -->
     <div class="workbench__toolbar">
       <button class="wb-btn wb-btn--run" type="button" title="运行画布 (Ctrl+Enter)" @click="runWorkflow">▶ 运行</button>
-      <div class="wb-add">
-        <button class="wb-btn wb-btn--primary" type="button" @click="addMenuOpen = !addMenuOpen">＋ 添加节点 ▾</button>
-        <div v-if="addMenuOpen" class="wb-add__menu">
-          <input v-model="addSearch" class="wb-add__search" placeholder="搜索节点…" @pointerdown.stop />
-          <template v-for="(item, index) in addMenuList" :key="item.label">
-            <div v-if="index === 0 || addMenuList[index - 1].group !== item.group" class="wb-add__group">
-              {{ item.group }}
-            </div>
-            <button
-              type="button"
-              @click="item.action(); addMenuOpen = false; addSearch = ''"
-            >
-              {{ item.icon }} {{ item.label }}
-            </button>
-          </template>
-          <p v-if="!addMenuList.length" class="wb-add__empty">没有匹配的节点</p>
-        </div>
-      </div>
-      <button class="wb-btn" type="button" title="保存画布 (Ctrl+S)" @click="saveWorkflow">保存</button>
-      <button class="wb-btn" type="button" title="打开画布 (Ctrl+O)" @click="openWorkflow">打开</button>
-      <button class="wb-btn" type="button" @click="managerOpen = !managerOpen">管理器</button>
-      <button class="wb-btn" type="button" @click="apiPanelOpen = !apiPanelOpen">API 配置</button>
-      <span class="workbench__divider"></span>
-      <button class="wb-btn wb-btn--icon" type="button" title="撤销 (Ctrl+Z)" :disabled="undoStack.length === 0" @click="undo">↶</button>
-      <button class="wb-btn wb-btn--icon" type="button" title="重做 (Ctrl+Shift+Z)" :disabled="redoStack.length === 0" @click="redo">↷</button>
-      <button
-        class="wb-btn"
-        :class="{ 'wb-btn--active': snapGrid }"
-        type="button"
-        :title="snapGrid ? '关闭网格吸附' : '开启网格吸附'"
-        @click="snapGrid = !snapGrid"
-      >
-        吸附
-      </button>
-      <span class="workbench__divider"></span>
-      <button class="wb-btn" type="button" :disabled="selectedNodeIds.length === 0 && selectedEdgeId === null" @click="removeSelected">删除选中</button>
-      <button class="wb-btn" type="button" :disabled="selectedNodeIds.length === 0" @click="rotateSelectedNode">旋转</button>
-      <button class="wb-btn" type="button" :disabled="nodes.length === 0" @click="clearCanvas">清空</button>
-      <span class="workbench__divider"></span>
-      <button class="wb-btn wb-btn--icon" type="button" title="缩小" @click="zoomOut">−</button>
-      <span class="workbench__zoom">{{ Math.round(zoom * 100) }}%</span>
-      <button class="wb-btn wb-btn--icon" type="button" title="放大" @click="zoomIn">＋</button>
-      <button class="wb-btn" type="button" title="让所有节点适合窗口" @click="fitToContent">适应</button>
       <span class="workbench__hint">右键添加节点 · 左键拖动平移 · 空格+左键框选 · Ctrl+D 复制 · Ctrl+Z 撤销</span>
     </div>
+
+    <!-- 左栏 -->
+    <aside class="wb-rail" :class="{ 'wb-rail--open': railOpen, 'wb-rail--reduced': reduceMotion }">
+      <div class="wb-rail__icons">
+        <button type="button" class="wb-rail__icon" :class="{ active: railOpen && railTab === 'projects' }" title="项目" @click="toggleRail('projects')">▤</button>
+        <button type="button" class="wb-rail__icon" :class="{ active: railOpen && railTab === 'nodes' }" title="节点库" @click="toggleRail('nodes')">＋</button>
+        <button type="button" class="wb-rail__icon" :class="{ active: railOpen && railTab === 'queue' }" title="队列" @click="toggleRail('queue')">≣</button>
+        <button type="button" class="wb-rail__icon" :class="{ active: railOpen && railTab === 'assets' }" title="结果" @click="toggleRail('assets')">◫</button>
+        <button type="button" class="wb-rail__icon" :class="{ active: railOpen && railTab === 'engine' }" title="引擎" @click="toggleRail('engine')">⚡</button>
+      </div>
+      <div class="wb-rail__spacer"></div>
+      <button type="button" class="wb-rail__icon" :class="{ active: railOpen && railTab === 'settings' }" title="设置" @click="toggleRail('settings')">…</button>
+    </aside>
+
+    <!-- 动态按钮区 -->
+    <div class="wb-rail__dynamic" :class="{ 'wb-rail--reduced': reduceMotion }">
+      <template v-if="selectedSingleNode">
+        <button class="wb-btn wb-btn--icon" type="button" title="运行此节点" @click="runNode(selectedSingleNode)">▶</button>
+        <button class="wb-btn wb-btn--icon" type="button" title="复制" @click="copySelected">⧉</button>
+        <button class="wb-btn wb-btn--icon" type="button" title="粘贴" :disabled="!clipboard?.nodes.length" @click="pasteNodes()">📋</button>
+        <button class="wb-btn wb-btn--icon" type="button" title="删除" @click="removeSelected">✕</button>
+        <button class="wb-btn" type="button" title="保存内容" @click="saveNodeContent(selectedSingleNode)">保存内容</button>
+        <template v-if="selectedSingleNode.genOpen !== undefined">
+          <button class="wb-btn" type="button" @click="selectedSingleNode.genOpen = !selectedSingleNode.genOpen">
+            {{ selectedSingleNode.genOpen ? '收起生成器' : '展开生成器' }}
+          </button>
+        </template>
+      </template>
+      <template v-else>
+        <button class="wb-btn wb-btn--icon" type="button" title="添加节点" @click="railOpen = true; railTab = 'nodes'">＋</button>
+        <button class="wb-btn wb-btn--icon" type="button" title="保存 (Ctrl+S)" @click="saveWorkflow">💾</button>
+        <button class="wb-btn wb-btn--icon" type="button" title="打开 (Ctrl+O)" @click="openWorkflow">📂</button>
+        <button class="wb-btn wb-btn--icon" type="button" title="撤销 (Ctrl+Z)" :disabled="undoStack.length === 0" @click="undo">↶</button>
+        <button class="wb-btn wb-btn--icon" type="button" title="重做" :disabled="redoStack.length === 0" @click="redo">↷</button>
+        <button class="wb-btn wb-btn--icon" type="button" title="缩小" @click="zoomOut">－</button>
+        <button class="wb-btn wb-btn--icon" type="button" title="放大" @click="zoomIn">＋</button>
+        <button class="wb-btn" type="button" title="适配全部节点" @click="fitToContent">适配</button>
+        <button class="wb-btn" type="button" title="清空画布" :disabled="nodes.length === 0" @click="clearCanvas">清空</button>
+      </template>
+    </div>
+
+    <!-- 左栏面板 -->
+    <section v-if="railOpen" class="wb-rail__panel" :class="{ 'wb-rail--reduced': reduceMotion }">
+      <template v-if="railTab === 'projects'">
+        <h3 class="wb-rail__panel-title">项目</h3>
+        <div class="wb-rail__row">
+          <button class="wb-btn" type="button" @click="clearCanvas">新建画布</button>
+          <button class="wb-btn" type="button" @click="saveWorkflow">保存</button>
+          <button class="wb-btn" type="button" @click="openWorkflow">打开</button>
+        </div>
+        <ul v-if="recentProjects.length" class="wb-rail__list">
+          <li v-for="item in recentProjects" :key="item.path" class="wb-rail__item">
+            <button type="button" class="wb-rail__item-main" @click="openProjectFile(item.path)">
+              <b>{{ item.name }}</b>
+              <small>{{ new Date(item.updatedAt).toLocaleString('zh-CN') }}</small>
+            </button>
+            <button type="button" class="wb-rail__item-del" title="从列表移除" @click="removeRecentItem(item.path)">✕</button>
+          </li>
+        </ul>
+        <p v-else class="wb-rail__empty">还没有保存过的项目</p>
+      </template>
+
+      <template v-else-if="railTab === 'nodes'">
+        <h3 class="wb-rail__panel-title">节点库</h3>
+        <input v-model="addSearch" class="wb-add__search" placeholder="搜索节点…" />
+        <template v-for="(item, index) in addMenuList" :key="item.label">
+          <div v-if="index === 0 || addMenuList[index - 1].group !== item.group" class="wb-add__group">
+            {{ item.group }}
+          </div>
+          <button type="button" class="wb-rail__node" @click="item.action(); addSearch = ''">
+            {{ item.icon }} {{ item.label }}
+          </button>
+        </template>
+        <p v-if="!addMenuList.length" class="wb-rail__empty">没有匹配的节点</p>
+      </template>
+
+      <template v-else-if="railTab === 'queue'">
+        <h3 class="wb-rail__panel-title">队列</h3>
+        <button class="wb-btn wb-btn--run" type="button" @click="runWorkflow" :disabled="runningRef">▶ 运行</button>
+        <div v-if="runProgress" class="wb-progress">
+          <div class="wb-progress__bar">
+            <div class="wb-progress__fill" :style="{ width: `${runProgress.total ? Math.round((runProgress.done / runProgress.total) * 100) : 0}%` }"></div>
+          </div>
+          <p>正在跑 第 {{ runProgress.done + 1 }}/{{ runProgress.total }} 个节点：{{ runProgress.current || '…' }}</p>
+          <button class="wb-btn wb-btn--danger" type="button" @click="cancelRun">取消运行</button>
+        </div>
+        <p v-else class="wb-rail__empty">还没有运行任务</p>
+      </template>
+
+      <template v-else-if="railTab === 'assets'">
+        <h3 class="wb-rail__panel-title">结果</h3>
+        <div v-if="assets.length" class="wb-assets">
+          <div v-for="asset in assets" :key="asset.id" class="wb-assets__item" draggable="true" @dragstart="onAssetDragStart($event, asset)">
+            <button type="button" class="wb-assets__preview" @click="previewAsset(asset)">
+              <img v-if="asset.type === 'image'" :src="mediaUrl(asset.file)" alt="" />
+              <video v-else-if="asset.type === 'video'" :src="mediaUrl(asset.file)" muted></video>
+              <span v-else class="wb-assets__text">TXT</span>
+            </button>
+            <div class="wb-assets__meta">
+              <b>{{ asset.meta?.node || asset.type }}</b>
+              <small>{{ new Date(asset.createdAt).toLocaleString('zh-CN') }}</small>
+            </div>
+            <div class="wb-assets__actions">
+              <button type="button" title="保存到电脑" @click="saveAsset(asset)">保存</button>
+              <button type="button" title="删除" @click="removeAsset(asset.id)">✕</button>
+            </div>
+          </div>
+          <button class="wb-btn wb-btn--danger" type="button" @click="clearAllAssets">清空全部</button>
+        </div>
+        <p v-else class="wb-rail__empty">运行节点后，结果会出现在这里</p>
+      </template>
+
+      <template v-else-if="railTab === 'engine'">
+        <h3 class="wb-rail__panel-title">引擎</h3>
+        <p class="wb-rail__empty">云端 API（默认）</p>
+        <p class="wb-rail__empty">本地引擎接入将在下一阶段提供</p>
+      </template>
+
+      <template v-else>
+        <h3 class="wb-rail__panel-title">设置</h3>
+        <label class="wb-rail__switch">
+          <input v-model="reduceMotion" type="checkbox" />
+          减弱动画
+        </label>
+        <div class="wb-rail__row">
+          <button class="wb-btn" type="button" @click="apiPanelOpen = !apiPanelOpen">API 配置</button>
+          <button class="wb-btn" type="button" @click="managerOpen = !managerOpen">节点管理器</button>
+        </div>
+      </template>
+    </section>
 
     <!-- 节点管理器 -->
     <div v-if="managerOpen" class="workbench__manager">
@@ -2689,6 +2799,8 @@ onUnmounted(() => {
         <span>右键画布空白处，添加任意节点（图片 / 视频 / 文本 / 已安装节点）</span>
       </div>
     </Transition>
+
+    <div v-if="toast" class="wb-toast">{{ toast.text }}</div>
 
     <ContextMenu
       v-if="contextMenu"
@@ -3795,5 +3907,290 @@ onUnmounted(() => {
 .wb-empty-enter-from,
 .wb-empty-leave-to {
   opacity: 0;
+}
+
+/* ---------- 左栏 ---------- */
+.wb-rail {
+  position: absolute;
+  left: 12px;
+  top: 64px;
+  bottom: 14px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  width: 52px;
+  background: rgba(26, 26, 46, 0.72);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 8px 6px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+  animation: wb-slide-in 0.2s ease-out;
+}
+.wb-rail__icons {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wb-rail__spacer {
+  flex: 1;
+}
+.wb-rail__icon {
+  width: 40px;
+  height: 40px;
+  border: none;
+  border-radius: 10px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.wb-rail__icon:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  transform: translateY(-1px);
+}
+.wb-rail__icon.active {
+  background: rgba(96, 165, 250, 0.28);
+  color: #93c5fd;
+}
+.wb-rail__panel {
+  position: absolute;
+  left: 76px;
+  top: 64px;
+  bottom: 14px;
+  z-index: 29;
+  width: 300px;
+  background: rgba(26, 26, 46, 0.9);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 14px;
+  overflow: auto;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.3);
+  animation: wb-slide-in 0.2s ease-out;
+}
+.wb-rail__dynamic {
+  position: absolute;
+  left: 12px;
+  top: 14px;
+  z-index: 28;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(26, 26, 46, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  animation: wb-pop 0.18s ease-out;
+}
+.wb-rail__panel-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  color: #fff;
+}
+.wb-rail__row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.wb-rail__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wb-rail__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.wb-rail__item-main {
+  flex: 1;
+  text-align: left;
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+}
+.wb-rail__item-main b,
+.wb-rail__item-main small {
+  display: block;
+}
+.wb-rail__item-main small {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+}
+.wb-rail__item-del {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+}
+.wb-rail__item-del:hover {
+  color: #f87171;
+}
+.wb-rail__node {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  margin-top: 4px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  cursor: pointer;
+}
+.wb-rail__node:hover {
+  background: rgba(96, 165, 250, 0.22);
+}
+.wb-rail__empty {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.wb-rail__switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+.wb-progress {
+  margin-top: 12px;
+}
+.wb-progress__bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+.wb-progress__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #60a5fa, #a78bfa);
+  transition: width 0.25s ease;
+}
+.wb-progress p {
+  margin: 8px 0;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12px;
+}
+.wb-assets {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wb-assets__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  cursor: grab;
+}
+.wb-assets__preview {
+  width: 56px;
+  height: 56px;
+  flex: none;
+  border: none;
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+}
+.wb-assets__preview img,
+.wb-assets__preview video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.wb-assets__text {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+}
+.wb-assets__meta {
+  flex: 1;
+  min-width: 0;
+}
+.wb-assets__meta b,
+.wb-assets__meta small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wb-assets__meta small {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+}
+.wb-assets__actions {
+  display: flex;
+  gap: 4px;
+  flex-direction: column;
+}
+.wb-assets__actions button {
+  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 6px;
+}
+.wb-assets__actions button:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+.wb-toast {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 60;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: rgba(30, 41, 59, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  animation: wb-pop 0.2s ease-out;
+}
+
+/* ---------- 动效 ---------- */
+@keyframes wb-slide-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes wb-pop {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.wb-rail--reduced * {
+  animation: none !important;
+  transition: none !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  .wb-rail,
+  .wb-rail__panel,
+  .wb-rail__dynamic,
+  .wb-toast {
+    animation: none !important;
+  }
 }
 </style>

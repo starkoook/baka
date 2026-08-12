@@ -74,4 +74,14 @@ describe('infinite canvas workbench', () => {
     expect(workbench).toContain('cancelRequested')
     expect(workbench).toContain('function cancelRun')
   })
+
+  it('provides a comfyui-style left rail with panels and animations', () => {
+    expect(workbench).toContain('wb-rail')
+    expect(workbench).toContain('railTab')
+    expect(workbench).toContain('toggleRail')
+    expect(workbench).toContain('wb-rail__dynamic')
+    expect(workbench).toContain('wb-progress')
+    expect(workbench).toContain('@keyframes wb-slide-in')
+    expect(workbench).toContain('@media (prefers-reduced-motion: reduce)')
+  })
 })
