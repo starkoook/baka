@@ -91,7 +91,7 @@ describe('infinite canvas workbench', () => {
     expect(workbench).toContain('workbench__toolbar')
     expect(workbench).toContain('wb-btn--run')
     expect(workbench).toContain('添加节点')
-    expect(workbench).toContain('保存画布 (Ctrl+S)')
+    expect(workbench).not.toContain('title="保存画布 (Ctrl+S)"')
   })
 
   it('collects generated results into an asset panel with drag-back', () => {
