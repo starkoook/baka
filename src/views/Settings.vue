@@ -330,7 +330,7 @@ onMounted(() => {
           <span class="sk-card-icon">🔊</span>
           <div>
             <div class="sk-card-title">界面音效</div>
-            <div class="sk-card-sub">二次元风点击音（piko♪）</div>
+            <div class="sk-card-sub">二次元萌系语音（nya～/笑声，CC0 免费音源）</div>
           </div>
         </div>
         <label class="sk-sound-toggle">
