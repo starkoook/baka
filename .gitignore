@@ -18,6 +18,19 @@ lora-rescripts-main/
 # 操作系统/工具残留
 nul
 
+# 本地预览/截图/日志/临时文件
+*preview.html
+ui-*.png
+ui-*.log
+/mihoyo-screen.png
+/DatasetsDeputy/
+/*dir-tree.txt
+/scripts/.tmp-shot-*.js
+/.claude/
+/tools/CLAUDE.md
+/交付文件/
+/📦 从图库导入.已标/
+
 # electron-builder / electron 构建缓存(重定向到 D 盘工程内)
 .cache/
 
