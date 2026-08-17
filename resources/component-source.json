@@ -1,0 +1,5 @@
+{
+  "formatVersion": 1,
+  "manifestUrl": "",
+  "note": "公开发布时仅需填写 HTTPS 组件清单地址；当前版本使用本地测试源或导入缓存。"
+}

@@ -7,19 +7,21 @@ import TrainingComponentsPanel from '@/components/settings/TrainingComponentsPan
 const appStore = useAppStore()
 
 // ── Tab state ──
-type TabId = 'api' | 'appearance' | 'components' | 'cache' | 'about'
+type TabId = 'api' | 'appearance' | 'components' | 'cache' | 'recycle' | 'about'
 const activeTab = ref<TabId>('api')
 const tabs: { id: TabId; label: string; icon: string }[] = [
   { id: 'components', label: '训练组件', icon: 'Lo' },
   { id: 'api', label: 'API', icon: '☁' },
   { id: 'appearance', label: '外观', icon: '🎨' },
   { id: 'cache', label: '缓存', icon: '🗂' },
+  { id: 'recycle', label: '回收站', icon: '♻' },
   { id: 'about', label: '关于', icon: 'ℹ' },
 ]
 
 // ── API config ──
 const provider = ref('openai')
 const apiKey = ref('')
+const apiKeys = ref('')
 const baseUrl = ref('')
 const model = ref('gpt-4o')
 const temperature = ref(0.3)
@@ -35,6 +37,31 @@ const showApiKey = ref(false)
 // ── Cache ──
 const cacheItems = ref<{ name: string; size: string }[]>([])
 const cacheTotal = ref('')
+
+const recycleItems = ref<RecycleItem[]>([])
+
+async function loadRecycleItems() {
+  if (!window.recycleAPI) return
+  const result = await window.recycleAPI.list()
+  if (result.success && result.data) recycleItems.value = result.data
+}
+
+async function restoreRecycleItem(id: number) {
+  if (!window.recycleAPI) return
+  const result = await window.recycleAPI.restore(id)
+  if (result.success) appStore.setStatus('已恢复到原位置')
+  else appStore.setError(result.error || '恢复失败')
+  await loadRecycleItems()
+}
+
+async function purgeRecycleItem(id: number) {
+  if (!window.recycleAPI) return
+  if (!confirm('确定彻底删除这个回收站项目吗？')) return
+  const result = await window.recycleAPI.purge(id)
+  if (result.success) appStore.setStatus('已彻底删除')
+  else appStore.setError(result.error || '删除失败')
+  await loadRecycleItems()
+}
 
 // ── Theme ──
 const isLight = computed(() => appStore.theme === 'light')
@@ -91,6 +118,7 @@ async function loadConfig() {
   if (c) {
     provider.value = c.provider || 'openai'
     apiKey.value = c.apiKey || ''
+    apiKeys.value = Array.isArray(c.apiKeys) ? c.apiKeys.join('\n') : ''
     baseUrl.value = c.baseUrl || ''
     model.value = c.model || 'gpt-4o'
     temperature.value = c.temperature ?? 0.3
@@ -110,6 +138,7 @@ async function saveConfig() {
     provider: provider.value, apiKey: apiKey.value, baseUrl: baseUrl.value,
     model: model.value, temperature: temperature.value,
     maxTokens: maxTokens.value, prompt: systemPrompt.value,
+    apiKeys: apiKeys.value.split('\n').map((key) => key.trim()).filter(Boolean),
   })
   appStore.setStatus('配置已保存')
 }
@@ -173,6 +202,7 @@ async function clearCache(target: string) {
 onMounted(() => {
   void loadConfig()
   void refreshPosterPreviews()
+  void loadRecycleItems()
 })
 </script>
 
@@ -240,6 +270,10 @@ onMounted(() => {
             <input class="form-input" :type="showApiKey ? 'text' : 'password'" v-model="apiKey" placeholder="sk-..." />
             <button class="sk-eye" @click="showApiKey = !showApiKey">{{ showApiKey ? '🙈' : '👁' }}</button>
           </div>
+        </div>
+        <div class="sk-field">
+          <label class="form-label">多个 API Key（每行一个，自动轮换）</label>
+          <textarea class="form-textarea" v-model="apiKeys" rows="3" placeholder="sk-...\nsk-..."></textarea>
         </div>
 
         <!-- Model -->
@@ -415,6 +449,30 @@ onMounted(() => {
           </div>
         </div>
         <div v-else class="sk-empty-state">暂无缓存数据</div>
+      </div>
+    </div>
+
+    <!-- ───────────── 回收站 ───────────── -->
+    <div v-if="activeTab === 'recycle'" class="sk-panel">
+      <div class="cabin-panel sk-card">
+        <span class="cabin-label">/// RECYCLE BIN</span>
+        <div class="cabin-panel-br"></div>
+        <div class="sk-card-header">
+          <span class="sk-card-icon">♻</span>
+          <div>
+            <div class="sk-card-title">回收站</div>
+            <div class="sk-card-sub">误删的图片和标签可以从这里恢复</div>
+          </div>
+        </div>
+        <div class="sk-cache-list" v-if="recycleItems.length > 0">
+          <div v-for="item in recycleItems" :key="item.id" class="sk-cache-row">
+            <span class="sk-cache-name">{{ item.original_path }}</span>
+            <span class="sk-cache-size">{{ item.kind }}</span>
+            <button class="btn btn-ghost btn-sm" @click="restoreRecycleItem(item.id)">恢复</button>
+            <button class="btn btn-ghost btn-sm" @click="purgeRecycleItem(item.id)">彻底删除</button>
+          </div>
+        </div>
+        <div v-else class="sk-empty-state">回收站是空的</div>
       </div>
     </div>
 

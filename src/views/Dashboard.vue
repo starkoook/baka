@@ -51,13 +51,28 @@ const displayTask = computed(() => {
   if (!name || !pipelineStore.currentTask) return null
   return { ...pipelineStore.currentTask, name }
 })
+const annotationTotal = computed(() => taggerStore.queue.length)
+const annotationDone = computed(() => taggerStore.queue.filter((item) => item.status === 'reviewed').length)
+const annotationRemaining = computed(() => Math.max(0, annotationTotal.value - annotationDone.value))
+const annotationPercent = computed(() => (annotationTotal.value > 0 ? Math.round((annotationDone.value / annotationTotal.value) * 100) : 0))
+const taskPercent = computed(() => {
+  const progress = displayTask.value?.progress ?? 0
+  return Number.isFinite(progress) ? Math.min(100, Math.max(0, progress)) : 0
+})
+
+const QUICK_TOOLS = [
+  { label: '图库', route: '/gallery' },
+  { label: '标注', route: '/tagger' },
+  { label: '训练', route: '/training' },
+  { label: '放大', route: '/upscale' },
+]
 
 function getRegisteredRoute(route: string) {
   return resolveDashboardRoute(route, (candidate) => router.resolve(candidate).matched.length > 0)
 }
 
 function continueWork() {
-  void router.push(getRegisteredRoute(continueAction.value.route))
+  appStore.toolPickerOpen = true
 }
 
 function navigate(route: string) {
@@ -76,7 +91,7 @@ onMounted(() => {
     <div class="dashboard-ambient" aria-hidden="true"></div>
     <div class="dashboard-hero-layer">
       <BrandHero
-        :action-label="continueAction.label"
+        action-label="开始工作"
         :show-artwork="appStore.showMascot"
         @action="continueWork"
       />
@@ -96,6 +111,56 @@ onMounted(() => {
           <h2 id="system-summary-title">系统监控</h2>
         </header>
         <SystemMonitor class="dashboard-system" />
+      </section>
+
+      <section class="dashboard-widgets" aria-label="工作台概览">
+        <article class="widget widget--quick">
+          <header><span>快捷入口</span><h3>快速打开</h3></header>
+          <div class="widget__quick">
+            <button
+              v-for="tool in QUICK_TOOLS"
+              :key="tool.route"
+              type="button"
+              @click="navigate(tool.route)"
+            >
+              {{ tool.label }}
+            </button>
+          </div>
+        </article>
+
+        <article class="widget">
+          <header><span>标注</span><h3>标注进度</h3></header>
+          <div class="widget__progress">
+            <div class="widget__row"><span>已完成</span><b>{{ annotationDone }}</b></div>
+            <div class="widget__row"><span>待处理</span><b>{{ annotationRemaining }}</b></div>
+            <div class="widget__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="annotationPercent">
+              <i :style="{ width: `${annotationPercent}%` }"></i>
+            </div>
+            <p v-if="annotationTotal > 0">{{ annotationPercent }}% 完成</p>
+            <p v-else>暂无标注任务</p>
+          </div>
+        </article>
+
+        <article class="widget">
+          <header><span>训练</span><h3>任务状态</h3></header>
+          <div v-if="displayTask" class="widget__task">
+            <strong>{{ displayTask.name }}</strong>
+            <span>{{ displayTask.speed }} · 预计 {{ displayTask.eta }}</span>
+            <div class="widget__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="taskPercent">
+              <i :style="{ width: `${taskPercent}%` }"></i>
+            </div>
+          </div>
+          <p v-else class="widget__empty">暂无进行中的任务</p>
+        </article>
+
+        <article class="widget">
+          <header><span>图库</span><h3>素材概览</h3></header>
+          <div class="widget__numbers">
+            <div><b>{{ summaryInput.imageCount }}</b><span>图片</span></div>
+            <div><b>{{ galleryStore.roots.length }}</b><span>来源</span></div>
+            <div><b>{{ galleryStore.datasets.length }}</b><span>数据集</span></div>
+          </div>
+        </article>
       </section>
     </div>
 
@@ -217,6 +282,156 @@ onMounted(() => {
   display: none;
 }
 
+.dashboard-widgets {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.widget {
+  min-width: 0;
+  padding: 18px 18px 20px;
+  border-radius: var(--radius-panel);
+  background: color-mix(in srgb, var(--surface-primary) 88%, var(--brand-soft));
+  box-shadow: var(--surface-shadow);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.widget:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.12);
+}
+
+.widget header {
+  min-height: 42px;
+  margin-bottom: 10px;
+}
+
+.widget header span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink-tertiary);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.widget h3 {
+  margin: 0;
+  color: var(--ink-primary);
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.widget__quick {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.widget__quick button {
+  height: 40px;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: var(--surface-secondary);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 620;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.widget__quick button:hover {
+  background: var(--brand-soft);
+  color: var(--brand-primary);
+  transform: translateY(-1px);
+}
+
+.widget__progress,
+.widget__task {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.widget__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.widget__row b {
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 14px;
+}
+
+.widget__track {
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--surface-secondary);
+  overflow: hidden;
+}
+
+.widget__track i {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--brand-primary);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--brand-primary) 55%, transparent);
+  transition: width 300ms ease;
+}
+
+.widget__progress p,
+.widget__empty {
+  margin: 2px 0 0;
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.widget__task strong {
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-weight: 680;
+}
+
+.widget__task span {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.widget__numbers {
+  display: flex;
+  gap: 12px;
+}
+
+.widget__numbers div {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+}
+
+.widget__numbers b {
+  display: block;
+  color: var(--brand-primary);
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.widget__numbers span {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-tertiary);
+  font-size: 10.5px;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .dashboard-workspace-layer:has(.recent-work:hover) .system-summary,
   .dashboard-workspace-layer:has(.system-summary:hover) .recent-work {
@@ -254,11 +469,19 @@ onMounted(() => {
   .system-summary {
     transform-origin: center;
   }
+
+  .dashboard-widgets {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 760px) {
   .dashboard-workspace-layer {
     margin-inline: 10px;
+  }
+
+  .dashboard-widgets {
+    grid-template-columns: 1fr;
   }
 }
 

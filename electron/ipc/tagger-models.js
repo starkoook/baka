@@ -24,6 +24,15 @@ const KNOWN_MODELS = {
   'deepdanbooru': { quality: 'low', speed: 'fast', memoryMb: 1024, resolution: 512, inputLayout: 'nhwc', normalization: 'wd14_bgr', outputActivation: 'identity', resizeMode: 'letterbox', padColor: [255,255,255], defaultThreshold: 0.35, characterThreshold: 0.85, maxTags: 50 },
 }
 
+const DOWNLOADABLE_MODELS = [
+  { id: 'wd-v1-4-vit-tagger-v2', name: 'WD14 ViT v2（快、体积小）', repo: 'SmilingWolf/wd-v1-4-vit-tagger-v2' },
+  { id: 'wd-v1-4-convnext-tagger-v2', name: 'WD14 ConvNext v2（较快）', repo: 'SmilingWolf/wd-v1-4-convnext-tagger-v2' },
+  { id: 'wd-v1-4-convnextv2-tagger-v2', name: 'WD14 ConvNextV2 v2（较快）', repo: 'SmilingWolf/wd-v1-4-convnextv2-tagger-v2' },
+  { id: 'wd-v1-4-swinv2-tagger-v2', name: 'WD14 SwinV2 v2（质量高）', repo: 'SmilingWolf/wd-v1-4-swinv2-tagger-v2' },
+  { id: 'wd-swinv2-tagger-v3', name: 'WD SwinV2 v3（质量高）', repo: 'SmilingWolf/wd-swinv2-tagger-v3' },
+  { id: 'wd-convnext-tagger-v3', name: 'WD ConvNext v3（较快）', repo: 'SmilingWolf/wd-convnext-tagger-v3' },
+]
+
 function matchKnownModel(filename) {
   const base = path.basename(filename, path.extname(filename)).toLowerCase()
   for (const [key, meta] of Object.entries(KNOWN_MODELS)) {
@@ -207,6 +216,76 @@ function registerModelHandlers() {
       return { success: true }
     } catch (e) { return { success: false, error: e.message } }
   })
+
+  ipcMain.handle('taggerV2:listDownloadableModels', async () => {
+    const dirPath = getDefaultModelDir()
+    return {
+      success: true,
+      data: DOWNLOADABLE_MODELS.map((model) => ({
+        ...model,
+        installed: fs.existsSync(path.join(dirPath, `${model.id}.onnx`)),
+      })),
+    }
+  })
+
+  ipcMain.handle('taggerV2:downloadModel', async (event, modelId) => {
+    const model = DOWNLOADABLE_MODELS.find((item) => item.id === modelId)
+    if (!model) return { success: false, error: '没有找到这个可下载模型。' }
+    const dirPath = getDefaultModelDir()
+    if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true })
+
+    const sendProgress = (received, total) => {
+      if (event.sender && !event.sender.isDestroyed()) {
+        event.sender.send('taggerV2:downloadProgress', { modelId, received, total })
+      }
+    }
+
+    const onnxUrl = `https://huggingface.co/${model.repo}/resolve/main/model.onnx`
+    const csvUrl = `https://huggingface.co/${model.repo}/resolve/main/selected_tags.csv`
+    const onnxPath = path.join(dirPath, `${model.id}.onnx`)
+    const csvPath = path.join(dirPath, `${model.id}.csv`)
+
+    try {
+      await downloadFile(onnxUrl, onnxPath, sendProgress)
+      sendProgress(1, 1)
+      try { await downloadFile(csvUrl, csvPath, () => {}) } catch (_) {}
+      return { success: true, data: { dirPath, models: scanModels(dirPath) } }
+    } catch (error) {
+      try { fs.unlinkSync(onnxPath) } catch (_) {}
+      return { success: false, error: error.message }
+    }
+  })
 }
 
-module.exports = { registerModelHandlers, scanModels, detectProviders, getGpuInfo }
+function downloadFile(url, destPath, onProgress) {
+  const https = require('https')
+  const follow = (currentUrl) => new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(destPath)
+    https.get(currentUrl, (response) => {
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        file.close()
+        try { fs.unlinkSync(destPath) } catch (_) {}
+        resolve(follow(new URL(response.headers.location, currentUrl).toString()))
+        return
+      }
+      if (response.statusCode !== 200) {
+        file.close()
+        try { fs.unlinkSync(destPath) } catch (_) {}
+        reject(new Error(`下载失败（HTTP ${response.statusCode}）`))
+        return
+      }
+      const total = Number(response.headers['content-length'] || 0)
+      let received = 0
+      response.on('data', (chunk) => {
+        received += chunk.length
+        onProgress?.(received, total)
+      })
+      response.pipe(file)
+      file.on('finish', () => { file.close(); resolve() })
+      file.on('error', reject)
+    }).on('error', reject)
+  })
+  return follow(url)
+}
+
+module.exports = { registerModelHandlers, scanModels, detectProviders, getGpuInfo, downloadFile }

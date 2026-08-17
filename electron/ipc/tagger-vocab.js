@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const { TagCatalog } = require('./tag-catalog')
 
 // ── Trie for prefix-based tag search ──
 
@@ -144,6 +145,17 @@ const BUILTIN_TAGS = [
 
 let trie = null
 let sortedVocab = [] // for contains/includes search
+let catalogPromise = null
+
+function getCatalog() {
+  if (!catalogPromise) {
+    catalogPromise = TagCatalog.load({
+      zhPath: path.join(__dirname, '../../resources/tag-data/danbooru-0-zh.csv'),
+      characterPath: path.join(__dirname, '../../resources/tag-data/danbooru_character_tags.csv'),
+    }).catch(() => new TagCatalog([]))
+  }
+  return catalogPromise
+}
 
 function buildIndex() {
   if (trie) return // already built
@@ -192,6 +204,11 @@ function searchTags(query, matchMode = 'prefix', limit = 20, category = null) {
   return results.slice(0, limit)
 }
 
+async function translateTags(tags, direction = 'en2zh') {
+  const catalog = await getCatalog()
+  return catalog.translateTags(tags, direction)
+}
+
 /**
  * Load additional tags from a CSV file.
  * CSV format: name,category,post_count (optional header)
@@ -230,6 +247,19 @@ function registerVocabHandlers() {
 
   ipcMain.handle('taggerV2:searchTags', async (_event, query, matchMode = 'prefix', limit = 20, category = null) => {
     try {
+      const hasChinese = /[\u4e00-\u9fff]/.test(query || '')
+      if (hasChinese) {
+        const catalog = await getCatalog()
+        const entries = catalog.searchChinese(query).slice(0, limit)
+        const data = entries.map(entry => ({
+          tag: entry.tag,
+          category: 'character',
+          postCount: 0,
+          chineseName: entry.chineseNames?.[0] || '',
+          parent: entry.parent || '',
+        }))
+        return { success: true, data }
+      }
       if (!trie) buildIndex()
       const results = searchTags(query, matchMode, limit, category)
       return { success: true, data: results }
@@ -250,6 +280,15 @@ function registerVocabHandlers() {
       return { success: false, error: e.message }
     }
   })
+
+  ipcMain.handle('taggerV2:translateTags', async (_event, tags, direction = 'en2zh') => {
+    try {
+      const data = await translateTags(tags, direction)
+      return { success: true, data }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
 }
 
-module.exports = { registerVocabHandlers, searchTags, loadCsvVocab, buildIndex }
+module.exports = { registerVocabHandlers, searchTags, translateTags, loadCsvVocab, buildIndex }

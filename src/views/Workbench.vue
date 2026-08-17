@@ -3,6 +3,19 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useAppStore } from '@/stores/app'
 import { useWorkbenchStore, type WorkbenchAction } from '@/stores/workbench'
 import ContextMenu, { type ContextMenuItem } from '@/components/common/ContextMenu.vue'
+import ImageLoadNode from '@/components/workbench/ImageLoadNode.vue'
+import AiImageEditNode from '@/components/workbench/AiImageEditNode.vue'
+import LocalEngineSetup from '@/components/workbench/LocalEngineSetup.vue'
+import ComfyDependencyNotice from '@/components/workbench/ComfyDependencyNotice.vue'
+import ComfyDependencyManager from '@/components/workbench/ComfyDependencyManager.vue'
+import { applyMetadataDefaults, arrangeDroppedImages, type GenerationMetadata } from '@/features/workbench/image-nodes'
+import {
+  createMinimapTransform,
+  minimapToWorld,
+  minimapViewportRect,
+  visibleWorldRect,
+  worldToMinimap,
+} from '@/features/workbench/minimap'
 
 const appStore = useAppStore()
 const wbStore = useWorkbenchStore()
@@ -45,6 +58,17 @@ interface WbNode {
   genPrompt?: string
   genSize?: string
   genOpen?: boolean
+  filePath?: string
+  mimeType?: string
+  imageWidth?: number
+  imageHeight?: number
+  metadata?: GenerationMetadata
+  editPrompt?: string
+  outputSize?: string
+  maskImageBase64?: string
+  editTouched?: Partial<Record<'model' | 'editPrompt' | 'outputSize', boolean>>
+  engineMode?: 'cloud' | 'local'
+  engineProfileId?: string
 }
 
 interface WbEdge {
@@ -73,7 +97,8 @@ interface DragState {
 
 // 内置节点类型 + 用户自定义节点共同构成开放注册表：任何 JSON 节点定义都能添加
 const BUILTIN_NODES: { kind: string; label: string; icon: string }[] = [
-  { kind: 'image', label: '图片节点', icon: '⬡' },
+  { kind: 'image', label: '加载图片', icon: '⬡' },
+  { kind: 'ai-image-edit', label: 'AI 图片编辑', icon: '✦' },
   { kind: 'video', label: '视频节点', icon: '▶' },
   { kind: 'text', label: '文本节点', icon: '❝' },
   { kind: 'reroute', label: '绕线节点', icon: '◎' },
@@ -97,15 +122,7 @@ const apiTesting = ref<string | null>(null)
 const apiFetchingModels = ref(false)
 const apiModels = ref<string[]>([])
 const nodeModelCache = ref<Record<string, string[]>>({})
-const gridPopup = ref<number | null>(null)
-const resizePopup = ref<number | null>(null)
-const cropState = ref<{
-  nodeId: number
-  x1: number
-  y1: number
-  x2: number
-  y2: number
-} | null>(null)
+const localModelCache = ref<Record<string, string[]>>({})
 const apiMessage = ref<{ ok: boolean; text: string } | null>(null)
 const apiForm = ref<WorkbenchApiConfig>({ id: '', name: '', provider: 'openai', baseUrl: '', apiKey: '', model: '' })
 const contextMenu = ref<{ x: number; y: number; items: ContextMenuItem[]; searchable?: boolean } | null>(null)
@@ -113,9 +130,11 @@ const currentWorkflowFile = ref<string | null>(null)
 const autosaveTimer = ref<number | null>(null)
 const runningRef = ref(false)
 const cancelRequested = ref(false)
+const activeChatRequestId = ref<string | null>(null)
 const runProgress = ref<{ done: number; total: number; current: string } | null>(null)
 const assets = ref<AssetRecord[]>([])
 const assetPreview = ref<AssetRecord | null>(null)
+const assetPreviewText = ref('')
 const recentProjects = ref<{ path: string; name: string; updatedAt: number }[]>([])
 const toast = ref<{ text: string } | null>(null)
 let toastTimer: number | null = null
@@ -126,6 +145,11 @@ const repoUrl = ref('')
 const importing = ref(false)
 const updatingFile = ref<string | null>(null)
 const managerMessage = ref<{ ok: boolean; text: string } | null>(null)
+const engineSetupOpen = ref(false)
+const dependencyManagerOpen = ref(false)
+const engineProfiles = ref<LocalEngineProfile[]>([])
+const dependencyRecords = ref<Record<number, ComfyDependencyRecord[]>>({})
+const dependencyBusyRepository = ref('')
 const zoom = ref(1)
 const pan = ref({ x: 80, y: 80 })
 const snapGrid = ref(true)
@@ -175,7 +199,9 @@ function minNodeSize(node: WbNode) {
   const w = NODE_WIDTH
   switch (node.kind) {
     case 'image':
-      return { w, h: node.genOpen ? TITLE_HEIGHT + 430 : TITLE_HEIGHT + 160 }
+      return { w, h: TITLE_HEIGHT + 310 }
+    case 'ai-image-edit':
+      return { w, h: TITLE_HEIGHT + 410 }
     case 'text':
       return { w, h: node.genOpen ? TITLE_HEIGHT + 330 : TITLE_HEIGHT + 130 }
     case 'ai-tag':
@@ -286,43 +312,46 @@ function toggleSelection(id: number) {
 // ---------- 节点创建（开放注册：内置 + 自定义 JSON 节点） ----------
 async function addImageNodes(files: string[], pos?: { x: number; y: number } | null) {
   let count = 0
+  const createdIds: number[] = []
+  const positions = arrangeDroppedImages(pos ?? { x: 60, y: 60 }, files.length, NODE_WIDTH)
   for (const filePath of files) {
     const ext = filePath.split('.').pop()?.toLowerCase() ?? ''
-    const name = filePath.split(/[/\\]/).pop() || filePath
     if (['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v'].includes(ext)) continue
-    const result = await window.fsAPI?.readImageBase64(filePath)
-    if (!result?.success || !result.base64) continue
-    const image = document.createElement('img')
-    const dataUrl = `data:${result.mime || 'image/png'};base64,${result.base64}`
-    image.src = dataUrl
-    const ratio = await new Promise<number>((resolve) => {
-      image.onload = () => resolve(image.naturalHeight / image.naturalWidth || 1)
-      image.onerror = () => resolve(1)
-    })
-    const contentH = Math.min(320, Math.max(100, Math.round(220 * ratio)))
+    const result = await window.workbenchImageAPI.inspect(filePath)
+    if (!result?.success || !result.image) continue
+    const image = result.image
+    const point = positions[count] ?? { x: (pos?.x ?? 60) + count * 40, y: pos?.y ?? 60 }
+    const id = nextId++
     nodes.value.push({
-      id: nextId++,
-      x: (pos?.x ?? 60) + count * 40,
-      y: (pos?.y ?? 60) + count * 40,
+      id,
+      x: point.x,
+      y: point.y,
       width: NODE_WIDTH,
-      height: TITLE_HEIGHT + Math.max(contentH, 430),
+      height: TITLE_HEIGHT + 310,
       kind: 'image',
-      label: name,
-      src: dataUrl,
-      contentH,
+      label: image.fileName,
+      src: image.dataUrl,
+      filePath: image.filePath,
+      mimeType: image.mimeType,
+      imageWidth: image.width,
+      imageHeight: image.height,
+      metadata: image.metadata,
+      contentH: 310,
       rotation: 0,
-      inputCount: 1,
+      inputCount: 0,
       outputCount: 1,
-      inTypes: ['image'],
       outTypes: ['image'],
-      genMode: 'text',
-      genPrompt: '',
-      genSize: '1024x1024',
-      genOpen: true,
     })
+    createdIds.push(id)
+    const createdNode = nodes.value[nodes.value.length - 1]
+    if (createdNode.metadata?.nodeTypes?.length && comfyProfile.value) await inspectImageDependencies(createdNode)
     count++
   }
-  if (count > 0) appStore.setStatus(`已添加 ${count} 个图片节点`)
+  if (count > 0) {
+    setSelection(createdIds)
+    const ignored = files.length - count
+    appStore.setStatus(`已添加 ${count} 个图片节点${ignored ? `，忽略 ${ignored} 个无法读取的文件` : ''}`)
+  }
 }
 
 function addVideoNodes(files: string[], pos?: { x: number; y: number } | null) {
@@ -491,6 +520,35 @@ function addAITextNode(pos?: { x: number; y: number } | null) {
   addMenuOpen.value = false
 }
 
+function addAIImageEditNode(pos?: { x: number; y: number } | null) {
+  snapshot()
+  nodes.value.push({
+    id: nextId++,
+    x: pos?.x ?? 60 + nodes.value.length * 30,
+    y: pos?.y ?? 60 + nodes.value.length * 30,
+    width: NODE_WIDTH,
+    height: TITLE_HEIGHT + 410,
+    kind: 'ai-image-edit',
+    label: 'AI 图片编辑',
+    src: '',
+    contentH: 410,
+    rotation: 0,
+    inputCount: 1,
+    outputCount: 1,
+    inTypes: ['image'],
+    outTypes: ['image'],
+    model: '',
+    editPrompt: '',
+    outputSize: '',
+    maskImageBase64: '',
+    editTouched: {},
+    engineMode: 'cloud',
+    engineProfileId: '',
+  })
+  appStore.setStatus('已添加 AI 图片编辑节点，请连接一张图片')
+  addMenuOpen.value = false
+}
+
 function addCustomNode(def: NodeDefinition, pos?: { x: number; y: number } | null) {
   snapshot()
   const inputMeta: NodeInputDef[] = (def.inputs ?? []).map((i) =>
@@ -532,10 +590,12 @@ function addBuiltinNode(kind: string, pos?: { x: number; y: number } | null) {
   else if (kind === 'save') addSaveNode(pos)
   else if (kind === 'ai-tag') addAITagNode(pos)
   else if (kind === 'ai-text') addAITextNode(pos)
+  else if (kind === 'ai-image-edit') addAIImageEditNode(pos)
 }
 
 function kindLabel(node: WbNode) {
   if (node.kind === 'image') return '图片'
+  if (node.kind === 'ai-image-edit') return 'AI 图片编辑'
   if (node.kind === 'video') return '视频'
   if (node.kind === 'reroute') return '绕线'
   if (node.kind === 'resize') return '缩放'
@@ -555,6 +615,7 @@ const NODE_CATEGORY: Record<string, string> = {
   reroute: '处理',
   'ai-tag': 'AI',
   'ai-text': 'AI',
+  'ai-image-edit': 'AI',
 }
 
 function nodeCategory(kind: string, defCategory?: string) {
@@ -607,6 +668,68 @@ function addMenuItems(filter = ''): AddMenuEntry[] {
 }
 
 const addMenuList = computed(() => addMenuItems(addSearch.value))
+const selectedImageWithWorkflow = computed(() => {
+  const selected = selectedNodeIds.value.map((id) => nodes.value.find((node) => node.id === id)).find((node) => node?.kind === 'image' && node.metadata?.nodeTypes?.length)
+  return selected || nodes.value.find((node) => node.kind === 'image' && node.metadata?.nodeTypes?.length) || null
+})
+const selectedDependencies = computed(() => selectedImageWithWorkflow.value ? (dependencyRecords.value[selectedImageWithWorkflow.value.id] ?? []) : [])
+const comfyProfile = computed(() => engineProfiles.value.find((profile) => profile.type === 'comfy'))
+const missingDependencyCount = computed(() => selectedDependencies.value.filter((record) => record.status !== 'installed').length)
+
+async function loadEngineProfiles() {
+  if (!window.localEngineAPI) return
+  engineProfiles.value = await window.localEngineAPI.listProfiles()
+  await inspectRestoredImageDependencies()
+}
+
+async function inspectImageDependencies(node: WbNode) {
+  if (!node.metadata?.nodeTypes?.length || !comfyProfile.value) return
+  dependencyRecords.value = {
+    ...dependencyRecords.value,
+    [node.id]: await window.localEngineAPI.resolveDependencies({
+      profileId: comfyProfile.value.id,
+      nodeTypes: node.metadata.nodeTypes,
+      sourceHints: node.metadata.sourceHints,
+    }),
+  }
+}
+
+async function onEngineSaved(profile: LocalEngineProfile) {
+  await loadEngineProfiles()
+  engineSetupOpen.value = false
+  if (profile.type === 'comfy' && selectedImageWithWorkflow.value) await inspectImageDependencies(selectedImageWithWorkflow.value)
+}
+
+function openDependencyPanel() {
+  if (!comfyProfile.value) engineSetupOpen.value = true
+  else dependencyManagerOpen.value = true
+}
+
+async function installDependency(record: ComfyDependencyRecord, repository: string) {
+  if (!comfyProfile.value || !repository) return
+  dependencyBusyRepository.value = repository
+  try {
+    const result = await window.localEngineAPI.installRepository({ profileId: comfyProfile.value.id, repository })
+    record.requiresRestart = result.requiresRestart
+    record.requirementsPath = result.requirementsPath
+    appStore.setStatus(result.requirementsPath ? '节点已拉取，请确认是否安装依赖' : '节点已拉取，请重启 ComfyUI')
+  } catch (reason) { appStore.setStatus(`拉取失败：${(reason as Error).message}`) }
+  finally { dependencyBusyRepository.value = '' }
+}
+
+async function installDependencyRequirements(record: ComfyDependencyRecord, repository: string) {
+  if (!comfyProfile.value || !record.requirementsPath || !repository) return
+  try {
+    await window.localEngineAPI.installRequirements({ profileId: comfyProfile.value.id, repository })
+    record.requirementsPath = undefined
+    appStore.setStatus('依赖已安装，请重启 ComfyUI')
+  } catch (reason) { appStore.setStatus(`依赖安装失败：${(reason as Error).message}`) }
+}
+
+async function copyDependencyName(name: string) {
+  await navigator.clipboard.writeText(name)
+  appStore.setStatus(`已复制节点名称：${name}`)
+}
 
 // ---------- 节点管理器 ----------
 async function loadCustomNodes() {
@@ -783,37 +906,23 @@ const boxHitIds = computed(() => {
 // ---------- 小地图 ----------
 const minimap = computed(() => {
   if (!nodes.value.length) return null
-  let x0 = Infinity
-  let y0 = Infinity
-  let x1 = -Infinity
-  let y1 = -Infinity
-  for (const n of nodes.value) {
-    x0 = Math.min(x0, n.x)
-    y0 = Math.min(y0, n.y)
-    x1 = Math.max(x1, n.x + n.width)
-    y1 = Math.max(y1, n.y + n.height)
-  }
-  const pad = 40
-  x0 -= pad
-  y0 -= pad
-  x1 += pad
-  y1 += pad
-  const bw = x1 - x0
-  const bh = y1 - y0
-  const scale = Math.min(MINI_W / bw, MINI_H / bh)
-  return { x0, y0, scale, ox: (MINI_W - bw * scale) / 2, oy: (MINI_H - bh * scale) / 2 }
+  return createMinimapTransform(
+    nodes.value,
+    visibleWorldRect(pan.value, zoom.value, viewSize.value),
+    { w: MINI_W, h: MINI_H },
+  )
 })
 
 function worldToMini(x: number, y: number) {
   const m = minimap.value
   if (!m) return { x: 0, y: 0 }
-  return { x: m.ox + (x - m.x0) * m.scale, y: m.oy + (y - m.y0) * m.scale }
+  return worldToMinimap({ x, y }, m)
 }
 
 function miniToWorld(mx: number, my: number) {
   const m = minimap.value
   if (!m) return { x: 0, y: 0 }
-  return { x: m.x0 + (mx - m.ox) / m.scale, y: m.y0 + (my - m.oy) / m.scale }
+  return minimapToWorld({ x: mx, y: my }, m)
 }
 
 function themeColor(varName: string, fallback: string) {
@@ -974,13 +1083,22 @@ async function runWorkflow() {
       node.execState = 'running'
       runProgress.value = { done: done.size, total: targets.length, current: node.label }
       await new Promise((r) => setTimeout(r, 150))
+      if (cancelRequested.value) break
+      const requestId = `workbench-${Date.now()}-${node.id}`
+      activeChatRequestId.value = requestId
       try {
-        const ok = await executeNode(node)
+        const ok = await executeNode(node, requestId)
         node.execState = ok ? 'done' : 'error'
-        if (ok) await collectAssetFromNode(node)
+        if (ok && !cancelRequested.value) await collectAssetFromNode(node)
       } catch (e) {
         node.execState = 'error'
         appStore.setStatus(`运行出错（${node.label}）：${(e as Error).message}`)
+      } finally {
+        if (activeChatRequestId.value === requestId) activeChatRequestId.value = null
+      }
+      if (cancelRequested.value) {
+        node.execState = undefined
+        break
       }
       done.add(node.id)
       progressed = true
@@ -1004,6 +1122,7 @@ async function runWorkflow() {
 
 function cancelRun() {
   cancelRequested.value = true
+  if (activeChatRequestId.value) void window.llmAPI?.cancelChat?.(activeChatRequestId.value)
   appStore.setStatus('正在取消…')
 }
 
@@ -1051,43 +1170,6 @@ async function handleWorkbenchAction(name: WorkbenchAction) {
     case 'delete-selected':
       removeSelected()
       break
-  }
-}
-
-async function runImageGen(node: WbNode) {
-  const cfg = apiConfigById(node.apiConfigId)
-  if (!cfg) {
-    node.execState = 'error'
-    appStore.setStatus('未选择 API 配置，请在节点里选择')
-    return
-  }
-  node.execState = 'running'
-  try {
-    const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,/.exec(node.src || '')
-    const imageBase64 =
-      node.genMode === 'image' && node.src
-        ? node.src.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, '')
-        : ''
-    const res = await window.llmAPI?.image({
-      provider: cfg.provider,
-      baseUrl: cfg.baseUrl,
-      apiKey: cfg.apiKey,
-      model: node.model || cfg.model,
-      prompt: node.genPrompt?.trim() || '一张精美的插画',
-      imageBase64: imageBase64 || undefined,
-      mimeType: m ? m[1] : 'image/png',
-      size: node.genSize || '1024x1024',
-    })
-    if (!res?.success) throw new Error(res?.error || '生图失败')
-    const out = res.images?.[0]
-    if (!out) throw new Error('接口没有返回图片')
-    deriveImageNode(node, out)
-    node.execState = 'done'
-    await collectAssetFromNode(node)
-    appStore.setStatus('生成完成 ✓ 已派生新节点')
-  } catch (e) {
-    node.execState = 'error'
-    appStore.setStatus(`生图失败：${(e as Error).message}`)
   }
 }
 
@@ -1152,7 +1234,7 @@ async function runNode(node: WbNode, visited = new Set<number>()) {
 }
 
 function isExecutable(node: WbNode) {
-  return node.kind === 'resize' || node.kind === 'save' || node.kind === 'ai-tag' || node.kind === 'ai-text'
+  return node.kind === 'resize' || node.kind === 'save' || node.kind === 'ai-tag' || node.kind === 'ai-text' || node.kind === 'ai-image-edit'
 }
 
 function inputTextOf(source: WbNode) {
@@ -1177,6 +1259,7 @@ async function loadNodeModels(node: WbNode) {
 }
 
 function nodeModelOptions(node: WbNode) {
+  if (node.engineMode === 'local') return localModelCache.value[node.engineProfileId ?? ''] ?? []
   const cfg = apiConfigById(node.apiConfigId)
   const cached = nodeModelCache.value[node.apiConfigId ?? ''] ?? []
   const set = new Set<string>()
@@ -1185,9 +1268,66 @@ function nodeModelOptions(node: WbNode) {
   return Array.from(set)
 }
 
-async function executeNode(node: WbNode): Promise<boolean> {
+async function loadImageEditModels(node: WbNode) {
+  if (node.engineMode !== 'local') {
+    await loadNodeModels(node)
+    return
+  }
+  if (!node.engineProfileId) return
+  try {
+    const models = await window.localEngineAPI.listModels(node.engineProfileId)
+    localModelCache.value = { ...localModelCache.value, [node.engineProfileId]: models }
+    applyImageMetadataToEditor(node, resolveInputSource(node.id))
+  } catch (reason) {
+    appStore.setStatus(`读取本地模型失败：${(reason as Error).message}`)
+  }
+}
+
+async function executeNode(node: WbNode, requestId?: string): Promise<boolean> {
   const source = resolveInputSource(node.id)
   if (!source) return false
+  if (node.kind === 'ai-image-edit') {
+    const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,/.exec(source.src || '')
+    if (!match) throw new Error('上游没有可用的图片')
+    if (!node.editPrompt?.trim()) throw new Error('请填写图片编辑要求')
+    if (node.engineMode === 'local') {
+      if (!node.engineProfileId) {
+        engineSetupOpen.value = true
+        throw new Error('请先选择或配置本地引擎')
+      }
+      const localProfile = engineProfiles.value.find((profile) => profile.id === node.engineProfileId)
+      if (localProfile?.type === 'comfy' && !node.model) throw new Error('请选择 ComfyUI 模型')
+      const [width, height] = (node.outputSize || '1024x1024').split('x').map(Number)
+      const res = await window.localEngineAPI.editImage({
+        profileId: node.engineProfileId,
+        imageBase64: source.src,
+        mimeType: match[1],
+        prompt: node.editPrompt.trim(),
+        model: node.model,
+        width,
+        height,
+        maskImageBase64: node.maskImageBase64 || undefined,
+      })
+      if (!res.success || !res.image) throw new Error(res.error || '本地图片编辑失败')
+      node.src = res.image
+    } else {
+      const cfg = apiConfigById(node.apiConfigId)
+      if (!cfg) throw new Error('未选择 API 配置，请在节点里选择')
+      const res = await window.llmAPI?.image({
+        provider: cfg.provider,
+        baseUrl: cfg.baseUrl,
+        apiKey: cfg.apiKey,
+        model: node.model || cfg.model,
+        prompt: node.editPrompt.trim(),
+        imageBase64: source.src.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, ''),
+        mimeType: match[1],
+        size: node.outputSize || '1024x1024',
+      })
+      if (!res?.success) throw new Error(res?.error || '图片编辑失败')
+      node.src = res.images?.[0] || ''
+    }
+    return !!node.src
+  }
   if (node.kind === 'resize') {
     const out = source.src ? await resizeImageDataUrl(source.src, node.size ?? 512) : null
     node.src = out ?? ''
@@ -1212,6 +1352,7 @@ async function executeNode(node: WbNode): Promise<boolean> {
         imageBase64: source.src.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, ''),
         mimeType: m[1],
         temperature: node.temperature ?? 0.5,
+        requestId,
       })
       if (!res?.success) throw new Error(res?.error || 'API 调用失败')
       node.text = (res.text ?? '').trim()
@@ -1228,6 +1369,7 @@ async function executeNode(node: WbNode): Promise<boolean> {
       model: node.model || cfg.model,
       prompt: filled,
       temperature: node.temperature ?? 0.5,
+      requestId,
     })
     if (!res?.success) throw new Error(res?.error || 'API 调用失败')
     node.text = (res.text ?? '').trim()
@@ -1236,221 +1378,35 @@ async function executeNode(node: WbNode): Promise<boolean> {
   return false
 }
 
-function deriveImageNode(source: WbNode, newSrc: string, label?: string, snap = true) {
-  if (snap) snapshot()
-  const node: WbNode = {
-    id: nextId++,
-    x: source.x + source.width + 60,
-    y: source.y,
-    width: source.width,
-    height: source.height,
-    kind: 'image',
-    label: label || `${source.label || '图片'}·新`,
-    src: newSrc,
-    contentH: source.contentH,
-    rotation: 0,
-    inputCount: 1,
-    outputCount: 1,
-    inTypes: ['image'],
-    outTypes: ['image'],
-    genMode: 'text',
-    genPrompt: '',
-    genSize: source.genSize || '1024x1024',
-    genOpen: source.genOpen ?? true,
-  }
-  nodes.value.push(node)
-  edges.value.push({ id: nextId++, from: source.id, to: node.id })
-  setSelection([node.id])
-  return node
+function markImageEditTouched(node: WbNode, field: 'model' | 'editPrompt' | 'outputSize') {
+  node.editTouched = { ...(node.editTouched ?? {}), [field]: true }
 }
 
-function canvasToDataUrl(
-  img: HTMLImageElement,
-  w: number,
-  h: number,
-  sx = 0,
-  sy = 0,
-  sw?: number,
-  sh?: number,
-) {
-  const c = document.createElement('canvas')
-  c.width = Math.max(1, Math.round(w))
-  c.height = Math.max(1, Math.round(h))
-  const ctx = c.getContext('2d')
-  if (!ctx) return ''
-  ctx.drawImage(img, sx, sy, sw ?? img.naturalWidth, sh ?? img.naturalHeight, 0, 0, c.width, c.height)
-  return c.toDataURL('image/png')
-}
-
-async function applyCanvasTool(node: WbNode, fn: (img: HTMLImageElement) => string) {
-  if (!node.src || !node.src.startsWith('data:image/')) {
-    appStore.setStatus('节点没有可处理的图片')
-    return
-  }
-  node.execState = 'running'
-  try {
-    const img = new Image()
-    img.src = node.src
-    await img.decode()
-    snapshot()
-    node.src = fn(img)
-    node.execState = 'done'
-    appStore.setStatus('处理完成 ✓')
-  } catch (e) {
-    node.execState = 'error'
-    appStore.setStatus(`处理失败：${(e as Error).message}`)
+async function chooseImageEditMask(node: WbNode) {
+  const paths = await window.fsAPI.selectImages()
+  if (!paths?.length) return
+  const response = await window.fsAPI.readImageBase64(paths[0])
+  if (response.success && response.base64) {
+    node.maskImageBase64 = `data:${response.mime || 'image/png'};base64,${response.base64}`
   }
 }
 
-function toolRotate(node: WbNode) {
-  void applyCanvasTool(node, (img) => {
-    const c = document.createElement('canvas')
-    c.width = img.naturalHeight
-    c.height = img.naturalWidth
-    const ctx = c.getContext('2d')
-    if (!ctx) return node.src
-    ctx.translate(c.width / 2, c.height / 2)
-    ctx.rotate(Math.PI / 2)
-    ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2)
-    return c.toDataURL('image/png')
-  })
+function applyImageMetadataToEditor(node: WbNode, source: WbNode | null) {
+  if (!source?.metadata?.hasMetadata) return
+  const defaults = applyMetadataDefaults(
+    {
+      editPrompt: node.editPrompt || '',
+      model: node.model || '',
+      outputSize: node.outputSize || '',
+      touched: node.editTouched || {},
+    },
+    source.metadata,
+    nodeModelOptions(node),
+  )
+  node.editPrompt = defaults.editPrompt
+  node.model = defaults.model
+  node.outputSize = defaults.outputSize
 }
-
-function toolResizeApply(node: WbNode) {
-  const width = Number(node.size || 512)
-  void applyCanvasTool(node, (img) => {
-    const scale = width / img.naturalWidth
-    return canvasToDataUrl(img, width, img.naturalHeight * scale)
-  })
-  resizePopup.value = null
-}
-
-function toolGridApply(node: WbNode, n: number) {
-  if (!node.src) return
-  void (async () => {
-    const img = new Image()
-    img.src = node.src
-    await img.decode()
-    const tw = Math.floor(img.naturalWidth / n)
-    const th = Math.floor(img.naturalHeight / n)
-    if (tw < 1 || th < 1) {
-      appStore.setStatus('图片太小，无法切分')
-      return
-    }
-    snapshot()
-    for (let r = 0; r < n; r++) {
-      for (let c = 0; c < n; c++) {
-        deriveImageNode(node, canvasToDataUrl(img, tw, th, c * tw, r * th, tw, th), `分块 ${r + 1}-${c + 1}`, false)
-      }
-    }
-    appStore.setStatus(`已切分为 ${n * n} 块并派生新节点`)
-  })()
-  gridPopup.value = null
-}
-
-async function runImageTool(node: WbNode, tool: 'hd' | 'outpaint' | 'inpaint') {
-  const cfg = apiConfigById(node.apiConfigId)
-  if (!cfg) {
-    node.execState = 'error'
-    appStore.setStatus('未选择 API 配置，AI 工具需要配置')
-    return
-  }
-  if (!node.src) {
-    node.execState = 'error'
-    appStore.setStatus('节点没有图片')
-    return
-  }
-  node.execState = 'running'
-  try {
-    const prompt =
-      tool === 'hd'
-        ? 'Upscale this image, keep content identical, 2x resolution, sharp and detailed.'
-        : tool === 'outpaint'
-          ? 'Extend this image outward naturally, fill the surrounding area seamlessly, keep the original center unchanged.'
-          : 'Re-edit this image according to the prompt, keep overall composition.'
-    const m = /^data:(image\/[a-zA-Z0-9.+-]+);base64,/.exec(node.src)
-    const res = await window.llmAPI?.image({
-      provider: cfg.provider,
-      baseUrl: cfg.baseUrl,
-      apiKey: cfg.apiKey,
-      model: node.model || cfg.model,
-      prompt: tool === 'inpaint' ? `${prompt} ${node.genPrompt || ''}` : prompt,
-      imageBase64: node.src.replace(/^data:image\/[a-zA-Z0-9.+-]+;base64,/, ''),
-      mimeType: m ? m[1] : 'image/png',
-      size: node.genSize || '1024x1024',
-    })
-    if (!res?.success) throw new Error(res?.error || '工具执行失败')
-    const out = res.images?.[0]
-    if (!out) throw new Error('接口没有返回图片')
-    deriveImageNode(
-      node,
-      out,
-      tool === 'hd' ? '高清放大' : tool === 'outpaint' ? '扩图' : '重绘',
-    )
-    node.execState = 'done'
-    appStore.setStatus('工具完成 ✓ 已派生新节点')
-  } catch (e) {
-    node.execState = 'error'
-    appStore.setStatus(
-      `${tool === 'hd' ? '高清' : tool === 'outpaint' ? '扩图' : '重绘'}失败：${(e as Error).message}`,
-    )
-  }
-}
-
-function cropStart(node: WbNode) {
-  cropState.value = { nodeId: node.id, x1: 0, y1: 0, x2: 0, y2: 0 }
-}
-
-function cropConfirm(node: WbNode) {
-  const cs = cropState.value
-  if (!cs) return
-  const x = Math.min(cs.x1, cs.x2)
-  const y = Math.min(cs.y1, cs.y2)
-  const w = Math.abs(cs.x2 - cs.x1)
-  const h = Math.abs(cs.y2 - cs.y1)
-  cropState.value = null
-  if (w < 4 || h < 4) {
-    appStore.setStatus('选框太小，已取消')
-    return
-  }
-  void applyCanvasTool(node, (img) => {
-    const sx = (x / 100) * img.naturalWidth
-    const sy = (y / 100) * img.naturalHeight
-    const sw = (w / 100) * img.naturalWidth
-    const sh = (h / 100) * img.naturalHeight
-    return canvasToDataUrl(img, sw, sh, sx, sy, sw, sh)
-  })
-}
-
-function onCropDown(event: PointerEvent, node: WbNode) {
-  const el = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  const x = ((event.clientX - el.left) / el.width) * 100
-  const y = ((event.clientY - el.top) / el.height) * 100
-  cropState.value = { nodeId: node.id, x1: x, y1: y, x2: x, y2: y }
-}
-
-function onCropMove(event: PointerEvent) {
-  const cs = cropState.value
-  if (!cs) return
-  const el = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  cs.x2 = ((event.clientX - el.left) / el.width) * 100
-  cs.y2 = ((event.clientY - el.top) / el.height) * 100
-}
-
-function onCropUp() {
-  /* 保持选框，等待点击“裁剪” */
-}
-
-const cropBoxStyle = computed(() => {
-  const cs = cropState.value
-  if (!cs) return {}
-  return {
-    left: `${Math.min(cs.x1, cs.x2)}%`,
-    top: `${Math.min(cs.y1, cs.y2)}%`,
-    width: `${Math.abs(cs.x2 - cs.x1)}%`,
-    height: `${Math.abs(cs.y2 - cs.y1)}%`,
-  }
-})
 
 function canSaveNode(node: WbNode) {
   if (node.kind === 'text' || node.kind === 'ai-tag' || node.kind === 'ai-text') return true
@@ -1571,16 +1527,14 @@ async function testApiConfig(cfg: WorkbenchApiConfig) {
 }
 
 const miniViewportStyle = computed(() => {
-  const a = screenToWorld(0, 0)
-  const b = screenToWorld(viewSize.value.w, viewSize.value.h)
-  if (!a || !b) return {}
-  const p1 = worldToMini(a.x, a.y)
-  const p2 = worldToMini(b.x, b.y)
+  const m = minimap.value
+  if (!m) return {}
+  const viewport = minimapViewportRect(visibleWorldRect(pan.value, zoom.value, viewSize.value), m)
   return {
-    left: `${p1.x}px`,
-    top: `${p1.y + MINI_TITLE_H}px`,
-    width: `${Math.max(6, p2.x - p1.x)}px`,
-    height: `${Math.max(6, p2.y - p1.y)}px`,
+    left: `${viewport.x}px`,
+    top: `${viewport.y + MINI_TITLE_H}px`,
+    width: `${Math.max(6, viewport.width)}px`,
+    height: `${Math.max(6, viewport.height)}px`,
   }
 })
 
@@ -1588,6 +1542,7 @@ function onMiniDown(event: PointerEvent) {
   event.stopPropagation()
   const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
   const contentH = rect.height - MINI_TITLE_H
+  if (contentH <= 0 || event.clientY < rect.top + MINI_TITLE_H) return
   const mx = ((event.clientX - rect.left) / rect.width) * MINI_W
   const my = ((event.clientY - rect.top - MINI_TITLE_H) / contentH) * MINI_H
   const world = miniToWorld(mx, my)
@@ -1739,6 +1694,7 @@ function onPointerUp(event: MouseEvent) {
         } else {
           snapshot()
           edges.value.push({ id: nextId++, from: fromId, to: toId })
+          if (toNode?.kind === 'ai-image-edit') applyImageMetadataToEditor(toNode, fromNode ?? null)
         }
       }
     }
@@ -1832,11 +1788,16 @@ async function replaceNodeMedia(node: WbNode) {
   if (node.kind === 'image') {
     const paths = await window.fsAPI?.selectImages()
     if (!paths?.length) return
-    const result = await window.fsAPI?.readImageBase64(paths[0])
-    if (result?.success && result.base64) {
+    const result = await window.workbenchImageAPI.inspect(paths[0])
+    if (result?.success && result.image) {
       snapshot()
-      node.src = `data:${result.mime || 'image/png'};base64,${result.base64}`
-      node.label = paths[0].split(/[/\\]/).pop() || node.label
+      node.src = result.image.dataUrl
+      node.label = result.image.fileName
+      node.filePath = result.image.filePath
+      node.mimeType = result.image.mimeType
+      node.imageWidth = result.image.width
+      node.imageHeight = result.image.height
+      node.metadata = result.image.metadata
       appStore.setStatus('图片已更换')
     }
   } else if (node.kind === 'video') {
@@ -1908,7 +1869,20 @@ async function performAutosave() {
   }
 }
 
-function applyWorkflowData(data: any, filePath: string | null) {
+function flushAutosave() {
+  if (autosaveTimer.value) window.clearTimeout(autosaveTimer.value)
+  autosaveTimer.value = null
+  window.workflowAPI?.saveAutosaveSync?.(workflowPayload())
+}
+
+async function inspectRestoredImageDependencies() {
+  if (!comfyProfile.value) return
+  for (const node of nodes.value) {
+    if (node.kind === 'image' && node.metadata?.nodeTypes?.length) await inspectImageDependencies(node)
+  }
+}
+
+async function applyWorkflowData(data: any, filePath: string | null) {
   if (!Array.isArray(data.nodes) || !Array.isArray(data.edges)) {
     throw new Error('文件格式不正确')
   }
@@ -1925,13 +1899,14 @@ function applyWorkflowData(data: any, filePath: string | null) {
   currentWorkflowFile.value = filePath
   setSelection([])
   selectedEdgeId.value = null
+  await inspectRestoredImageDependencies()
 }
 
 async function restoreAutosave() {
   const res = await window.workflowAPI?.loadAutosave?.()
   if (!res?.success || !res.content) return
   try {
-    applyWorkflowData(JSON.parse(res.content), null)
+    await applyWorkflowData(JSON.parse(res.content), null)
     appStore.setStatus('已恢复上次的画布')
   } catch {
     /* 自动保存文件损坏时忽略 */
@@ -1988,6 +1963,16 @@ function onAssetDragStart(event: DragEvent, asset: AssetRecord) {
 }
 
 async function onCanvasDrop(event: DragEvent) {
+  const droppedFiles = Array.from(event.dataTransfer?.files ?? [])
+  const droppedPaths = droppedFiles.map((file) => window.fsAPI.getFilePath(file)).filter(Boolean)
+  if (droppedPaths.length) {
+    event.preventDefault()
+    const pos = screenToWorld(event.clientX, event.clientY)
+    if (!pos) return
+    snapshot()
+    await addImageNodes(droppedPaths, pos)
+    return
+  }
   const id = event.dataTransfer?.getData('application/x-baka-asset')
   if (!id) return
   event.preventDefault()
@@ -1996,30 +1981,8 @@ async function onCanvasDrop(event: DragEvent) {
   const pos = screenToWorld(event.clientX, event.clientY)
   if (!pos) return
   if (asset.type === 'image') {
-    const res = await window.fsAPI?.readImageBase64?.(asset.file)
-    if (res?.success && res.base64) {
-      const dataUrl = `data:${res.mime || 'image/png'};base64,${res.base64}`
-      nodes.value.push({
-        id: nextId++,
-        x: pos.x,
-        y: pos.y,
-        width: NODE_WIDTH,
-        height: TITLE_HEIGHT + 240,
-        kind: 'image',
-        label: fileNameOf(asset.file),
-        src: dataUrl,
-        contentH: 240,
-        rotation: 0,
-        inputCount: 1,
-        outputCount: 1,
-        inTypes: ['image'],
-        outTypes: ['image'],
-        genMode: 'text',
-        genPrompt: '',
-        genSize: '1024x1024',
-        genOpen: true,
-      })
-    }
+    snapshot()
+    await addImageNodes([asset.file], pos)
   } else if (asset.type === 'video') {
     addVideoNodes([asset.file], pos)
   } else if (asset.type === 'text') {
@@ -2046,14 +2009,26 @@ async function onCanvasDrop(event: DragEvent) {
   appStore.setStatus('已从结果拖入画布')
 }
 
-function previewAsset(asset: AssetRecord) {
+async function previewAsset(asset: AssetRecord) {
   assetPreview.value = asset
+  assetPreviewText.value = ''
+  if (asset.type === 'text') {
+    const res = await window.fsAPI?.readText?.(asset.file)
+    assetPreviewText.value = res?.success ? (res.text ?? '') : ''
+  }
+}
+
+function assetFileExtension(asset: AssetRecord) {
+  const match = fileNameOf(asset.file).match(/\.[a-zA-Z0-9]+$/)
+  return match?.[0] || (asset.type === 'image' ? '.png' : asset.type === 'text' ? '.txt' : '.mp4')
 }
 
 async function saveAsset(asset: AssetRecord) {
+  const extension = assetFileExtension(asset)
+  const baseName = String(asset.meta?.node || asset.type).replace(/\.[a-zA-Z0-9]+$/, '')
   await window.fsAPI?.saveFile?.({
     sourcePath: asset.file,
-    defaultName: `${asset.meta?.node || asset.type}-${new Date(asset.createdAt).toLocaleDateString('zh-CN')}`,
+    defaultName: `${baseName}-${new Date(asset.createdAt).toISOString().slice(0, 10)}${extension}`,
   })
 }
 
@@ -2079,7 +2054,7 @@ async function openProjectFile(filePath: string) {
     return
   }
   try {
-    applyWorkflowData(JSON.parse(content.text), filePath)
+    await applyWorkflowData(JSON.parse(content.text), filePath)
     await window.workflowAPI?.recordRecent?.({ path: filePath, name: fileNameOf(filePath) })
     await loadRecentProjects()
     appStore.setStatus(`已打开：${filePath}`)
@@ -2146,7 +2121,7 @@ async function openWorkflow() {
   }
   try {
     const data = JSON.parse(res.content)
-    applyWorkflowData(data, res.path ?? null)
+    await applyWorkflowData(data, res.path ?? null)
     await window.workflowAPI?.recordRecent?.({ path: res.path ?? '', name: fileNameOf(res.path ?? '') })
     await loadRecentProjects()
     appStore.setStatus(`已打开：${res.path}`)
@@ -2293,7 +2268,7 @@ function resizeObserver() {
   viewSize.value = { w: el.clientWidth, h: el.clientHeight }
 }
 
-watch([nodes, edges], () => drawMinimap(), { deep: true, flush: 'post' })
+watch([nodes, edges, pan, zoom, viewSize], () => drawMinimap(), { deep: true, flush: 'post' })
 watch([nodes, edges, pan, zoom], () => scheduleAutosave(), { deep: true })
 
 watch(
@@ -2343,6 +2318,7 @@ watch(
 onMounted(() => {
   void loadCustomNodes()
   void loadApiConfigs()
+  void loadEngineProfiles()
   void restoreAutosave()
   void loadRecentProjects()
   void loadAssets()
@@ -2351,6 +2327,7 @@ onMounted(() => {
   window.addEventListener('keydown', onKeyDown)
   window.addEventListener('keyup', onKeyUp)
   window.addEventListener('blur', onWindowBlur)
+  window.addEventListener('beforeunload', flushAutosave)
   if ('ResizeObserver' in window && canvasRef.value) {
     const observer = new ResizeObserver(resizeObserver)
     observer.observe(canvasRef.value)
@@ -2361,13 +2338,15 @@ onUnmounted(() => {
   window.removeEventListener('keydown', onKeyDown)
   window.removeEventListener('keyup', onKeyUp)
   window.removeEventListener('blur', onWindowBlur)
+  window.removeEventListener('beforeunload', flushAutosave)
+  flushAutosave()
 })
 </script>
 
 <template>
   <main
     class="workbench"
-    :class="{ 'workbench--space': spaceDown }"
+    :class="{ 'workbench--space': spaceDown, 'workbench--reduced': wbStore.reduceMotion }"
     ref="canvasRef"
     :style="gridStyle"
     @wheel.prevent="onWheel"
@@ -2379,6 +2358,23 @@ onUnmounted(() => {
     @dragover.prevent
     @drop="onCanvasDrop"
   >
+    <ComfyDependencyNotice
+      v-if="selectedImageWithWorkflow && (!comfyProfile || missingDependencyCount > 0) && !dependencyManagerOpen"
+      :configured="!!comfyProfile"
+      :missing-count="missingDependencyCount"
+      @open="openDependencyPanel"
+    />
+    <ComfyDependencyManager
+      v-if="dependencyManagerOpen"
+      :records="selectedDependencies"
+      :busy-repository="dependencyBusyRepository"
+      @close="dependencyManagerOpen = false"
+      @recheck="selectedImageWithWorkflow && inspectImageDependencies(selectedImageWithWorkflow)"
+      @install="installDependency"
+      @requirements="installDependencyRequirements"
+      @copy-name="copyDependencyName"
+    />
+    <LocalEngineSetup v-if="engineSetupOpen" @saved="onEngineSaved" @close="engineSetupOpen = false" />
     <!-- 连线层 -->
     <svg class="workbench__edges" :width="viewSize.w" :height="viewSize.h">
       <path
@@ -2438,140 +2434,39 @@ onUnmounted(() => {
           </span>
         </header>
         <div v-if="node.kind !== 'reroute'" class="wb-node__content">
-          <div v-if="node.kind === 'image'" class="wb-node__media-gen">
-            <div class="wb-node__media-preview" :class="{ cropping: cropState?.nodeId === node.id }">
-              <img v-if="node.src" :src="node.src" alt="" draggable="false" />
-              <span v-else class="wb-node__media-empty">加载图片后可生成</span>
-              <div
-                v-if="cropState?.nodeId === node.id"
-                class="wb-node__crop"
-                @pointerdown.stop="onCropDown($event, node)"
-                @pointermove.stop="onCropMove($event)"
-                @pointerup.stop="onCropUp"
-              >
-                <div
-                  v-if="cropState && Math.abs(cropState.x2 - cropState.x1) > 0"
-                  class="wb-node__crop-box"
-                  :style="cropBoxStyle"
-                ></div>
-              </div>
-              <button
-                v-if="cropState?.nodeId === node.id"
-                type="button"
-                class="wb-node__crop-confirm"
-                @pointerdown.stop
-                @click.stop="cropConfirm(node)"
-              >
-                裁剪
-              </button>
-            </div>
-            <div class="wb-node__gen">
-              <div
-                class="wb-node__gen-toggle"
-                role="button"
-                tabindex="0"
-                @pointerdown.stop
-                @click.stop="node.genOpen = !node.genOpen"
-                @keydown.enter.prevent="node.genOpen = !node.genOpen"
-              >
-                <span>✨ 生成器</span>
-                <span>{{ node.genOpen ? '▾' : '▸' }}</span>
-              </div>
-              <template v-if="node.genOpen">
-              <div class="wb-node__gen-modes">
-                <button
-                  type="button"
-                  :class="{ on: node.genMode !== 'image' }"
-                  @pointerdown.stop
-                  @click.stop="node.genMode = 'text'"
-                >
-                  文生图
-                </button>
-                <button
-                  type="button"
-                  :class="{ on: node.genMode === 'image' }"
-                  @pointerdown.stop
-                  @click.stop="node.genMode = 'image'"
-                >
-                  图生图
-                </button>
-              </div>
-              <label class="wb-node__ai-field">
-                <span>配置</span>
-                <select v-model="node.apiConfigId" @change="loadNodeModels(node)">
-                  <option value="">（未选择）</option>
-                  <option v-for="cfg in apiConfigs" :key="cfg.id" :value="cfg.id">{{ cfg.name }}</option>
-                </select>
-              </label>
-              <label class="wb-node__ai-field">
-                <span>模型</span>
-                <select v-model="node.model">
-                  <option value="">（用配置默认）</option>
-                  <option v-for="m in nodeModelOptions(node)" :key="m" :value="m">{{ m }}</option>
-                </select>
-              </label>
-              <textarea
-                v-model="node.genPrompt"
-                class="wb-node__gen-prompt"
-                :placeholder="node.genMode === 'image' ? '描述想改什么（参考当前图）' : '描述要生成的画面'"
-                @pointerdown.stop
-                @wheel.stop
-              ></textarea>
-              <div class="wb-node__gen-row">
-                <select v-model="node.genSize">
-                  <option value="1024x1024">1:1</option>
-                  <option value="1536x1024">16:9</option>
-                  <option value="1024x1536">9:16</option>
-                </select>
-                <button
-                  type="button"
-                  class="wb-node__gen-btn"
-                  :disabled="node.execState === 'running'"
-                  @pointerdown.stop
-                  @click.stop="runImageGen(node)"
-                >
-                  {{ node.execState === 'running' ? '生成中…' : '生成' }}
-                </button>
-              </div>
-              <div class="wb-node__tools">
-                <button type="button" @pointerdown.stop @click.stop="cropStart(node)">裁剪</button>
-                <button type="button" @pointerdown.stop @click.stop="gridPopup = node.id">宫格</button>
-                <button type="button" @pointerdown.stop @click.stop="resizePopup = node.id">缩放</button>
-                <button type="button" @pointerdown.stop @click.stop="toolRotate(node)">旋转</button>
-              </div>
-              <div v-if="gridPopup === node.id" class="wb-node__tool-pop">
-                <label>
-                  切分
-                  <select v-model.number="node.size">
-                    <option :value="2">2×2</option>
-                    <option :value="3">3×3</option>
-                    <option :value="5">5×5</option>
-                  </select>
-                </label>
-                <button type="button" @pointerdown.stop @click.stop="toolGridApply(node, node.size || 2)">
-                  切分
-                </button>
-              </div>
-              <div v-if="resizePopup === node.id" class="wb-node__tool-pop">
-                <label>
-                  宽度
-                  <select v-model.number="node.size">
-                    <option :value="256">256</option>
-                    <option :value="512">512</option>
-                    <option :value="1024">1024</option>
-                    <option :value="1920">1920</option>
-                  </select>
-                </label>
-                <button type="button" @pointerdown.stop @click.stop="toolResizeApply(node)">缩放</button>
-              </div>
-              <div class="wb-node__tools wb-node__tools--ai">
-                <button type="button" @pointerdown.stop @click.stop="runImageTool(node, 'hd')">高清</button>
-                <button type="button" @pointerdown.stop @click.stop="runImageTool(node, 'outpaint')">扩图</button>
-                <button type="button" @pointerdown.stop @click.stop="runImageTool(node, 'inpaint')">重绘</button>
-              </div>
-              </template>
-            </div>
-          </div>
+          <ImageLoadNode
+            v-if="node.kind === 'image'"
+            :src="node.src"
+            :file-name="node.label"
+            :width="node.imageWidth"
+            :height="node.imageHeight"
+            :mime-type="node.mimeType"
+            :metadata="node.metadata"
+            @choose="replaceNodeMedia(node)"
+            @replace="replaceNodeMedia(node)"
+            @save="saveNodeContent(node)"
+          />
+          <AiImageEditNode
+            v-else-if="node.kind === 'ai-image-edit'"
+            v-model:api-config-id="node.apiConfigId"
+            v-model:model="node.model"
+            v-model:edit-prompt="node.editPrompt"
+            v-model:output-size="node.outputSize"
+            v-model:mask-image-base64="node.maskImageBase64"
+            v-model:engine-mode="node.engineMode"
+            v-model:engine-profile-id="node.engineProfileId"
+            :source-ready="!!resolveInputSource(node.id)?.src"
+            :api-configs="apiConfigs"
+            :models="nodeModelOptions(node)"
+            :result="node.src"
+            :running="node.execState === 'running'"
+            :engine-profiles="engineProfiles"
+            @touch="markImageEditTouched(node, $event)"
+            @choose-mask="chooseImageEditMask(node)"
+            @load-models="loadImageEditModels(node)"
+            @run="runNode(node)"
+            @configure-engine="engineSetupOpen = true"
+          />
           <video v-else-if="node.kind === 'video'" :src="node.src" muted loop playsinline autoplay></video>
           <div v-else-if="node.kind === 'text'" class="wb-node__media-gen">
             <div
@@ -2957,7 +2852,7 @@ onUnmounted(() => {
       <div class="wb-asset-modal__body">
         <img v-if="assetPreview.type === 'image'" :src="mediaUrl(assetPreview.file)" alt="" />
         <video v-else-if="assetPreview.type === 'video'" :src="mediaUrl(assetPreview.file)" controls autoplay></video>
-        <p v-else class="wb-asset-modal__text">{{ assetPreview.meta?.node || '文本结果' }}</p>
+        <p v-else class="wb-asset-modal__text">{{ assetPreviewText || '文本结果' }}</p>
         <button class="wb-btn" type="button" @click="assetPreview = null">关闭</button>
       </div>
     </div>
@@ -4347,7 +4242,7 @@ onUnmounted(() => {
   from { opacity: 0; transform: scale(0.96); }
   to { opacity: 1; transform: scale(1); }
 }
-.wb-rail--reduced * {
+.workbench--reduced * {
   animation: none !important;
   transition: none !important;
 }

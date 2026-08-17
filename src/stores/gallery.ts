@@ -115,7 +115,8 @@ export const useGalleryStore = defineStore('gallery', () => {
       if (reset) {
         images.value = res.data
       } else {
-        images.value.push(...res.data)
+        const existing = new Set(images.value.map((image) => image.id))
+        images.value.push(...res.data.filter((image) => !existing.has(image.id)))
       }
       currentOffset.value = currentOffset.value + res.data.length
       if (res.data.length < pageSize) _reachedEnd.value = true
@@ -240,7 +241,7 @@ export const useGalleryStore = defineStore('gallery', () => {
     }
   }
 
-  async function saveTags(imageId: number, tags: { tag: string; confidence?: number; source?: string }[]) {
+  async function saveTags(imageId: number, tags: { tag: string; confidence?: number; source?: string; weight?: number }[]) {
     if (!window.galleryAPI) return
     const res = await window.galleryAPI.setImageTags(imageId, tags)
     if (res.success) {

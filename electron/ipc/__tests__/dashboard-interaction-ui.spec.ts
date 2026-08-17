@@ -101,7 +101,7 @@ describe('dashboard interaction layers', () => {
     expect(monitor).not.toContain('barClass')
   })
 
-  it('layers sidebar rail, navigation, submenu, and local-status motion deliberately', () => {
+  it('layers sidebar rail and navigation motion deliberately', () => {
     const sidebar = read('src/components/sidebar/AppSidebar.vue')
 
     expect(sidebar).not.toContain('sidebar-brand')
@@ -115,26 +115,16 @@ describe('dashboard interaction layers', () => {
     expect(sidebar).toMatch(/\.nav-item\s*\{[^}]*transition:[^}]*color 160ms[^}]*background(?:-color)? 160ms[^}]*transform 160ms/s)
     expect(sidebar).toMatch(/\.nav-item :deep\(svg\)\s*\{[^}]*transition:\s*transform 160ms[^}]*;/s)
     expect(sidebar).toMatch(/\.nav-label\s*\{[^}]*transition:\s*transform 160ms[^}]*;/s)
-    expect(sidebar).toMatch(/@keyframes tool-subnav-enter\s*\{[\s\S]*from\s*\{[^}]*opacity:\s*0;[^}]*transform:\s*translateY\(-4px\) scale\(\.98\);[^}]*\}[\s\S]*to\s*\{[^}]*opacity:\s*1;[^}]*transform:\s*none;[^}]*\}/s)
-    expect(sidebar).toMatch(/\.tool-subnav\s*\{[^}]*animation:\s*tool-subnav-enter 180ms[^;]*;/s)
-    expect(sidebar).toContain('animation: local-status-breathe 3.6s ease-in-out infinite')
-    expect(sidebar).toMatch(/@keyframes local-status-breathe\s*\{[\s\S]*opacity:[^;]+;[\s\S]*box-shadow:\s*0 0 10px[^;]+;/s)
-    expect(sidebar.match(/\binfinite\b/g)).toHaveLength(1)
+    expect(sidebar).not.toMatch(/\binfinite\b/)
   })
 
-  it('adds stable desktop tool-submenu flow height to rail items after tools and resets it for the compact flyout', () => {
+  it('keeps the active rail anchored to the home entry', () => {
     const sidebar = read('src/components/sidebar/AppSidebar.vue')
-    const compactStart = sidebar.indexOf('@media (max-width: 1200px)')
-    const compact = sidebar.slice(compactStart, sidebar.indexOf('@media (prefers-reduced-motion: reduce)'))
 
-    expect(sidebar).not.toContain('--tool-subnav-flow-offset: 131px')
-    expect(sidebar).toMatch(/\.sidebar-nav\.tools-expanded\.active-after-tools \.sidebar-active-rail\s*\{[^}]*transform:\s*translateY\(calc\(var\(--active-navigation-index\) \* 44px \+ var\(--tool-subnav-flow-offset\)\)\);/s)
     expect(sidebar).toMatch(/\.nav-item\s*\{[^}]*height:\s*40px;[^}]*min-height:\s*0;/s)
     expect(sidebar).toMatch(/\.nav-label\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/s)
-    expect(sidebar).toMatch(/\.tool-subnav\s*\{[^}]*grid-auto-rows:\s*var\(--tool-subnav-row-height\);[^}]*gap:\s*var\(--tool-subnav-gap\);[^}]*margin:\s*var\(--tool-subnav-margin-top\) 0 var\(--tool-subnav-margin-bottom\) 21px;[^}]*white-space:\s*nowrap;/s)
-    expect(sidebar).toMatch(/\.tool-subnav-item\s*\{[^}]*min-height:\s*var\(--tool-subnav-row-height\);/s)
-    expect(compactStart).toBeGreaterThan(-1)
-    expect(compact).toMatch(/\.sidebar-nav\.tools-expanded\.active-after-tools \.sidebar-active-rail\s*\{[^}]*transform:\s*translateY\(calc\(var\(--active-navigation-index\) \* 44px\)\);/s)
+    expect(sidebar).not.toContain('tool-subnav')
+    expect(sidebar).not.toContain('tools-expanded')
   })
 
   it('gates fine-pointer sidebar hover behind keyboard focus and preserves pressed states', () => {
@@ -176,7 +166,5 @@ describe('dashboard interaction layers', () => {
     expect(reducedRail).toContain('transition: none;')
     expect(reducedRail).not.toContain('transform: none;')
     expect(reduced).toMatch(/\.nav-item,\s*\.nav-item :deep\(svg\),\s*\.nav-label\s*\{[^}]*animation:\s*none !important;[^}]*transition:\s*none !important;[^}]*transform:\s*none !important;/s)
-    expect(reduced).toMatch(/\.tool-subnav\s*\{[^}]*animation:\s*none;[^}]*transition:\s*none;[^}]*transform:\s*none;/s)
-    expect(reduced).toMatch(/\.local-status-dot\s*\{[^}]*animation:\s*none;/s)
   })
 })

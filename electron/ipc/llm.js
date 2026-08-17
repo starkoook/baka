@@ -1,14 +1,23 @@
 const { ipcMain } = require('electron')
 const fs = require('fs')
 const path = require('path')
-const { app } = require('electron')
+const { app, safeStorage } = require('electron')
 const sharp = require('sharp')
+const {
+  splitAndEncrypt,
+  mergeDecrypted,
+  protectApiKeyFields,
+  restoreApiKeyFields,
+} = require('./credential-store')
+
+const activeChatRequests = new Map()
 
 // Default config
 const defaultConfig = {
   provider: 'openai',
   baseUrl: 'https://api.openai.com/v1',
   apiKey: '',
+  apiKeys: [],
   model: 'gpt-4o',
   outputFormat: 'danbooru', // 'natural' | 'danbooru' | 'both'
   temperature: 0.3,
@@ -65,12 +74,28 @@ function apiConfigsPath() {
   return path.join(getDataRoot(), 'workbench-api-configs.json')
 }
 
+function credentialsPath() {
+  const { getCredentialsPath } = require('./paths')
+  return getCredentialsPath()
+}
+
+function getSafeStorage() {
+  try {
+    if (safeStorage && typeof safeStorage.isEncryptionAvailable === 'function' && safeStorage.isEncryptionAvailable()) {
+      return safeStorage
+    }
+  } catch (_) {}
+  return null
+}
+
 function loadApiConfigs() {
   try {
     if (fs.existsSync(apiConfigsPath())) {
       const raw = fs.readFileSync(apiConfigsPath(), 'utf-8')
       const list = JSON.parse(raw)
-      return Array.isArray(list) ? list : []
+      const items = Array.isArray(list) ? list : []
+      const storage = getSafeStorage()
+      return storage ? restoreApiKeyFields(items, storage) : items
     }
   } catch (_) {}
   return []
@@ -79,10 +104,17 @@ function loadApiConfigs() {
 // Load config
 function loadConfig() {
   try {
+    const merged = {}
     if (fs.existsSync(configPath())) {
       const raw = fs.readFileSync(configPath(), 'utf-8')
-      return { ...defaultConfig, ...JSON.parse(raw) }
+      Object.assign(merged, JSON.parse(raw))
     }
+    if (fs.existsSync(credentialsPath())) {
+      const credentials = JSON.parse(fs.readFileSync(credentialsPath(), 'utf-8'))
+      Object.assign(merged, mergeDecrypted({}, credentials, getSafeStorage()))
+    }
+    const storage = getSafeStorage()
+    return { ...defaultConfig, ...(storage ? restoreApiKeyFields(merged, storage) : merged) }
   } catch (_) {}
   return { ...defaultConfig }
 }
@@ -92,7 +124,14 @@ function saveApiConfig(partial) {
   const existing = loadConfig()
   const merged = { ...existing, ...partial }
   try {
-    fs.writeFileSync(configPath(), JSON.stringify(merged, null, 2), 'utf-8')
+    const storage = getSafeStorage()
+    if (storage) {
+      const { settings, credentials } = splitAndEncrypt(merged, storage)
+      fs.writeFileSync(configPath(), JSON.stringify(protectApiKeyFields(settings, storage), null, 2), 'utf-8')
+      fs.writeFileSync(credentialsPath(), JSON.stringify(credentials, null, 2), 'utf-8')
+    } else {
+      fs.writeFileSync(configPath(), JSON.stringify(merged, null, 2), 'utf-8')
+    }
     return { success: true }
   } catch (e) {
     return { success: false, error: e.message }
@@ -123,7 +162,17 @@ async function callLLM(params) {
   const config = loadConfig()
   const provider = params.provider || config.provider
   const baseUrl = params.baseUrl || config.baseUrl
-  const apiKey = params.apiKey || config.apiKey
+  let apiKey = params.apiKey || config.apiKey
+  const keys = Array.isArray(params.apiKeys) && params.apiKeys.length > 0
+    ? params.apiKeys
+    : Array.isArray(config.apiKeys) && config.apiKeys.length > 0
+      ? config.apiKeys
+      : []
+  if (keys.length > 0) {
+    const index = callLLM.keyIndex = (callLLM.keyIndex || 0) % keys.length
+    apiKey = keys[index]
+    callLLM.keyIndex = index + 1
+  }
   const model = params.model || config.model
   const format = params.outputFormat || config.outputFormat || 'danbooru'
   const temperature = Math.max(0.1, Math.min(2, params.temperature ?? config.temperature ?? 0.3))
@@ -145,9 +194,9 @@ async function callLLM(params) {
   // Call API
   let result
   if (provider === 'gemini') {
-    result = await callGemini(baseUrl, apiKey, model, prompt, imageBase64, mimeType, temperature)
+    result = await callGemini(baseUrl, apiKey, model, prompt, imageBase64, mimeType, temperature, params.signal)
   } else {
-    result = await callOpenAI(baseUrl, apiKey, model, prompt, imageBase64, mimeType, temperature, maxTokens)
+    result = await callOpenAI(baseUrl, apiKey, model, prompt, imageBase64, mimeType, temperature, maxTokens, params.signal)
   }
 
   // Parse structured output
@@ -170,8 +219,8 @@ async function chatCompletion(params) {
   const prompt = params.prompt || ''
   const result =
     provider === 'gemini'
-      ? await callGemini(baseUrl, apiKey, model, prompt, imageBase64, mimeType, temperature)
-      : await callOpenAI(baseUrl, apiKey, model, prompt, imageBase64, mimeType, temperature, maxTokens)
+      ? await callGemini(baseUrl, apiKey, model, prompt, imageBase64, mimeType, temperature, params.signal)
+      : await callOpenAI(baseUrl, apiKey, model, prompt, imageBase64, mimeType, temperature, maxTokens, params.signal)
   return result.raw || ''
 }
 
@@ -264,7 +313,7 @@ async function imageGeneration(params) {
 }
 
 // ── OpenAI-compatible API ──
-async function callOpenAI(baseUrl, apiKey, model, prompt, imageBase64, mimeType = 'image/jpeg', temperature = 0.3, maxTokens = 300) {
+async function callOpenAI(baseUrl, apiKey, model, prompt, imageBase64, mimeType = 'image/jpeg', temperature = 0.3, maxTokens = 300, signal) {
   const url = baseUrl.replace(/\/$/, '') + '/chat/completions'
 
   // Build message content: with or without image
@@ -289,6 +338,7 @@ async function callOpenAI(baseUrl, apiKey, model, prompt, imageBase64, mimeType 
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
+    signal,
   })
 
   if (!res.ok) {
@@ -304,7 +354,7 @@ async function callOpenAI(baseUrl, apiKey, model, prompt, imageBase64, mimeType 
 }
 
 // ── Gemini API ──
-async function callGemini(baseUrl, apiKey, model, prompt, imageBase64, mimeType = 'image/jpeg', temperature = 0.3) {
+async function callGemini(baseUrl, apiKey, model, prompt, imageBase64, mimeType = 'image/jpeg', temperature = 0.3, signal) {
   const url = baseUrl.replace(/\/$/, '') + `/v1beta/models/${model}:generateContent?key=${apiKey}`
 
   const parts = imageBase64
@@ -320,6 +370,7 @@ async function callGemini(baseUrl, apiKey, model, prompt, imageBase64, mimeType 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   })
 
   if (!res.ok) {
@@ -506,12 +557,25 @@ function registerLLMHandlers() {
 
   // ── Generic chat completion (workbench AI nodes) ──
   ipcMain.handle('llm:chat', async (_event, params) => {
+    const requestId = typeof params?.requestId === 'string' ? params.requestId : ''
+    const controller = requestId ? new AbortController() : null
+    if (requestId) activeChatRequests.set(requestId, controller)
     try {
-      const text = await chatCompletion(params)
+      const text = await chatCompletion(controller ? { ...params, signal: controller.signal } : params)
       return { success: true, text }
     } catch (e) {
+      if (e.name === 'AbortError') return { success: false, cancelled: true, error: '已取消' }
       return { success: false, error: e.message }
+    } finally {
+      if (requestId && activeChatRequests.get(requestId) === controller) activeChatRequests.delete(requestId)
     }
+  })
+
+  ipcMain.handle('llm:cancelChat', (_event, requestId) => {
+    const controller = activeChatRequests.get(requestId)
+    if (!controller) return { success: false }
+    controller.abort()
+    return { success: true }
   })
 
   ipcMain.handle('llm:image', async (_event, params) => {
@@ -545,7 +609,9 @@ function registerLLMHandlers() {
     if (idx >= 0) list[idx] = entry
     else list.push(entry)
     try {
-      fs.writeFileSync(apiConfigsPath(), JSON.stringify(list, null, 2), 'utf-8')
+      const storage = getSafeStorage()
+      const payload = storage ? protectApiKeyFields(list, storage) : list
+      fs.writeFileSync(apiConfigsPath(), JSON.stringify(payload, null, 2), 'utf-8')
       return { success: true, config: entry }
     } catch (e) {
       return { success: false, error: e.message }
@@ -555,7 +621,9 @@ function registerLLMHandlers() {
   ipcMain.handle('llm:deleteApiConfig', async (_event, id) => {
     const list = loadApiConfigs().filter((c) => c.id !== id)
     try {
-      fs.writeFileSync(apiConfigsPath(), JSON.stringify(list, null, 2), 'utf-8')
+      const storage = getSafeStorage()
+      const payload = storage ? protectApiKeyFields(list, storage) : list
+      fs.writeFileSync(apiConfigsPath(), JSON.stringify(payload, null, 2), 'utf-8')
       return { success: true }
     } catch (e) {
       return { success: false, error: e.message }
@@ -563,4 +631,4 @@ function registerLLMHandlers() {
   })
 }
 
-module.exports = { registerLLMHandlers, imageGeneration }
+module.exports = { registerLLMHandlers, imageGeneration, callLLM, buildPrompt, parseOutput, parseTagList }

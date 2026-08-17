@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld('llmAPI', {
   switchProfile: (name) => ipcRenderer.invoke('llm:switchProfile', name),
   deleteProfile: (name) => ipcRenderer.invoke('llm:deleteProfile', name),
   chat: (params) => ipcRenderer.invoke('llm:chat', params),
+  cancelChat: (requestId) => ipcRenderer.invoke('llm:cancelChat', requestId),
   image: (params) => ipcRenderer.invoke('llm:image', params),
   listApiConfigs: () => ipcRenderer.invoke('llm:listApiConfigs'),
   saveApiConfig: (cfg) => ipcRenderer.invoke('llm:saveApiConfig', cfg),
@@ -60,10 +61,73 @@ contextBridge.exposeInMainWorld('fsAPI', {
   moveImages: (params) => ipcRenderer.invoke('fs:moveImages', params),
   scanModels: (dirPath) => ipcRenderer.invoke('fs:scanModels', dirPath),
   writeBase64: (params) => ipcRenderer.invoke('fs:writeBase64', params),
+  writeTextSafe: (params) => ipcRenderer.invoke('fs:writeTextSafe', params),
+  writeBytesSafe: (params) => ipcRenderer.invoke('fs:writeBytesSafe', params),
+  deleteMedia: (params) => ipcRenderer.invoke('fs:deleteMedia', params),
+  getFilePath: (file) => webUtils.getPathForFile(file),
+})
+
+contextBridge.exposeInMainWorld('recycleAPI', {
+  list: () => ipcRenderer.invoke('recycle:list'),
+  restore: (id) => ipcRenderer.invoke('recycle:restore', id),
+  purge: (id) => ipcRenderer.invoke('recycle:purge', id),
+})
+
+contextBridge.exposeInMainWorld('historyAPI', {
+  list: (filePath) => ipcRenderer.invoke('history:list', filePath),
+  restore: (id) => ipcRenderer.invoke('history:restore', id),
+})
+
+contextBridge.exposeInMainWorld('workbenchImageAPI', {
+  inspect: (filePath) => ipcRenderer.invoke('workbenchImage:inspect', filePath),
+})
+
+contextBridge.exposeInMainWorld('booruGalleryAPI', {
+  listSites: () => ipcRenderer.invoke('booru:listSites'),
+  saveSite: (site) => ipcRenderer.invoke('booru:saveSite', site),
+  deleteSite: (siteId) => ipcRenderer.invoke('booru:deleteSite', siteId),
+  resetSites: () => ipcRenderer.invoke('booru:resetSites'),
+  getSettings: () => ipcRenderer.invoke('booru:getSettings'),
+  saveSettings: (settings) => ipcRenderer.invoke('booru:saveSettings', settings),
+  search: (params) => ipcRenderer.invoke('booru:search', params),
+  ranking: (params) => ipcRenderer.invoke('booru:ranking', params),
+  tagSuggest: (params) => ipcRenderer.invoke('booru:tagSuggest', params),
+  relatedTags: (params) => ipcRenderer.invoke('booru:relatedTags', params),
+  detail: (params) => ipcRenderer.invoke('booru:detail', params),
+  proxyImage: (url) => ipcRenderer.invoke('booru:proxyImage', url),
+  download: (params) => ipcRenderer.invoke('booru:download', params),
+  chooseFolder: () => ipcRenderer.invoke('booru:chooseFolder'),
+  createFolder: (parent, name) => ipcRenderer.invoke('booru:createFolder', parent, name),
+  batchDownload: (params) => ipcRenderer.invoke('booru:batchDownload', params),
+  onBatchProgress: (callback) => ipcRenderer.on('booru:batchProgress', (_event, data) => callback(data)),
+})
+
+contextBridge.exposeInMainWorld('localEngineAPI', {
+  detect: () => ipcRenderer.invoke('localEngine:detect'),
+  listProfiles: () => ipcRenderer.invoke('localEngine:listProfiles'),
+  validateRoot: (params) => ipcRenderer.invoke('localEngine:validateRoot', params),
+  saveProfile: (profile) => ipcRenderer.invoke('localEngine:saveProfile', profile),
+  removeProfile: (id) => ipcRenderer.invoke('localEngine:removeProfile', id),
+  health: (id) => ipcRenderer.invoke('localEngine:health', id),
+  listModels: (id) => ipcRenderer.invoke('localEngine:listModels', id),
+  objectInfo: (id) => ipcRenderer.invoke('localEngine:objectInfo', id),
+  start: (id) => ipcRenderer.invoke('localEngine:start', id),
+  editImage: (params) => ipcRenderer.invoke('localEngine:editImage', params),
+  resolveDependencies: (params) => ipcRenderer.invoke('localEngine:resolveDependencies', {
+    profileId: params.profileId,
+    required: params.nodeTypes,
+    hints: params.sourceHints || [],
+  }),
+  refreshDependencyMap: () => ipcRenderer.invoke('localEngine:refreshDependencyMap'),
+  installRepository: (params) => ipcRenderer.invoke('localEngine:installRepository', params),
+  updateRepository: (params) => ipcRenderer.invoke('localEngine:updateRepository', params),
+  installRequirements: (params) => ipcRenderer.invoke('localEngine:installRequirements', params),
+  onProgress: (callback) => ipcRenderer.on('localEngine:progress', (_event, data) => callback(data)),
 })
 
 contextBridge.exposeInMainWorld('workflowAPI', {
   saveAutosave: (content) => ipcRenderer.invoke('workflow:saveAutosave', content),
+  saveAutosaveSync: (content) => ipcRenderer.sendSync('workflow:saveAutosaveSync', content),
   loadAutosave: () => ipcRenderer.invoke('workflow:loadAutosave'),
   listRecent: () => ipcRenderer.invoke('workflow:listRecent'),
   recordRecent: (entry) => ipcRenderer.invoke('workflow:recordRecent', entry),
@@ -117,6 +181,9 @@ contextBridge.exposeInMainWorld('taggerV2API', {
   getModelDir: () => ipcRenderer.invoke('taggerV2:getModelDir'),
   importModel: (filePath) => ipcRenderer.invoke('taggerV2:importModel', filePath),
   openModelDir: () => ipcRenderer.invoke('taggerV2:openModelDir'),
+  listDownloadableModels: () => ipcRenderer.invoke('taggerV2:listDownloadableModels'),
+  downloadModel: (modelId) => ipcRenderer.invoke('taggerV2:downloadModel', modelId),
+  onDownloadProgress: (callback) => { ipcRenderer.on('taggerV2:downloadProgress', (_event, data) => callback(data)) },
   // Inference
   inferSingle: (params) => ipcRenderer.invoke('taggerV2:inferSingle', params),
   inferBatch: (params) => ipcRenderer.invoke('taggerV2:inferBatch', params),
@@ -125,11 +192,67 @@ contextBridge.exposeInMainWorld('taggerV2API', {
   // Vocabulary
   searchTags: (query, matchMode, limit, category) => ipcRenderer.invoke('taggerV2:searchTags', query, matchMode, limit, category),
   getCategories: () => ipcRenderer.invoke('taggerV2:getCategories'),
+  translateTags: (tags, direction) => ipcRenderer.invoke('taggerV2:translateTags', tags, direction),
   // Bulk editing
   bulkDryRun: (imageIds, operation) => ipcRenderer.invoke('taggerV2:bulkDryRun', { imageIds, operation }),
   bulkApply: (imageIds, operation) => ipcRenderer.invoke('taggerV2:bulkApply', { imageIds, operation }),
   // Export
   exportTags: (imageIds, template) => ipcRenderer.invoke('taggerV2:exportTags', { imageIds, template }),
+})
+
+contextBridge.exposeInMainWorld('taggingAPI', {
+  generate: (params) => ipcRenderer.invoke('tagging:generate', params),
+  preview: (params) => ipcRenderer.invoke('tagging:preview', params),
+  apply: (params) => ipcRenderer.invoke('tagging:apply', params),
+  cancel: (taskId) => ipcRenderer.invoke('tagging:cancel', taskId),
+  listTemplates: () => ipcRenderer.invoke('tagging:listTemplates'),
+  saveTemplate: (template) => ipcRenderer.invoke('tagging:saveTemplate', template),
+  deleteTemplate: (id) => ipcRenderer.invoke('tagging:deleteTemplate', id),
+  importTemplates: (entries) => ipcRenderer.invoke('tagging:importTemplates', entries),
+  listConfigs: () => ipcRenderer.invoke('tagging:listConfigs'),
+  onProgress: (callback) => ipcRenderer.on('tagging:progress', (_event, data) => callback(data)),
+})
+
+contextBridge.exposeInMainWorld('characterAuditAPI', {
+  inventory: (params) => ipcRenderer.invoke('characterAudit:inventory', params),
+  run: (params) => ipcRenderer.invoke('characterAudit:run', params),
+  apply: (params) => ipcRenderer.invoke('characterAudit:apply', params),
+})
+
+contextBridge.exposeInMainWorld('imageToolsAPI', {
+  removeBackground: (params) => ipcRenderer.invoke('imageTools:removeBackground', params),
+  replaceTransparentBackground: (params) => ipcRenderer.invoke('imageTools:replaceTransparentBackground', params),
+  edit: (params) => ipcRenderer.invoke('imageTools:edit', params),
+  similar: (params) => ipcRenderer.invoke('imageTools:similar', params),
+  badScan: (params) => ipcRenderer.invoke('imageTools:badScan', params),
+  removeBackgroundAi: (params) => ipcRenderer.invoke('imageTools:removeBackgroundAi', params),
+  getAiModelInfo: () => ipcRenderer.invoke('imageTools:getAiModelInfo'),
+  downloadAiModel: () => ipcRenderer.invoke('imageTools:downloadAiModel'),
+  onDownloadAiProgress: (callback) => { ipcRenderer.on('imageTools:downloadAiProgress', (_event, data) => callback(data)) },
+})
+
+contextBridge.exposeInMainWorld('promptAPI', {
+  listWildcards: () => ipcRenderer.invoke('prompt:listWildcards'),
+  expandWildcards: (params) => ipcRenderer.invoke('prompt:expandWildcards', params),
+  convertWeights: (params) => ipcRenderer.invoke('prompt:convertWeights', params),
+})
+
+contextBridge.exposeInMainWorld('effectsAPI', {
+  render: (params) => ipcRenderer.invoke('effects:render', params),
+  listPresets: () => ipcRenderer.invoke('effects:listPresets'),
+  savePreset: (preset) => ipcRenderer.invoke('effects:savePreset', preset),
+  deletePreset: (name) => ipcRenderer.invoke('effects:deletePreset', name),
+})
+
+contextBridge.exposeInMainWorld('videoAPI', {
+  probe: (videoPath) => ipcRenderer.invoke('video:probe', videoPath),
+  extract: (params) => ipcRenderer.invoke('video:extract', params),
+  convert: (params) => ipcRenderer.invoke('video:convert', params),
+  tag: (params) => ipcRenderer.invoke('video:tag', params),
+  cancel: (taskId) => ipcRenderer.invoke('video:cancel', taskId),
+  onProgress: (callback) => ipcRenderer.on('video:progress', (_event, data) => callback(data)),
+  onTagProgress: (callback) => ipcRenderer.on('video:tagProgress', (_event, data) => callback(data)),
+  setFfmpegDir: (dirPath) => ipcRenderer.invoke('video:setFfmpegDir', dirPath),
 })
 
 contextBridge.exposeInMainWorld('galleryAPI', {

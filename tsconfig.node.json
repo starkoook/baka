@@ -7,9 +7,17 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "esModuleInterop": true,
-    "lib": ["ES2020"],
+    "lib": [
+      "ES2020"
+    ],
     "skipLibCheck": true,
-    "noEmit": true
+    "composite": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./node_modules/.tsc-tmp"
   },
-  "include": ["vite.config.ts", "electron/**/*.ts"]
+  "include": [
+    "vite.config.ts",
+    "electron/**/*.ts"
+  ]
 }

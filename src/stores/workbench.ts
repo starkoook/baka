@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 
 export type WorkbenchRailTab = 'projects' | 'nodes' | 'assets' | 'settings'
 
@@ -28,10 +28,18 @@ export interface WorkbenchActiveNode {
 export const useWorkbenchStore = defineStore('workbench', () => {
   const railOpen = ref(false)
   const railTab = ref<WorkbenchRailTab>('projects')
-  const reduceMotion = ref(false)
+  const reduceMotion = ref(
+    typeof localStorage !== 'undefined' && localStorage.getItem('baka-workbench-reduce-motion') === '1',
+  )
   const running = ref(false)
   const activeNode = ref<WorkbenchActiveNode | null>(null)
   const action = ref<WorkbenchAction | null>(null)
+
+  watch(reduceMotion, (value) => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('baka-workbench-reduce-motion', value ? '1' : '0')
+    }
+  })
 
   function toggleRail(tab: WorkbenchRailTab) {
     if (railOpen.value && railTab.value === tab) {

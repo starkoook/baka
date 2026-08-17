@@ -30,18 +30,22 @@ function readPngChunks(filePath) {
           chunks[keyword] = text
         }
       } else if (type === 'iTXt') {
-        const parts = []
-        let start = 0
-        for (let i = 0; i < 5 && start < data.length; i++) {
-          const nullIdx = data.indexOf(0, start)
-          if (nullIdx < 0) break
-          parts.push(data.toString('utf8', start, nullIdx))
-          start = nullIdx + 1
-        }
-        if (parts.length >= 5 && start < data.length) {
-          const keyword = parts[0]
-          const text = data.toString('utf8', start)
-          chunks[keyword] = text
+        const keywordEnd = data.indexOf(0)
+        if (keywordEnd > 0 && keywordEnd + 2 < data.length) {
+          const keyword = data.toString('utf8', 0, keywordEnd)
+          const compressed = data[keywordEnd + 1] === 1
+          let cursor = keywordEnd + 3
+          const languageEnd = data.indexOf(0, cursor)
+          if (languageEnd < 0) continue
+          cursor = languageEnd + 1
+          const translatedEnd = data.indexOf(0, cursor)
+          if (translatedEnd < 0) continue
+          cursor = translatedEnd + 1
+          try {
+            chunks[keyword] = compressed
+              ? zlib.inflateSync(data.slice(cursor)).toString('utf8')
+              : data.toString('utf8', cursor)
+          } catch (_) {}
         }
       } else if (type === 'zTXt') {
         const nullIdx1 = data.indexOf(0)
@@ -68,6 +72,13 @@ function parseWebUIParameters(paramsStr) {
     result.prompt = lines[0].trim()
   }
 
+  const loras = []
+  const loraPattern = /<lora:([^:>]+):([+-]?(?:\d+(?:\.\d+)?|\.\d+))>/gi
+  for (const match of paramsStr.matchAll(loraPattern)) {
+    loras.push({ name: match[1].trim(), weight: Number(match[2]) })
+  }
+  if (loras.length) result.loras = loras
+
   for (const line of lines) {
     if (line.startsWith('Negative prompt:')) {
       result.negative = line.replace('Negative prompt:', '').trim()
@@ -87,6 +98,68 @@ function parseWebUIParameters(paramsStr) {
   }
 
   return result
+}
+
+function parseEmbeddedJsonList(value) {
+  if (Array.isArray(value)) return value
+  if (typeof value !== 'string' || !value.trim()) return []
+  try {
+    const parsed = JSON.parse(value)
+    return Array.isArray(parsed) ? parsed : []
+  } catch (_) {
+    return []
+  }
+}
+
+function normalizeLora(item) {
+  if (!item || typeof item !== 'object' || item.hidden === true) return null
+  const name = item.name || item.lora || item.lora_name
+  if (typeof name !== 'string' || !name.trim()) return null
+
+  const weightValue = item.weight ?? item.strength_model ?? item.strength ?? 1
+  const textEncoderValue = item.text_encoder_weight ?? item.strength_clip
+  const weight = Number(weightValue)
+  const textEncoderWeight = textEncoderValue === undefined ? undefined : Number(textEncoderValue)
+  const normalized = {
+    name: name.replace(/\.safetensors$/i, '').trim(),
+    weight: Number.isFinite(weight) ? weight : 1,
+  }
+  const displayName = item.display_name || item.displayName
+  if (typeof displayName === 'string' && displayName.trim()) normalized.displayName = displayName.trim()
+  if (Number.isFinite(textEncoderWeight)) normalized.textEncoderWeight = textEncoderWeight
+  return normalized
+}
+
+function collectComfyLoras(nodes) {
+  const loras = []
+  const seen = new Set()
+  const add = (item) => {
+    const normalized = normalizeLora(item)
+    if (!normalized) return
+    const key = `${normalized.name.toLowerCase()}|${normalized.weight}|${normalized.textEncoderWeight ?? ''}`
+    if (seen.has(key)) return
+    seen.add(key)
+    loras.push(normalized)
+  }
+
+  for (const node of nodes) {
+    const inputs = node?.inputs || {}
+    const classType = String(node?.class_type || '')
+    if (typeof inputs.lora_str === 'string' || Array.isArray(inputs.lora_str)) {
+      parseEmbeddedJsonList(inputs.lora_str).forEach(add)
+    }
+
+    const loraName = inputs.lora_name
+    if ((classType.includes('LoraLoader') || classType.includes('LoRALoader') || classType === 'Lora') && typeof loraName === 'string') {
+      add({
+        name: loraName.split(/[/\\]/).pop(),
+        weight: inputs.strength_model ?? inputs.strength ?? inputs.strength_clip ?? 1,
+        text_encoder_weight: inputs.strength_clip,
+      })
+    }
+  }
+
+  return loras
 }
 
 /**
@@ -109,6 +182,21 @@ function cleanPromptText(text) {
   }
 
   return t
+}
+
+function isXmlLikeText(text) {
+  return typeof text === 'string' && text.trim().startsWith('<') && text.includes('</')
+}
+
+function extractPromptFromStructuredText(text) {
+  if (typeof text !== 'string') return null
+  const match = text.match(/"prompt"\s*:\s*"((?:\\.|[^"\\])*)"/)
+  if (!match) return null
+  try {
+    return JSON.parse(`"${match[1]}"`)
+  } catch (_) {
+    return match[1]
+  }
 }
 
 function isPromptLike(text) {
@@ -136,10 +224,53 @@ function collectTexts(obj, depth) {
   return texts
 }
 
+function sourceHint(node) {
+  const properties = node?.properties || {}
+  const repository = properties.repo_url || properties.repository || properties.project_url
+  const registryId = properties.cnr_id || properties.aux_id
+  if (!repository && !registryId) return null
+  return {
+    nodeType: node.type,
+    registryId: registryId || undefined,
+    repository: repository || undefined,
+  }
+}
+
+function parseComfyUIWorkflow(raw) {
+  try {
+    const workflow = typeof raw === 'string' ? JSON.parse(raw) : raw
+    if (!Array.isArray(workflow?.nodes)) {
+      return { workflow: undefined, nodeTypes: [], sourceHints: [] }
+    }
+    const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : []
+    return {
+      workflow,
+      nodeTypes: [...new Set(nodes.map(node => node?.type).filter(Boolean))],
+      sourceHints: nodes.map(sourceHint).filter(Boolean),
+    }
+  } catch (_) {
+    return { workflow: undefined, nodeTypes: [], sourceHints: [] }
+  }
+}
+
+function sanitizeJsonLike(text) {
+  if (typeof text !== 'string') return text
+  return text
+    .replace(/(?<=[\s:,\[])NaN(?=[\s,\]\}])/g, 'null')
+    .replace(/(?<=[\s:,\[])-Infinity(?=[\s,\]\}])/g, 'null')
+    .replace(/(?<=[\s:,\[])Infinity(?=[\s,\]\}])/g, 'null')
+}
+
 function parseComfyUIPrompt(promptJson) {
   try {
-    const data = JSON.parse(promptJson)
+    const data = JSON.parse(sanitizeJsonLike(promptJson))
     const result = { generator: 'ComfyUI' }
+
+    const nodes = Object.values(data).filter(node => node && typeof node === 'object')
+    result.nodeTypes = [...new Set(nodes.map(node => node.class_type).filter(Boolean))]
+    result.sourceHints = nodes
+      .map(node => sourceHint({ type: node.class_type, properties: node.properties }))
+      .filter(Boolean)
 
     // Search ALL nodes for params and prompts
     const allTexts = []
@@ -196,16 +327,6 @@ function parseComfyUIPrompt(promptJson) {
         }
       }
 
-      // Extract LoRA
-      if (ct.includes('LoraLoader') || ct.includes('Lora')) {
-        if (!result.loras) result.loras = []
-        const loraName = node.inputs?.lora_name || ''
-        const weight = node.inputs?.strength_model ?? node.inputs?.strength ?? node.inputs?.strength_clip ?? 1
-        if (loraName) {
-          result.loras.push({ name: loraName.split(/[/\\]/).pop(), weight })
-        }
-      }
-
       // Collect all input texts for prompt detection
       if (node.inputs) {
         const texts = collectTexts(node.inputs, 0)
@@ -213,12 +334,18 @@ function parseComfyUIPrompt(promptJson) {
       }
     }
 
+    const loras = collectComfyLoras(nodes)
+    if (loras.length) result.loras = loras
+
     // Classify texts into prompts and negatives
     const prompts = []
     const negatives = []
     for (const t of allTexts) {
       if (isNegativeLike(t.text)) {
         negatives.push(t.text)
+      } else if (isXmlLikeText(t.text)) {
+        const embeddedPrompt = extractPromptFromStructuredText(t.text)
+        if (embeddedPrompt) prompts.push(embeddedPrompt)
       } else if (t.text.length > 20) {
         prompts.push(t.text)
       }
@@ -311,14 +438,31 @@ function parseMetadata(filePath) {
 
     const promptChunk = chunks['prompt']
     const commentChunk = chunks['Comment']
+    const workflowData = parseComfyUIWorkflow(chunks['workflow'])
+
+    if (workflowData.workflow) {
+      result = { generator: 'ComfyUI', hasMetadata: true, ...workflowData }
+    } else if (chunks['workflow']) {
+      result = { ...result, ...parseComfyUIPrompt(chunks['workflow']), hasMetadata: true }
+    }
 
     if (promptChunk) {
       if (promptChunk.includes('class_type')) {
-        result = parseComfyUIPrompt(promptChunk)
-        result.hasMetadata = true
+        const promptData = parseComfyUIPrompt(promptChunk)
+        const { nodeTypes, sourceHints, ...promptMetadata } = promptData
+        result = { ...result, ...promptMetadata, hasMetadata: true }
+        if (!result.workflow) {
+          result.nodeTypes = nodeTypes
+          result.sourceHints = sourceHints
+        }
       } else if (promptChunk.trim().startsWith('{')) {
-        result = parseComfyUIPrompt(promptChunk)
-        result.hasMetadata = true
+        const promptData = parseComfyUIPrompt(promptChunk)
+        const { nodeTypes, sourceHints, ...promptMetadata } = promptData
+        result = { ...result, ...promptMetadata, hasMetadata: true }
+        if (!result.workflow) {
+          result.nodeTypes = nodeTypes
+          result.sourceHints = sourceHints
+        }
       }
     }
 
@@ -355,6 +499,11 @@ function parseMetadata(filePath) {
         }
       }
     }
+
+    if (Object.keys(chunks).length > 0) {
+      result.rawMetadata = chunks
+      result.hasMetadata = true
+    }
   }
 
   // ── Final cleanup: strip trailing JSON token arrays from all prompt fields ──
@@ -366,4 +515,4 @@ function parseMetadata(filePath) {
   return result
 }
 
-module.exports = { parseMetadata }
+module.exports = { parseMetadata, parseComfyUIWorkflow, sourceHint, collectComfyLoras }

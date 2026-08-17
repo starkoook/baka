@@ -5,3 +5,25 @@ release/
 *.log
 .DS_Store
 Thumbs.db
+
+# 第三方训练后端(约112MB,本地需保留以运行训练,但勿入版本库)
+lora-rescripts-main/
+
+# 编辑器/IDE 目录
+.vscode/
+
+# 助手工作记忆(非工程产物)
+.workbuddy/
+
+# 操作系统/工具残留
+nul
+
+# electron-builder / electron 构建缓存(重定向到 D 盘工程内)
+.cache/
+
+# dev 模式 userData(重定向到工程内,见 electron/main.js)
+.userdata/
+
+# 大型/生成文件不入库
+resources/ffmpeg/*.exe
+**/__pycache__/

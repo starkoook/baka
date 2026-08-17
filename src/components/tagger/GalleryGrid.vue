@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import ContextMenu, { type ContextMenuItem } from '@/components/common/ContextMenu.vue'
 
 interface ImageCard {
   id: number
+  path: string
   filename: string
   width: number
   height: number
@@ -25,13 +27,17 @@ const emit = defineEmits<{
   toggle: [image: ImageCard]
   rangeSelect: [image: ImageCard]
   openMetadata: [image: ImageCard, index: number]
+  sendToTagger: [image: ImageCard]
+  reveal: [image: ImageCard]
   scrollEnd: []
   requestThumb: [imageId: number, el: HTMLImageElement]
+  delete: [image: ImageCard]
 }>()
 
 let observer: IntersectionObserver | null = null
 const scrollContainer = ref<HTMLElement | null>(null)
 const gridRef = ref<HTMLElement | null>(null)
+const contextMenu = ref<{ x: number; y: number; items: ContextMenuItem[] } | null>(null)
 
 onMounted(() => {
   observer = new IntersectionObserver((entries) => {
@@ -48,7 +54,10 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => observer?.disconnect())
-watch(() => props.images.length, () => requestAnimationFrame(observeCards))
+watch(
+  () => `${props.images.length}:${props.images.map((image) => image.id).join(',')}`,
+  () => requestAnimationFrame(observeCards),
+)
 
 function observeCards() {
   gridRef.value?.querySelectorAll<HTMLImageElement>('img[data-image-id]:not([src])').forEach((el) => observer?.observe(el))
@@ -58,6 +67,19 @@ function onCardClick(image: ImageCard, event: MouseEvent) {
   if (event.shiftKey) emit('rangeSelect', image)
   else if (event.ctrlKey || event.metaKey) emit('toggle', image)
   else emit('select', image)
+}
+
+function onContextMenu(image: ImageCard, index: number, event: MouseEvent) {
+  contextMenu.value = {
+    x: Math.min(event.clientX, window.innerWidth - 190),
+    y: Math.min(event.clientY, window.innerHeight - 110),
+    items: [
+      { label: '查看图片与元数据', action: () => emit('openMetadata', image, index) },
+      { label: '送去标注', action: () => emit('sendToTagger', image) },
+      { label: '打开文件位置', action: () => emit('reveal', image) },
+      { label: '移入回收站', danger: true, action: () => emit('delete', image) },
+    ],
+  }
 }
 
 function onScroll() {
@@ -93,7 +115,7 @@ defineExpose({ setThumbSrc, getScrollTop, restoreScroll })
 
     <div v-else-if="images.length === 0" class="gallery-state gallery-state--empty">
       <strong>这里还没有图片</strong>
-      <span>从左侧添加一个图片文件夹，就可以开始整理和标注。</span>
+      <span>点击右上角“导入”，选择图片或文件夹即可开始整理和标注。</span>
     </div>
 
     <div v-else ref="gridRef" class="gallery-grid" :class="`gallery-grid--${viewMode || 'small'}`">
@@ -105,6 +127,7 @@ defineExpose({ setThumbSrc, getScrollTop, restoreScroll })
         tabindex="0"
         @click="onCardClick(image, $event)"
         @dblclick.prevent="emit('openMetadata', image, index)"
+        @contextmenu.prevent="onContextMenu(image, index, $event)"
         @keydown.enter="emit('openMetadata', image, index)"
       >
         <div class="image-card__preview">
@@ -131,6 +154,13 @@ defineExpose({ setThumbSrc, getScrollTop, restoreScroll })
     </div>
 
     <div v-if="isLoading && !isScanning" class="gallery-loading"><span></span>正在加载更多</div>
+    <ContextMenu
+      v-if="contextMenu"
+      :x="contextMenu.x"
+      :y="contextMenu.y"
+      :items="contextMenu.items"
+      @close="contextMenu = null"
+    />
   </main>
 </template>
 
@@ -166,5 +196,5 @@ defineExpose({ setThumbSrc, getScrollTop, restoreScroll })
 .gallery-loading { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 18px; color: var(--text-tertiary); font-size: 11px; }
 .gallery-loading span { width: 10px; height: 10px; border: 2px solid rgba(255,255,255,.1); border-top-color: var(--accent-primary); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .image-card { transition: none; } .state-spinner, .gallery-loading span { animation-duration: 1.8s; } }
+@media (prefers-reduced-motion: reduce) { .image-card { transition: none; } .image-card:hover, .image-card:focus-visible { transform: none; } .state-spinner, .gallery-loading span { animation-duration: 1.8s; } }
 </style>

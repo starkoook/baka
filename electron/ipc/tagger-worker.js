@@ -19,6 +19,12 @@
 const sharp = require('sharp')
 const fs = require('fs')
 const path = require('path')
+const {
+  applySigmoidIfNeeded,
+  parseTagLabels,
+  resolveInputLayout,
+  selectOutputNames,
+} = require('./tagger-layout')
 
 // ── State ──
 let session = null
@@ -27,33 +33,13 @@ let resizeDim = 448
 let cancelled = false
 let ort = null
 let activeProvider = 'cpu'
+let inputLayout = 'nchw'
+let outputOrder = []
 
 // ── CSV label loading ──
 function loadCsv(csvPath) {
   try {
-    const text = fs.readFileSync(csvPath, 'utf-8')
-    const lines = text.split('\n')
-    const result = []
-    let hasHeader = false
-    // Detect WD14 CSV header: tag_id,name,category,count
-    if (lines.length > 0) {
-      const first = lines[0].trim()
-      if (first.includes('tag_id') && first.includes('name')) {
-        hasHeader = true
-      }
-    }
-    const start = hasHeader ? 1 : 0
-    for (let i = start; i < lines.length; i++) {
-      const line = lines[i].trim()
-      if (!line) continue
-      const parts = line.split(',')
-      if (parts.length >= 2) {
-        result.push(parts[hasHeader ? 1 : 0].trim())
-      } else if (parts.length === 1) {
-        result.push(parts[0].trim())
-      }
-    }
-    return result
+    return parseTagLabels(fs.readFileSync(csvPath, 'utf-8'))
   } catch (e) {
     process.send({ type: 'error', message: 'Failed to load CSV: ' + e.message })
     return []
@@ -61,7 +47,7 @@ function loadCsv(csvPath) {
 }
 
 // ── Image preprocessing ──
-async function preprocessOne(imagePath, dim) {
+async function preprocessOne(imagePath, dim, layout = 'nchw') {
   const { data, info } = await sharp(imagePath)
     .resize(dim, dim, { fit: 'inside', background: { r: 255, g: 255, b: 255 } })
     .toBuffer({ resolveWithObject: true })
@@ -86,21 +72,30 @@ async function preprocessOne(imagePath, dim) {
     }
   }
 
-  // Convert to float32 [0,1] with CHW layout
+  // Convert to float32 [0,1]
   const floatArr = new Float32Array(3 * dim * dim)
-  for (let c = 0; c < 3; c++) {
+  if (layout === 'nhwc') {
     for (let p = 0; p < dim * dim; p++) {
-      floatArr[c * dim * dim + p] = padded[p * 3 + c] / 255.0
+      floatArr[p * 3] = padded[p * 3] / 255.0
+      floatArr[p * 3 + 1] = padded[p * 3 + 1] / 255.0
+      floatArr[p * 3 + 2] = padded[p * 3 + 2] / 255.0
+    }
+  } else {
+    for (let c = 0; c < 3; c++) {
+      for (let p = 0; p < dim * dim; p++) {
+        floatArr[c * dim * dim + p] = padded[p * 3 + c] / 255.0
+      }
     }
   }
   return floatArr
 }
 
-async function stackPreprocess(imagePaths, dim) {
-  const tensors = await Promise.all(imagePaths.map((p) => preprocessOne(p, dim)))
-  const flat = new Float32Array(tensors.length * 3 * dim * dim)
+async function stackPreprocess(imagePaths, dim, layout = 'nchw') {
+  const tensors = await Promise.all(imagePaths.map((p) => preprocessOne(p, dim, layout)))
+  const perImage = layout === 'nhwc' ? dim * dim * 3 : 3 * dim * dim
+  const flat = new Float32Array(tensors.length * perImage)
   for (let i = 0; i < tensors.length; i++) {
-    flat.set(tensors[i], i * 3 * dim * dim)
+    flat.set(tensors[i], i * perImage)
   }
   return flat
 }
@@ -134,20 +129,35 @@ async function runInference(imagePaths, threshold, maxBatch) {
     const slice = imagePaths.slice(i, end)
 
     try {
-      const flat = await stackPreprocess(slice, resizeDim)
-      const tensor = new ort.Tensor('float32', flat, [slice.length, 3, resizeDim, resizeDim])
+      const flat = await stackPreprocess(slice, resizeDim, inputLayout)
+      const shape = inputLayout === 'nhwc'
+        ? [slice.length, resizeDim, resizeDim, 3]
+        : [slice.length, 3, resizeDim, resizeDim]
+      const tensor = new ort.Tensor('float32', flat, shape)
       const feeds = { [session.inputNames[0]]: tensor }
       const output = await session.run(feeds)
-      const outputName = session.outputNames[0]
-      const probs = output[outputName].data
+      let probs = null
+      for (const name of outputOrder) {
+        if (output[name] && output[name].data) {
+          probs = output[name].data
+          break
+        }
+      }
+      if (!probs && session.outputNames[0]) probs = output[session.outputNames[0]]?.data
+      if (!probs) throw new Error('Tagger model returned no output')
+      const probabilities = applySigmoidIfNeeded(probs)
 
       const tagsPerImage = labels.length
       for (let j = 0; j < slice.length; j++) {
         const start = j * tagsPerImage
         const imgTags = []
         for (let k = 0; k < tagsPerImage; k++) {
-          if (probs[start + k] >= threshold) {
-            imgTags.push({ tag: labels[k], confidence: Math.round(probs[start + k] * 10000) / 10000 })
+          if (probabilities[start + k] >= threshold) {
+            imgTags.push({
+              tag: labels[k].name,
+              category: labels[k].category,
+              confidence: Math.round(probabilities[start + k] * 10000) / 10000,
+            })
           }
         }
         imgTags.sort((a, b) => b.confidence - a.confidence)
@@ -201,7 +211,23 @@ process.on('message', async (msg) => {
       resizeDim = msg.resolution || 448
       labels = loadCsv(msg.csvPath)
       session = await createSession(msg.modelPath, msg.providers || ['cpu'])
-      process.send({ type: 'ready', labelCount: labels.length, provider: activeProvider })
+      const inputDims = session.inputMetadata[session.inputNames[0]]?.dims || [1, 3, resizeDim, resizeDim]
+      try {
+        inputLayout = resolveInputLayout(inputDims)
+      } catch (_) {
+        inputLayout = 'nchw'
+      }
+      const outputDims = {}
+      for (const [name, meta] of Object.entries(session.outputMetadata || {})) {
+        outputDims[name] = meta?.dims || meta?.dimensions || []
+      }
+      outputOrder = selectOutputNames(outputDims, labels.length)
+      process.send({
+        type: 'ready',
+        labelCount: labels.length,
+        provider: activeProvider,
+        inputLayout,
+      })
     } catch (e) {
       process.send({ type: 'error', message: 'Init failed: ' + e.message })
     }

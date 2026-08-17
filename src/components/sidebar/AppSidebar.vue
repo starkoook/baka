@@ -46,7 +46,11 @@ function navigateTo(path: string) {
       </div>
     </nav>
 
-    <div v-if="isWorkbench" class="sidebar-workbench">
+    <div
+      v-if="isWorkbench"
+      class="sidebar-workbench"
+      :class="{ 'sidebar-workbench--reduced': wbStore.reduceMotion }"
+    >
       <span class="sidebar-workbench__label">工作台</span>
       <template v-if="!wbStore.activeNode">
         <button class="sidebar-workbench__btn" type="button" aria-label="项目" @click="wbStore.toggleRail('projects')">▤</button>
@@ -141,6 +145,12 @@ function navigateTo(path: string) {
   transform: translateX(2px) scale(1.018);
 }
 .sidebar-workbench__btn:active { transform: scale(.97); }
+.sidebar-workbench--reduced,
+.sidebar-workbench--reduced * {
+  animation: none !important;
+  transition: none !important;
+  transform: none !important;
+}
 .sidebar-workbench__btn::after {
   content: attr(aria-label);
   position: absolute;

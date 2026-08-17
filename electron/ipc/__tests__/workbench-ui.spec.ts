@@ -100,6 +100,46 @@ describe('infinite canvas workbench', () => {
     expect(workbench).toContain('onAssetDragStart')
     expect(workbench).toContain('wb-assets')
   })
+
+  it('keeps image loading separate from AI image editing', () => {
+    const loadNode = read('src/components/workbench/ImageLoadNode.vue')
+    const editNode = read('src/components/workbench/AiImageEditNode.vue')
+
+    expect(workbench).toContain("{ kind: 'image', label: '加载图片'")
+    expect(workbench).toContain("{ kind: 'ai-image-edit', label: 'AI 图片编辑'")
+    expect(loadNode).not.toContain('API 配置')
+    expect(loadNode).not.toContain('开始编辑')
+    expect(editNode).toContain('开始编辑')
+    expect(editNode).toContain('结果预览')
+    expect(workbench).not.toContain('deriveImageNode(')
+  })
+
+  it('creates image nodes from operating-system file drops', () => {
+    expect(workbench).toContain('event.dataTransfer?.files')
+    expect(workbench).toContain('window.fsAPI.getFilePath')
+    expect(workbench).toContain('window.workbenchImageAPI.inspect')
+    expect(workbench).toContain('arrangeDroppedImages')
+  })
+
+  it('guides local engine setup and opens missing ComfyUI dependencies', () => {
+    const wizard = read('src/components/workbench/LocalEngineSetup.vue')
+    const notice = read('src/components/workbench/ComfyDependencyNotice.vue')
+    const manager = read('src/components/workbench/ComfyDependencyManager.vue')
+
+    expect(wizard).toContain('选择本地引擎')
+    expect(wizard).toContain('ComfyUI')
+    expect(wizard).toContain('WebUI / Forge')
+    expect(wizard).toContain('自动检测')
+    expect(wizard).toContain('选择安装目录')
+    expect(notice).toContain('查看依赖')
+    expect(manager).toContain('Git 拉取')
+    expect(manager).toContain('安装依赖')
+    expect(manager).toContain('来源未知')
+    expect(manager).toContain('可能来源')
+    expect(workbench).toContain('LocalEngineSetup')
+    expect(workbench).toContain('ComfyDependencyNotice')
+    expect(workbench).toContain('ComfyDependencyManager')
+  })
 })
 
 describe('workbench dynamic left taskbar', () => {

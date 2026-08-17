@@ -1,11 +1,14 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 const isMaximized = ref(false)
+const router = useRouter()
 
 function handleMinimize() { window.windowAPI?.minimize() }
 function handleMaximize() { window.windowAPI?.maximize() }
 function handleClose() { window.windowAPI?.close() }
+function openSettings() { void router.push('/settings') }
 
 function onTitlebarDblClick(event: MouseEvent) {
   if ((event.target as HTMLElement | null)?.closest('.titlebar-controls')) return
@@ -31,6 +34,12 @@ onMounted(() => {
       </span>
     </div>
     <div class="titlebar-controls">
+      <button class="ctrl-btn ctrl-settings" type="button" @click="openSettings" title="设置" aria-label="设置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.2 2.2-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-3.2v-.2a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-2.2-2.2.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H4.6v-3.2h.2a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L6 7.8l2.2-2.2.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6v-.2h3.2v.2a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.2 2.2-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2V14h-.2a1.7 1.7 0 0 0-1.4 1Z" />
+        </svg>
+      </button>
       <button class="ctrl-btn" type="button" @click="handleMinimize" title="最小化" aria-label="最小化">
         <svg viewBox="0 0 12 12" aria-hidden="true"><rect x="1" y="5.5" width="10" height="1" fill="currentColor" /></svg>
       </button>

@@ -30,6 +30,14 @@ function listAssets(root = getDataRoot()) {
   }
 }
 
+function removeManagedAssetFile(file, root) {
+  if (!file) return
+  const filesDir = getFilesDir(root)
+  const relative = path.relative(filesDir, file)
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return
+  try { fs.unlinkSync(file) } catch { /* 文件可能已不存在 */ }
+}
+
 function addAsset(entry, root = getDataRoot()) {
   const { type, dataUrl, text, sourcePath, meta } = entry || {}
   const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
@@ -49,7 +57,9 @@ function addAsset(entry, root = getDataRoot()) {
     return { success: false, error: '缺少资产内容' }
   }
   const record = { id, type, file, meta: meta || {}, createdAt: Date.now() }
-  const next = [record, ...listAssets(root)].slice(0, ASSET_LIMIT)
+  const all = [record, ...listAssets(root)]
+  const next = all.slice(0, ASSET_LIMIT)
+  for (const removed of all.slice(ASSET_LIMIT)) removeManagedAssetFile(removed.file, root)
   fs.writeFileSync(getIndexPath(root), JSON.stringify(next, null, 2), 'utf-8')
   return { success: true, asset: record }
 }
@@ -59,13 +69,12 @@ function deleteAsset(id, root = getDataRoot()) {
   const found = list.find((item) => item.id === id)
   const next = list.filter((item) => item.id !== id)
   fs.writeFileSync(getIndexPath(root), JSON.stringify(next, null, 2), 'utf-8')
-  if (found && found.file && found.file.startsWith(getFilesDir(root))) {
-    try { fs.unlinkSync(found.file) } catch { /* 文件可能已不存在 */ }
-  }
+  if (found) removeManagedAssetFile(found.file, root)
   return { success: true, list: next }
 }
 
 function clearAssets(root = getDataRoot()) {
+  fs.rmSync(getFilesDir(root), { recursive: true, force: true })
   fs.writeFileSync(getIndexPath(root), '[]', 'utf-8')
   return { success: true }
 }

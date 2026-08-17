@@ -1,93 +1,67 @@
-// 二次元萌系语音音效：内置 CC0 免费语音（Freesound），点击/成功时随机播放
 import clickNyaUrl from '@/assets/sounds/click-nya.mp3'
-import clickGiggle1Url from '@/assets/sounds/click-giggle-1.mp3'
-import clickGiggle2Url from '@/assets/sounds/click-giggle-2.mp3'
-import successNyuuUrl from '@/assets/sounds/success-nyuu.mp3'
-import successMahouUrl from '@/assets/sounds/success-mahou.mp3'
 
-let soundEnabled = true
+let soundEnabled = typeof localStorage === 'undefined' || localStorage.getItem('baka-sound-enabled') !== 'off'
 
 export function setSoundEnabled(value: boolean) {
   soundEnabled = value
 }
 
-interface VoiceClip {
-  el: HTMLAudioElement
-}
+const clickAudio = new Audio(clickNyaUrl)
+clickAudio.volume = 0.5
+clickAudio.preload = 'auto'
 
-// 预创建音频对象，点击时直接重播，避免反复创建导致的卡顿
-const clickClips: VoiceClip[] = [
-  { el: new Audio(clickNyaUrl) },
-  { el: new Audio(clickGiggle1Url) },
-  { el: new Audio(clickGiggle2Url) },
-]
-const successClips: VoiceClip[] = [
-  { el: new Audio(successNyuuUrl) },
-  { el: new Audio(successMahouUrl) },
-]
+let audioContext: AudioContext | null = null
+let lastHoverAt = 0
 
-for (const clip of clickClips) {
-  clip.el.volume = 0.5
-  clip.el.preload = 'auto'
-}
-for (const clip of successClips) {
-  clip.el.volume = 0.65
-  clip.el.preload = 'auto'
-}
-
-let lastClick = -1
-let hoverCtx: AudioContext | null = null
-
-function getHoverCtx(): AudioContext {
-  if (!hoverCtx) {
-    hoverCtx = new AudioContext()
-    if (hoverCtx.state === 'suspended') void hoverCtx.resume()
+function getAudioContext(): AudioContext {
+  if (!audioContext) {
+    audioContext = new AudioContext()
+    if (audioContext.state === 'suspended') void audioContext.resume().catch(() => {})
   }
-  return hoverCtx
+  return audioContext
 }
 
-// 随机选一条语音播放，尽量不和上一条重复；快速连点时打断上一段，避免声音叠在一起
-function playRandom(clips: VoiceClip[]) {
-  if (!soundEnabled || clips.length === 0) return
-  let idx = Math.floor(Math.random() * clips.length)
-  if (clips.length > 1 && idx === lastClick) idx = (idx + 1) % clips.length
-  lastClick = idx
-  const audio = clips[idx].el
+export async function restartAudio(audio: Pick<HTMLAudioElement, 'pause' | 'currentTime' | 'play'>) {
   try {
     audio.pause()
     audio.currentTime = 0
-    void audio.play()
-  } catch (_) {}
+    await audio.play()
+  } catch {
+    // Autoplay can be blocked; sound failure must never break the UI.
+  }
 }
 
-// 点击：随机萌音（nya / 可爱笑声）
 export function playClick() {
-  playRandom(clickClips)
+  if (soundEnabled) void restartAudio(clickAudio)
 }
 
-// 悬停：极轻的高音 "tick"（用小铃铛碰一下的感觉），不做成语音避免每移一次都说话
-export function playHover() {
+function playTone(start: number, end: number, duration: number, volume: number) {
   if (!soundEnabled) return
+
   try {
-    const ctx = getHoverCtx()
-    const t = ctx.currentTime
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
+    const context = getAudioContext()
+    const time = context.currentTime
+    const oscillator = context.createOscillator()
+    const gain = context.createGain()
 
-    osc.type = 'sine'
-    osc.frequency.setValueAtTime(1760, t)
-    osc.frequency.exponentialRampToValueAtTime(2200, t + 0.03)
-    gain.gain.setValueAtTime(0.035, t)
-    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.05)
-
-    osc.connect(gain).connect(ctx.destination)
-
-    osc.start(t)
-    osc.stop(t + 0.05)
-  } catch (_) {}
+    oscillator.type = 'sine'
+    oscillator.frequency.setValueAtTime(start, time)
+    oscillator.frequency.exponentialRampToValueAtTime(end, time + duration)
+    gain.gain.setValueAtTime(volume, time)
+    gain.gain.exponentialRampToValueAtTime(0.001, time + duration)
+    oscillator.connect(gain).connect(context.destination)
+    oscillator.start(time)
+    oscillator.stop(time + duration)
+  } catch {}
 }
 
-// 成功：随机一条魔法少女/猫娘语音
+export function playHover() {
+  const now = performance.now()
+  if (now - lastHoverAt < 90) return
+  lastHoverAt = now
+  playTone(1760, 2200, 0.05, 0.035)
+}
+
 export function playSuccess() {
-  playRandom(successClips)
+  playTone(880, 1320, 0.14, 0.055)
 }

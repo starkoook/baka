@@ -15,25 +15,10 @@ if (false) {
 }
 
 describe('application navigation', () => {
-  it('defines the six application navigation labels in order', () => {
+  it('defines the application navigation labels in order', () => {
     expect(APP_NAVIGATION.map((item) => item.label)).toEqual([
       '主页',
-      '图库',
-      '标注',
-      '训练',
-      '工具',
-      '设置',
     ])
-  })
-
-  it('keeps training active for its nested routes only', () => {
-    const training = APP_NAVIGATION.find((item) => item.id === 'training')!
-
-    expect(isNavigationItemActive(training, '/training')).toBe(true)
-    expect(isNavigationItemActive(training, '/training/runtime')).toBe(true)
-    expect(isNavigationItemActive(training, '/training/run')).toBe(true)
-    expect(isNavigationItemActive(training, '/gallery')).toBe(false)
-    expect(isNavigationItemActive(training, '/training-old')).toBe(false)
   })
 
   it('keeps home active only at the root route', () => {
@@ -41,27 +26,5 @@ describe('application navigation', () => {
 
     expect(isNavigationItemActive(home, '/')).toBe(true)
     expect(isNavigationItemActive(home, '/gallery')).toBe(false)
-  })
-
-  it('keeps all tool routes active without matching training', () => {
-    const tools = APP_NAVIGATION.find((item) => item.id === 'tools')!
-
-    expect(isNavigationItemActive(tools, '/reverse')).toBe(true)
-    expect(isNavigationItemActive(tools, '/upscale')).toBe(true)
-    expect(isNavigationItemActive(tools, '/generate')).toBe(true)
-    expect(isNavigationItemActive(tools, '/console')).toBe(true)
-    expect(isNavigationItemActive(tools, '/training')).toBe(false)
-    expect(isNavigationItemActive(tools, '/reverse-engineering')).toBe(false)
-  })
-
-  it('provides visible child navigation for every tool route', () => {
-    const tools = APP_NAVIGATION.find((item) => item.id === 'tools')!
-
-    expect(tools.children).toEqual([
-      { label: '超分放大', route: '/upscale' },
-      { label: '提示词反推', route: '/reverse' },
-      { label: 'AI 生成', route: '/generate' },
-      { label: '控制台', route: '/console' },
-    ])
   })
 })

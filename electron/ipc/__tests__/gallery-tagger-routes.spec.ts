@@ -15,25 +15,22 @@ describe('gallery and annotation routes', () => {
     expect(router).not.toContain("component: () => import('@/views/TaggerV2.vue')")
   })
 
-  it('shows gallery and annotation as independent top-level entries', () => {
-    const navigation = read('src/features/navigation/app-navigation.ts')
-    const sidebar = read('src/components/sidebar/AppSidebar.vue')
+  it('offers gallery and annotation through the tool picker', () => {
+    const picker = read('src/components/sidebar/ToolPicker.vue')
 
-    expect(navigation).toContain("{ id: 'gallery', label: '图库', route: '/gallery'")
-    expect(navigation).toContain("{ id: 'tagger', label: '标注', route: '/tagger'")
-    expect(sidebar).toContain('APP_NAVIGATION')
-    expect(sidebar).not.toContain('图库 & 标注')
+    expect(picker).toContain("key: 'gallery'")
+    expect(picker).toContain("route: '/gallery'")
+    expect(picker).toContain("key: 'tagger'")
+    expect(picker).toContain("route: '/tagger'")
   })
 
-  it('exposes every tool route through the sidebar subnavigation', () => {
-    const navigation = read('src/features/navigation/app-navigation.ts')
-    const sidebar = read('src/components/sidebar/AppSidebar.vue')
+  it('exposes every tool route through the tool picker', () => {
+    const picker = read('src/components/sidebar/ToolPicker.vue')
 
-    for (const route of ['/upscale', '/reverse', '/generate', '/console']) {
-      expect(navigation).toContain(`route: '${route}'`)
+    for (const route of ['/gallery', '/tagger', '/training', '/upscale']) {
+      expect(picker).toContain(`route: '${route}'`)
     }
-    expect(sidebar).toContain('item.children')
-    expect(sidebar).toContain('aria-expanded')
-    expect(sidebar).toContain('aria-controls')
+    expect(picker).toContain('@mouseenter="activeTool = tool.key"')
+    expect(picker).toContain('@click="enterTool(tool.route)"')
   })
 })

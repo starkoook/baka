@@ -1,26 +1,29 @@
 appId: com.bakatools.app
 productName: Baka TOOLS
+electronDist: node_modules/electron/dist
 directories:
   output: release
   buildResources: public
 files:
   - dist/**/*
   - electron/**/*.js
+  - electron/**/*.py
   - package.json
+  - THIRD_PARTY_NOTICES.md
 extraResources:
-  - from: dist/renderer/launcher
-    to: launcher
+  - from: THIRD_PARTY_NOTICES.md
+    to: licenses/THIRD_PARTY_NOTICES.md
+  - from: licenses/AGPL-3.0.txt
+    to: licenses/AGPL-3.0.txt
+  - from: resources/component-source.json
+    to: component-source.json
 win:
   target: nsis
   icon: public/icon.png
   signAndEditExecutable: false
+  artifactName: Baka-TOOLS-Setup.${ext}
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
 extraMetadata:
   name: baka-tools
-# Auto-update via GitHub Releases
-publish:
-  provider: github
-  owner: starkoook
-  repo: baka

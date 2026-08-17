@@ -13,6 +13,7 @@ export interface TagResult {
   confidence: number
   source?: string
   category?: string
+  weight?: number
 }
 
 export interface TagQueueItem {
@@ -133,7 +134,7 @@ export const useTaggerStore = defineStore('tagger', () => {
       id: item.id,
       path: item.path,
       status: 'pending',
-      tags: [],
+      tags: (item.tags ?? []).map((tag) => ({ ...tag, confidence: tag.confidence ?? 1 })),
       error: '',
       databaseSaved: false,
       captionSaved: false,
@@ -162,6 +163,22 @@ export const useTaggerStore = defineStore('tagger', () => {
       existing.add(path)
     }
     persistSession()
+  }
+
+  function removeMissing(paths: string[]) {
+    return removePaths(paths)
+  }
+
+  function removePaths(paths: string[]) {
+    if (paths.length === 0) return 0
+    const missing = new Set(paths)
+    const before = queue.value.length
+    queue.value = queue.value.filter((item) => !missing.has(item.path))
+    if (currentIndex.value >= queue.value.length) {
+      currentIndex.value = Math.max(0, queue.value.length - 1)
+    }
+    persistSession()
+    return before - queue.value.length
   }
 
   async function loadModels() {
@@ -379,7 +396,7 @@ export const useTaggerStore = defineStore('tagger', () => {
     models, activeModelPath, tagSource, threshold, providers,
     taskId, batchCompleted, batchTotal, batchCurrentFile, batchProvider, lastError,
     currentItem, completedCount, failedCount, batchPercent, hasUnfinishedWork,
-    createQueueFromGallery, appendPaths, loadModels, startRun, stopRun,
+    createQueueFromGallery, appendPaths, removeMissing, removePaths, loadModels, startRun, stopRun,
     setupProgressListener, applyInferenceResults, retryFailed, setCurrentIndex, saveCurrent, saveAndNext,
     replacePaths, persistSession, restoreSession, consumeReturnContext, clearCompletedSession,
   }

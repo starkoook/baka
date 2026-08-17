@@ -2,6 +2,38 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 
 const STORAGE_KEY = 'baka-tools-config'
+const TOOL_POSTERS_KEY = 'baka-tools-tool-posters'
+
+export type ToolPosterKey = 'gallery' | 'booruGallery' | 'tagger' | 'training' | 'upscale' | 'workbench' | 'video' | 'imageTools'
+export type ToolPosters = Record<ToolPosterKey, string | null>
+
+const DEFAULT_TOOL_POSTERS: ToolPosters = {
+  gallery: null,
+  booruGallery: null,
+  tagger: null,
+  training: null,
+  upscale: null,
+  workbench: null,
+  video: null,
+  imageTools: null,
+}
+
+function loadToolPosters(): ToolPosters {
+  try {
+    const raw = localStorage.getItem(TOOL_POSTERS_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<ToolPosters>
+      return { ...DEFAULT_TOOL_POSTERS, ...parsed }
+    }
+  } catch {}
+  return { ...DEFAULT_TOOL_POSTERS }
+}
+
+function saveToolPosters(posters: ToolPosters) {
+  try {
+    localStorage.setItem(TOOL_POSTERS_KEY, JSON.stringify(posters))
+  } catch {}
+}
 
 function loadConfig(): { theme: 'dark' | 'light'; showMascot: boolean } {
   try {
@@ -32,6 +64,8 @@ export const useAppStore = defineStore('app', () => {
   const errorCount = ref(0)
   const theme = ref<'dark' | 'light'>(saved.theme)
   const showMascot = ref(saved.showMascot)
+  const toolPickerOpen = ref(false)
+  const toolPosters = ref<ToolPosters>(loadToolPosters())
 
   let _errorTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -71,6 +105,19 @@ export const useAppStore = defineStore('app', () => {
     saveConfig({ theme: theme.value, showMascot: showMascot.value })
   }
 
+  function toggleToolPicker() {
+    toolPickerOpen.value = !toolPickerOpen.value
+  }
+
+  function closeToolPicker() {
+    toolPickerOpen.value = false
+  }
+
+  function setToolPoster(key: ToolPosterKey, path: string | null) {
+    toolPosters.value = { ...toolPosters.value, [key]: path }
+    saveToolPosters(toolPosters.value)
+  }
+
   return {
     version,
     status,
@@ -78,6 +125,8 @@ export const useAppStore = defineStore('app', () => {
     errorCount,
     theme,
     showMascot,
+    toolPickerOpen,
+    toolPosters,
     setStatus,
     setError,
     clearError,
@@ -85,5 +134,8 @@ export const useAppStore = defineStore('app', () => {
     setTheme,
     toggleTheme,
     toggleMascot,
+    toggleToolPicker,
+    closeToolPicker,
+    setToolPoster,
   }
 })

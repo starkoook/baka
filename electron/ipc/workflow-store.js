@@ -66,6 +66,9 @@ function removeRecent(filePath, root = getDataRoot()) {
 
 function registerWorkflowHandlers() {
   ipcMain.handle('workflow:saveAutosave', (_event, content) => saveAutosave(content))
+  ipcMain.on('workflow:saveAutosaveSync', (event, content) => {
+    event.returnValue = saveAutosave(content)
+  })
   ipcMain.handle('workflow:loadAutosave', () => loadAutosave())
   ipcMain.handle('workflow:listRecent', () => ({ success: true, list: listRecent() }))
   ipcMain.handle('workflow:recordRecent', (_event, entry) => recordRecent(entry))

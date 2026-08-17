@@ -7,8 +7,14 @@
     "dev": "node scripts/start.js",
     "build:renderer": "vite build",
     "build": "vite build",
-    "package": "vite build && electron-builder",
+    "package": "node scripts/package.js",
+    "components:build-local": "node scripts/build-local-component-source.js --include-runtime",
+    "components:verify-local": "node scripts/verify-local-component-source.js",
     "typecheck": "vue-tsc --noEmit",
+    "cli": "node scripts/baka-cli.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check:ipc": "node scripts/check-ipc-channels.js",
     "branding:build": "node scripts/build-brand-assets.js"
   },
   "keywords": [
@@ -20,13 +26,16 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "adm-zip": "^0.5.16",
     "electron-updater": "^6.8.3",
     "onnxruntime-node": "^1.26.0",
     "pinia": "^3.0.4",
     "sharp": "^0.34.5",
     "sql.js": "^1.14.1",
     "vue": "^3.5.35",
-    "vue-router": "^5.1.0"
+    "vue-router": "^5.1.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^25.9.1",
@@ -34,8 +43,10 @@
     "concurrently": "^10.0.3",
     "electron": "42.3.3",
     "electron-builder": "^26.8.1",
+    "jsdom": "^29.1.1",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
+    "vitest": "^4.1.10",
     "vue-tsc": "^3.3.3",
     "wait-on": "^9.0.10"
   }

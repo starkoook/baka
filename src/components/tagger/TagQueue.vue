@@ -2,7 +2,7 @@
 import type { TagQueueItem } from '@/stores/tagger'
 
 defineProps<{ queue: TagQueueItem[]; currentIndex: number; collapsed: boolean }>()
-defineEmits<{ select: [index: number]; addFiles: []; addFolder: []; retry: []; toggleCollapsed: [] }>()
+defineEmits<{ select: [index: number]; addFiles: []; addFolder: []; retry: []; removeSelected: []; toggleCollapsed: []; context: [index: number, event: MouseEvent] }>()
 
 const statusLabel: Record<TagQueueItem['status'], string> = {
   pending: '等待', running: '识别中', ready: '待校对', reviewed: '已保存', failed: '失败', partial: '部分保存',
@@ -17,7 +17,7 @@ const statusLabel: Record<TagQueueItem['status'], string> = {
       <button class="queue-collapse" :aria-label="collapsed ? '展开任务队列' : '收起任务队列'" @click="$emit('toggleCollapsed')">{{ collapsed ? '›' : '‹' }}</button>
     </header>
     <div v-if="!collapsed" class="queue-list">
-      <button v-for="(item, index) in queue" :key="`${item.path}-${index}`" :class="{ active: currentIndex === index }" @click="$emit('select', index)">
+      <button v-for="(item, index) in queue" :key="`${item.path}-${index}`" :class="{ active: currentIndex === index }" @click="$emit('select', index)" @contextmenu.prevent="$emit('context', index, $event)">
         <span class="queue-number">{{ String(index + 1).padStart(2, '0') }}</span>
         <span class="queue-file"><strong>{{ item.path.split(/[/\\]/).pop() }}</strong><small :class="`status-${item.status}`">{{ statusLabel[item.status] }}</small></span>
         <i :class="`dot-${item.status}`"></i>
@@ -25,7 +25,11 @@ const statusLabel: Record<TagQueueItem['status'], string> = {
       <div v-if="queue.length === 0" class="queue-empty"><span>队列为空 · 可从图库发送或继续添加</span></div>
     </div>
     <div v-if="!collapsed && queue.some((item) => item.status === 'failed' || item.status === 'partial')" class="queue-retry"><button @click="$emit('retry')">重试失败项目</button></div>
-    <footer v-if="!collapsed"><button @click="$emit('addFiles')">＋ 添加图片</button><button @click="$emit('addFolder')">添加文件夹</button></footer>
+    <footer v-if="!collapsed">
+      <button class="queue-remove" :disabled="queue.length === 0 || currentIndex < 0" @click="$emit('removeSelected')">删除选中</button>
+      <button @click="$emit('addFiles')">＋ 添加图片</button>
+      <button @click="$emit('addFolder')">添加文件夹</button>
+    </footer>
     <button v-else class="queue-rail-add" aria-label="添加图片" @click="$emit('addFiles')">＋</button>
   </aside>
 </template>
@@ -55,9 +59,11 @@ const statusLabel: Record<TagQueueItem['status'], string> = {
 .queue-empty { height: 100%; display: flex; align-items: center; justify-content: center; padding: 0 10px; color: var(--text-tertiary); text-align: center; }
 .queue-empty span { max-width: none; color: var(--text-tertiary); font-size: 7px; line-height: 1.4; white-space: nowrap; }
 .queue-retry { padding: 6px; }.queue-retry button { width: 100%; height: 29px; border: 1px solid rgba(255,137,117,.18); border-radius: 7px; background: rgba(255,137,117,.07); color: #ff9a86; cursor: pointer; font-size: 8px; }
-.tag-queue footer { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 7px; border: 0; }
+.tag-queue footer { flex: none; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; padding: 7px; border: 0; }
 .tag-queue footer button { height: 30px; border: 1px solid rgba(255,255,255,.07); border-radius: 7px; background: rgba(255,255,255,.025); color: var(--text-tertiary); cursor: pointer; font-size: 8px; }
 .tag-queue footer button:first-child { color: var(--accent-primary); }
+.tag-queue footer button.queue-remove { border-color: rgba(255,137,117,.18); background: rgba(255,137,117,.06); color: #ff9a86; }
+.tag-queue footer button.queue-remove:disabled { opacity: .35; cursor: not-allowed; }
 .queue-rail-add { width: 30px; height: 30px; margin: auto auto 9px; border: 1px solid rgba(var(--accent-primary-rgb),.2); border-radius: 7px; background: rgba(var(--accent-primary-rgb),.08); color: var(--accent-primary); cursor: pointer; }
 @media (max-width: 1200px) {
   .tag-queue:not(.tag-queue--collapsed) { width: 166px; flex-basis: 166px; }

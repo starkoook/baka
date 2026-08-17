@@ -10,7 +10,7 @@ if (process.env.ELECTRON_RUN_AS_NODE) {
 }
 
 const { join } = require('path')
-const { app, BrowserWindow, ipcMain, dialog, protocol, net } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, protocol, net, session } = require('electron')
 const { registerLLMHandlers } = require('./ipc/llm')
 const { registerUpdaterHandlers } = require('./ipc/updater')
 const { registerCacheHandlers } = require('./ipc/cache')
@@ -21,12 +21,26 @@ const { registerComponentManagerHandlers } = require('./ipc/component-manager')
 const { registerTrainingHttpHandlers } = require('./ipc/training-http-bridge')
 const { registerGalleryHandlers } = require('./ipc/gallery')
 const { registerTaggerV2Handlers, shutdownWorker } = require('./ipc/tagger-v2')
+const { registerCharacterTagAuditHandlers } = require('./ipc/character-tag-audit-ipc')
+const { registerImageToolsHandlers } = require('./ipc/image-tools-ipc')
 const { registerModelHandlers } = require('./ipc/tagger-models')
 const { registerVocabHandlers } = require('./ipc/tagger-vocab')
+const { registerPromptHandlers } = require('./ipc/prompt-ipc')
+const { registerEffectsHandlers } = require('./ipc/effects-ipc')
 const { registerNodeHandlers } = require('./ipc/nodes')
 const { registerWorkflowHandlers } = require('./ipc/workflow-store')
 const { registerAssetHandlers } = require('./ipc/assets')
+const { registerWorkbenchImageHandlers } = require('./ipc/workbench-images')
+const { registerLocalEngineHandlers } = require('./ipc/local-engines')
+const { registerBooruGalleryHandlers } = require('./ipc/booru-gallery')
 const { startMcpServer, stopMcpServer } = require('./mcp/mcp-server')
+const { writeTextSafe, writeBytesSafe } = require('./ipc/safe-file')
+const { listVersions, restoreVersion, createHistoryRecord } = require('./ipc/file-history')
+const { moveToRecycle, restoreRecycleItem, listRecycleItems, purgeExpiredItems } = require('./ipc/recycle-bin')
+const { moveImages } = require('./ipc/move-images-safe')
+const { runFfprobe, parseProbe, extractFrames, convertVideo } = require('./ipc/video-processing')
+const { registerVideoTagHandlers } = require('./ipc/video-tag')
+const { ensureDb, runSql, importImageFiles } = require('./ipc/gallery')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
@@ -44,6 +58,7 @@ protocol.registerSchemesAsPrivileged([
 app.commandLine.appendSwitch('disable-features', 'FocusRingEnabled')
 
 let mainWindow = null
+const videoTasks = new Map()
 const isDev = !app.isPackaged
 
 // ── userData 重定向到 D 盘(与 paths.js 的 DATA_ROOT 同处),避免 Electron 默认写 C 盘 ──
@@ -57,6 +72,9 @@ try {
 registerLLMHandlers()
 registerWorkflowHandlers()
 registerAssetHandlers()
+registerWorkbenchImageHandlers()
+registerLocalEngineHandlers(ipcMain)
+registerBooruGalleryHandlers(ipcMain)
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -213,8 +231,8 @@ ipcMain.handle('fs:saveCaption', async (_event, { txtPath, caption }) => {
   try {
     const actualPath = txtPath || ''
     if (!actualPath) throw new Error('No path')
-    fs.writeFileSync(actualPath, caption, 'utf-8')
-    return { success: true }
+    if (fs.existsSync(actualPath)) await createHistoryRecord(actualPath)
+    return writeTextSafe(actualPath, caption)
   } catch (e) {
     return { success: false, error: e.message }
   }
@@ -230,36 +248,123 @@ ipcMain.handle('fs:createFolder', async (_event, folderPath) => {
 
 // ── Move/copy images to folder ──
 ipcMain.handle('fs:moveImages', async (_event, { filePaths, destFolder, keepOriginal }) => {
+  return moveImages({ filePaths, destFolder, keepOriginal })
+})
+
+ipcMain.handle('fs:writeTextSafe', async (_event, params) => {
+  if (fs.existsSync(params.filePath)) await createHistoryRecord(params.filePath)
+  return writeTextSafe(params.filePath, params.text)
+})
+ipcMain.handle('fs:writeBytesSafe', async (_event, params) => writeBytesSafe(params.filePath, Buffer.from(params.base64, 'base64')))
+ipcMain.handle('fs:deleteMedia', async (_event, params) => {
+  const results = []
+  const failures = []
+  for (const filePath of params.filePaths || []) {
+    const captionPath = filePath.replace(/\.[^.]+$/, '') + '.txt'
+    const mediaResult = await moveToRecycle(filePath)
+    if (!mediaResult.success) { failures.push({ path: filePath, error: mediaResult.error }); continue }
+    if (fs.existsSync(captionPath)) await moveToRecycle(captionPath)
+    await ensureDb()
+    runSql('DELETE FROM image_tags WHERE image_id IN (SELECT id FROM images WHERE path = ?)', [filePath])
+    runSql('DELETE FROM images WHERE path = ?', [filePath])
+    results.push(filePath)
+  }
+  return { success: failures.length === 0, data: { moved: results.length, failures } }
+})
+ipcMain.handle('recycle:list', async () => ({ success: true, data: await listRecycleItems() }))
+ipcMain.handle('recycle:restore', async (_event, id) => {
+  const restored = await restoreRecycleItem(id)
+  if (!restored.success) return restored
+  const { restoredPath } = restored
   try {
-    if (!fs.existsSync(destFolder)) fs.mkdirSync(destFolder, { recursive: true })
-    let moved = 0
-    const destPaths = []
-    for (const src of filePaths) {
-      const filename = path.basename(src)
-      const dest = path.join(destFolder, filename)
-      // Handle duplicate filenames
-      let finalDest = dest
-      let n = 1
-      while (fs.existsSync(finalDest) || fs.existsSync(finalDest.replace(/\.[^.]+$/, '') + '.txt')) {
-        const ext = path.extname(filename)
-        const base = filename.replace(ext, '')
-        finalDest = path.join(destFolder, `${base}_${n}${ext}`)
-        n++
-      }
-      const captionSrc = src.replace(/\.[^.]+$/, '') + '.txt'
-      const captionDest = finalDest.replace(/\.[^.]+$/, '') + '.txt'
-      if (keepOriginal) {
-        fs.copyFileSync(src, finalDest)
-        if (fs.existsSync(captionSrc)) fs.copyFileSync(captionSrc, captionDest)
-      } else {
-        fs.renameSync(src, finalDest)
-        if (fs.existsSync(captionSrc)) fs.renameSync(captionSrc, captionDest)
-      }
-      destPaths.push(finalDest)
-      moved++
-    }
-    return { success: true, data: { moved, destPaths } }
-  } catch (e) { return { success: false, error: e.message } }
+    await ensureDb()
+    await importImageFiles([restoredPath])
+  } catch (_) {}
+  return restored
+})
+ipcMain.handle('recycle:purge', async (_event, id) => {
+  const items = await listRecycleItems()
+  const item = items.find(row => row.id === id)
+  if (!item) return { success: false, error: 'Item not found' }
+  fs.rmSync(item.recycle_path, { force: true })
+  require('./ipc/gallery').runSql('DELETE FROM recycle_items WHERE id = ?', [id])
+  return { success: true }
+})
+ipcMain.handle('history:list', async (_event, filePath) => ({ success: true, data: await listVersions(filePath) }))
+ipcMain.handle('history:restore', async (_event, id) => restoreVersion(id))
+
+ipcMain.handle('video:probe', async (_event, videoPath) => {
+  try {
+    const info = parseProbe(await runFfprobe(videoPath))
+    return { success: true, data: info }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
+
+ipcMain.handle('video:extract', async (_event, params) => {
+  try {
+    const taskId = params.taskId || `video_${Date.now()}`
+    const controller = new AbortController()
+    videoTasks.set(taskId, controller)
+    const frames = await extractFrames(params.videoPath, params.outputDir, {
+      ...params,
+      signal: controller.signal,
+      onProgress: (progress) => {
+        mainWindow?.webContents.send('video:progress', { taskId, ...progress })
+      },
+    })
+    videoTasks.delete(taskId)
+    return { success: true, data: { frames } }
+  } catch (e) {
+    if (params.taskId) videoTasks.delete(params.taskId)
+    return { success: false, error: e.message }
+  }
+})
+
+ipcMain.handle('video:convert', async (_event, params) => {
+  try {
+    const taskId = params.taskId || `video_${Date.now()}`
+    const controller = new AbortController()
+    videoTasks.set(taskId, controller)
+    const outputPath = await convertVideo(params.videoPath, params.outputPath, {
+      codec: params.codec,
+      signal: controller.signal,
+      onProgress: (progress) => {
+        mainWindow?.webContents.send('video:progress', { taskId, ...progress })
+      },
+    })
+    videoTasks.delete(taskId)
+    return { success: true, outputPath }
+  } catch (e) {
+    if (params.taskId) videoTasks.delete(params.taskId)
+    return { success: false, error: e.message }
+  }
+})
+
+ipcMain.handle('video:cancel', async (_event, taskId) => {
+  const controller = videoTasks.get(taskId)
+  if (!controller) return { success: false, error: 'No active task' }
+  controller.abort()
+  videoTasks.delete(taskId)
+  return { success: true }
+})
+
+ipcMain.handle('video:setFfmpegDir', async (_event, dirPath) => {
+  try {
+    const fs = require('fs')
+    const path = require('path')
+    const { getConfigPath } = require('./ipc/paths')
+    const configPath = getConfigPath()
+    let config = {}
+    if (fs.existsSync(configPath)) config = JSON.parse(fs.readFileSync(configPath, 'utf8'))
+    config.ffmpegDir = dirPath
+    fs.mkdirSync(path.dirname(configPath), { recursive: true })
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8')
+    return { success: true }
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
 })
 
 // ── Scan directory for ONNX models ──
@@ -355,8 +460,13 @@ ipcMain.handle('system:stats', async () => {
   }
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const { pathToFileURL } = require('url')
+  const { loadSettings } = require('./ipc/booru-gallery')
+  const gallerySettings = loadSettings()
+  if (gallerySettings.proxy) {
+    await session.defaultSession.setProxy({ proxyRules: `http=${gallerySettings.proxy};https=${gallerySettings.proxy}` })
+  }
   protocol.handle('media', (request) => {
     const url = new URL(request.url)
     const filePath = decodeURIComponent(url.pathname.replace(/^\//, ''))
@@ -538,7 +648,12 @@ app.whenReady().then(() => {
   registerGalleryHandlers(mainWindow)
   registerModelHandlers()
   registerVocabHandlers()
+  registerPromptHandlers()
+  registerEffectsHandlers()
   registerTaggerV2Handlers(mainWindow)
+  registerCharacterTagAuditHandlers()
+  registerImageToolsHandlers()
+  registerVideoTagHandlers()
   registerNodeHandlers()
 
   // ── Open file in Explorer ──
@@ -557,6 +672,7 @@ app.whenReady().then(() => {
 
   // ── MCP server ──
   startMcpServer().catch(e => console.error('[main] MCP start failed:', e.message))
+  purgeExpiredItems(30).catch(() => {})
 })
 
 app.on('window-all-closed', () => {

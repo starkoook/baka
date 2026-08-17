@@ -3,12 +3,13 @@ const { spawn } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const { app } = require('electron')
+const { getConfigPath } = require('./paths')
 
 let trainingProcess = null
 let guiPort = 28000
 
 function getRepoPath() {
-  const configPath = path.join(app.getPath('userData'), 'baka-config.json')
+  const configPath = getConfigPath()
   try {
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'))
@@ -34,7 +35,7 @@ function registerTrainingHandlers(mainWindow) {
 
   // Set repo path
   ipcMain.handle('training:setPath', async (_event, folderPath) => {
-    const configPath = path.join(app.getPath('userData'), 'baka-config.json')
+    const configPath = getConfigPath()
     try {
       const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf-8')) : {}
       config.loraRescriptsPath = folderPath
@@ -56,6 +57,7 @@ function registerTrainingHandlers(mainWindow) {
       return { success: true, alreadyRunning: true, url: `http://127.0.0.1:${guiPort}` }
     }
 
+    let crashed = false
     try {
       // Try system python first, then bundled
       let usePython = 'python'
@@ -99,7 +101,6 @@ function registerTrainingHandlers(mainWindow) {
         if (msg) mainWindow?.webContents.send('training:log', { type: 'error', message: msg })
       })
 
-      let crashed = false
       trainingProcess.on('close', (code) => {
         crashed = trainingProcess !== null
         trainingProcess = null

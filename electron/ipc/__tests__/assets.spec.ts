@@ -29,9 +29,11 @@ describe('assets store', () => {
   })
 
   it('caps the list at 200 entries newest first', () => {
-    for (let i = 0; i < 205; i++) addAsset({ type: 'text', text: `t${i}`, meta: {} }, root)
+    const oldest = addAsset({ type: 'text', text: 't0', meta: {} }, root).asset!
+    for (let i = 1; i < 205; i++) addAsset({ type: 'text', text: `t${i}`, meta: {} }, root)
     const list = listAssets(root)
     expect(list).toHaveLength(200)
+    expect(existsSync(oldest.file)).toBe(false)
   })
 
   it('deletes and clears assets', () => {
@@ -44,5 +46,6 @@ describe('assets store', () => {
     expect(existsSync(b.file)).toBe(true)
     expect(clearAssets(root).success).toBe(true)
     expect(listAssets(root)).toHaveLength(0)
+    expect(existsSync(b.file)).toBe(false)
   })
 })

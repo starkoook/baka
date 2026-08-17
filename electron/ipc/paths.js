@@ -1,20 +1,24 @@
 /**
  * Centralised storage paths for Baka TOOLS.
- * All persistent data lives under D:\BakaTOOLS\ — NOT on C: drive.
+ * Existing D:\BakaTOOLS data is preserved; new installs use the system app-data directory.
  */
 const fs = require('fs')
 const path = require('path')
+const os = require('os')
 
-const DATA_ROOT = 'D:\\BakaTOOLS'
+const LEGACY_DATA_ROOT = 'D:\\BakaTOOLS'
 
-// Ensure root exists at module load time (before any DB operations)
-try {
-  if (!fs.existsSync(DATA_ROOT)) {
-    fs.mkdirSync(DATA_ROOT, { recursive: true })
-  }
-} catch (e) {
-  console.error(`[paths] Cannot create data root ${DATA_ROOT}: ${e.message}`)
+function resolveDataRoot({
+  legacyRoot = LEGACY_DATA_ROOT,
+  appDataRoot = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
+  exists = fs.existsSync,
+} = {}) {
+  if (process.env.BAKA_DATA_ROOT) return process.env.BAKA_DATA_ROOT
+  if (exists(legacyRoot)) return legacyRoot
+  return path.join(appDataRoot, 'BakaTOOLS')
 }
+
+const DATA_ROOT = resolveDataRoot()
 
 function ensure(dir) {
   if (fs.existsSync(dir)) {
@@ -39,8 +43,8 @@ function getDataRoot() { ensure(DATA_ROOT); return DATA_ROOT }
 function getDbDir() {
   const dir = path.join(DATA_ROOT, 'data'); ensure(dir); return dir
 }
-function getDbPath() {
-  const dir = getDbDir()
+function getDbPath(root = DATA_ROOT) {
+  const dir = path.join(root, 'data'); ensure(dir)
   return path.join(dir, 'gallery.db')
 }
 
@@ -57,4 +61,28 @@ function getConfigPath() {
   return path.join(DATA_ROOT, 'baka-config.json')
 }
 
-module.exports = { getDataRoot, getDbDir, getDbPath, getThumbDir, getModelDir, getConfigPath }
+function getCredentialsPath() {
+  ensure(DATA_ROOT)
+  return path.join(DATA_ROOT, 'credentials.json')
+}
+
+function getRecycleDir(root = DATA_ROOT) {
+  const dir = path.join(root, 'recycle-bin'); ensure(dir); return dir
+}
+
+function getHistoryDir(root = DATA_ROOT) {
+  const dir = path.join(root, 'file-history'); ensure(dir); return dir
+}
+
+module.exports = {
+  resolveDataRoot,
+  getDataRoot,
+  getDbDir,
+  getDbPath,
+  getThumbDir,
+  getModelDir,
+  getConfigPath,
+  getCredentialsPath,
+  getRecycleDir,
+  getHistoryDir,
+}

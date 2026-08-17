@@ -1,499 +1,357 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'; import { useAppStore } from '@/stores/app'; import { playSuccess } from '@/composables/useSound'
+import { computed, onMounted, ref } from 'vue'
+import { storeToRefs } from 'pinia'
+import { useRoute } from 'vue-router'
+import { useAppStore } from '@/stores/app'
+import { useReverseStore } from '@/stores/reverse'
+import { playSuccess } from '@/composables/useSound'
+
+const route = useRoute()
 const appStore = useAppStore()
-const isDragover = ref(false); const imageBase64 = ref<string | null>(null); const imagePreview = ref<string | null>(null); const fileName = ref<string | null>(null); const isProcessing = ref(false)
-const threshold = ref(0.25); const cleanTags = ref(true); const engineMode = ref<'api' | 'local'>('api'); const outputFormat = ref<'danbooru' | 'natural' | 'both'>('danbooru')
-const tags = ref<string[]>([]); const naturalText = ref(''); const copied = ref(false); const activeTagFilter = ref('')
-function onDragOver(e: DragEvent) { e.preventDefault(); isDragover.value = true }
-function onDragLeave() { isDragover.value = false }
-async function loadFile(file: File) { fileName.value = file.name; const reader = new FileReader(); reader.onload = () => { const d = reader.result as string; imagePreview.value = d; imageBase64.value = d.split(',')[1] || '' }; reader.readAsDataURL(file) }
-function onDrop(e: DragEvent) { e.preventDefault(); isDragover.value = false; if (e.dataTransfer?.files.length) loadFile(e.dataTransfer.files[0]) }
-function selectFile() { const input = document.createElement('input'); input.type = 'file'; input.accept = 'image/jpeg,image/png,image/webp'; input.onchange = () => { if (input.files?.length) loadFile(input.files[0]) }; input.click() }
-function cleanTag(t: string): string { if (!cleanTags.value) return t; return t.replace(/_/g, ' ').replace(/\\/g, '').replace(/['"]/g, '').trim() }
-function parseTagList(raw: string): string[] { return raw.split(/[,，\n]+/).map(t => cleanTag(t)).filter(t => t.length > 0 && t.length < 80 && !t.includes('.')) }
-async function runReverse() {
-  if (!imageBase64.value) return; isProcessing.value = true; tags.value = []; naturalText.value = ''; appStore.setStatus('反推中...')
-  try { let tagList: string[] = []
-    if (engineMode.value === 'local') { const res = await window.taggerAPI.localInfer({ imagePath: fileName.value!, threshold: threshold.value }); if (res.success && res.tags) tagList = res.tags }
-    else { const res = await window.llmAPI.tagImage({ imageBase64: imageBase64.value, threshold: threshold.value, outputFormat: outputFormat.value }); if (res.success && res.tags) tagList = res.tags; if (res.raw) { const extra = parseTagList(res.raw); if (extra.length > tagList.length) tagList = extra } }
-    if (outputFormat.value === 'natural' || outputFormat.value === 'both') { naturalText.value = tagList.join(', ') }
-    if (outputFormat.value !== 'natural') tags.value = tagList.map(cleanTag)
-    appStore.setStatus(`完成: ${tags.value.length} 个标签`); playSuccess()
-  } catch (e: any) { appStore.setStatus('反推失败') }
-  isProcessing.value = false
+const reverse = useReverseStore()
+const {
+  imagePath, imageBase64, imageMime, engineMode, modelPath, threshold,
+  tags, naturalText, drawingPrompt, isProcessing, lastError,
+} = storeToRefs(reverse)
+
+const models = ref<ModelInfo[]>([])
+const isDragover = ref(false)
+const tagFilter = ref('')
+const copiedField = ref('')
+const newTag = ref('')
+const galleryImageId = ref<number | null>(null)
+
+const imagePreview = computed(() => imageBase64.value
+  ? `data:${imageMime.value};base64,${imageBase64.value}`
+  : '')
+const fileName = computed(() => imagePath.value.split(/[\\/]/).pop() || '')
+const filteredTags = computed(() => {
+  const query = tagFilter.value.trim().toLowerCase()
+  return query ? tags.value.filter(tag => tag.toLowerCase().includes(query)) : tags.value
+})
+const needsLocal = computed(() => engineMode.value === 'local' || engineMode.value === 'dual')
+const needsCloud = computed(() => engineMode.value === 'cloud' || engineMode.value === 'dual')
+const canRun = computed(() =>
+  !!imageBase64.value &&
+  !!imagePath.value &&
+  !isProcessing.value &&
+  (!needsLocal.value || !!modelPath.value)
+)
+
+async function loadImagePath(selectedPath: string) {
+  const result = await window.fsAPI?.readImageBase64(selectedPath)
+  if (!result?.success || !result.base64) {
+    lastError.value = result?.error || '无法读取图片'
+    return
+  }
+  imagePath.value = selectedPath
+  imageBase64.value = result.base64
+  imageMime.value = result.mime || 'image/jpeg'
+  lastError.value = ''
 }
-function copyAll() { navigator.clipboard.writeText(tags.value.join(', ')); copied.value = true; setTimeout(() => copied.value = false, 2000) }
-function removeTag(i: number) { tags.value.splice(i, 1) }
-function clearAll() { imageBase64.value = null; imagePreview.value = null; fileName.value = null; tags.value = []; naturalText.value = '' }
-const displayTags = computed(() => { if (!activeTagFilter.value) return tags.value; return tags.value.filter(t => t.toLowerCase().includes(activeTagFilter.value.toLowerCase())) })
+
+async function selectFile() {
+  const selected = await window.fsAPI?.selectImages()
+  if (selected?.[0]) await loadImagePath(selected[0])
+}
+
+function onDragOver(event: DragEvent) {
+  event.preventDefault()
+  isDragover.value = true
+}
+
+function onDragLeave() {
+  isDragover.value = false
+}
+
+async function onDrop(event: DragEvent) {
+  event.preventDefault()
+  isDragover.value = false
+  const file = event.dataTransfer?.files?.[0]
+  if (!file) return
+  const selectedPath = window.galleryAPI?.getFilePath(file)
+  if (selectedPath) await loadImagePath(selectedPath)
+}
+
+function normalizeLocalTags(input: any[]): string[] {
+  return input
+    .map(item => typeof item === 'string' ? item : item?.tag)
+    .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+}
+
+async function runLocal() {
+  const model = models.value.find(item => item.path === modelPath.value)
+  if (!model) throw new Error('请先选择本地标签模型')
+  const result = await window.taggerV2API?.inferSingle({
+    modelPath: model.path,
+    csvPath: model.csvPath || undefined,
+    imagePath: imagePath.value,
+    threshold: threshold.value,
+    resolution: model.resolution,
+  })
+  if (!result?.success) throw new Error(result?.error || '本地反推失败')
+  return normalizeLocalTags(result.data?.tags || [])
+}
+
+async function runCloud() {
+  const config = await window.llmAPI?.getConfig()
+  if (!config?.apiKey) throw new Error('云端 API 尚未配置，请先到设置页填写')
+  const result = await window.llmAPI?.tagImage({
+    imageBase64: imageBase64.value,
+    threshold: threshold.value,
+    outputFormat: 'both',
+  })
+  if (!result?.success) throw new Error(result?.error || '云端反推失败')
+  const description = (result.natural || '').trim()
+  return {
+    tags: Array.isArray(result.tags) ? result.tags : [],
+    naturalText: description,
+    drawingPrompt: description,
+  }
+}
+
+async function runReverse() {
+  if (!canRun.value) return
+  isProcessing.value = true
+  lastError.value = ''
+  appStore.setStatus('正在分析图片…')
+  try {
+    const [localResult, cloudResult] = await Promise.all([
+      needsLocal.value ? runLocal() : Promise.resolve([]),
+      needsCloud.value ? runCloud() : Promise.resolve({ tags: [], naturalText: '', drawingPrompt: '' }),
+    ])
+    const mergedTags = [...new Set([...localResult, ...cloudResult.tags])]
+    reverse.setResult({
+      tags: mergedTags,
+      naturalText: cloudResult.naturalText,
+      drawingPrompt: cloudResult.drawingPrompt,
+    })
+    reverse.persist()
+    appStore.setStatus(`反推完成：${mergedTags.length} 个标签`)
+    playSuccess()
+  } catch (error: any) {
+    lastError.value = error.message || '反推失败'
+    appStore.setStatus('反推失败')
+  } finally {
+    isProcessing.value = false
+  }
+}
+
+function removeTag(tag: string) {
+  tags.value = tags.value.filter(item => item !== tag)
+  reverse.persist()
+}
+
+function addTag() {
+  const value = newTag.value.trim()
+  if (!value || tags.value.includes(value)) return
+  tags.value.push(value)
+  newTag.value = ''
+  reverse.persist()
+}
+
+async function copyField(field: 'tags' | 'natural' | 'prompt') {
+  const value = field === 'tags' ? tags.value.join(', ')
+    : field === 'natural' ? naturalText.value
+      : drawingPrompt.value
+  await navigator.clipboard.writeText(value)
+  copiedField.value = field
+  setTimeout(() => { copiedField.value = '' }, 1500)
+}
+
+async function saveText() {
+  if (!imagePath.value) return
+  const text = drawingPrompt.value || naturalText.value || tags.value.join(', ')
+  const txtPath = imagePath.value.replace(/\.[^.\\/]+$/, '') + '.txt'
+  const result = await window.fsAPI?.saveCaption({ txtPath, caption: text })
+  appStore.setStatus(result?.success ? `已保存：${txtPath}` : `保存失败：${result?.error || '未知错误'}`)
+}
+
+async function writeBackToGallery() {
+  if (!galleryImageId.value || !window.galleryAPI) return
+  const result = await window.galleryAPI.setImageTags(
+    galleryImageId.value,
+    tags.value.map(tag => ({ tag, category: 'general', source: 'reverse' }))
+  )
+  appStore.setStatus(result.success ? '标签已写回图库' : `写回失败：${result.error || '未知错误'}`)
+}
+
+function clearAll() {
+  reverse.clear()
+  galleryImageId.value = null
+}
+
+onMounted(async () => {
+  reverse.restore()
+  const modelResult = await window.taggerV2API?.listModels()
+  if (modelResult?.success && modelResult.data) {
+    models.value = modelResult.data.models
+    if (!modelPath.value && models.value[0]) modelPath.value = models.value[0].path
+  }
+
+  const queryPath = typeof route.query.imagePath === 'string' ? route.query.imagePath : ''
+  const queryId = Number(route.query.imageId)
+  if (Number.isFinite(queryId) && queryId > 0) galleryImageId.value = queryId
+  if (queryPath) await loadImagePath(queryPath)
+  else if (imagePath.value && !imageBase64.value) await loadImagePath(imagePath.value)
+})
 </script>
 
 <template>
-  <div class="rv-root">
-    <!-- ═══ HERO UPLOAD ═══ -->
-    <div
-      class="rv-hero"
-      :class="{ loaded: imagePreview, hover: isDragover }"
-      @dragover="onDragOver"
-      @dragleave="onDragLeave"
-      @drop="onDrop"
-      @click="!imagePreview && selectFile()"
-    >
-      <div class="rv-hero-glow" aria-hidden="true"></div>
-      <template v-if="imagePreview">
-        <img :src="imagePreview" class="rv-hero-img" />
-        <div class="rv-hero-overlay">
-          <span class="rv-hero-fn">{{ fileName }}</span>
-          <button class="rv-hero-change" @click.stop="selectFile">更换图片</button>
-        </div>
-      </template>
-      <template v-else>
-        <div class="rv-hero-empty">
-          <span class="rv-hero-icon">🖼</span>
-          <h2>拖入图片开始反推</h2>
-          <p>支持 JPEG / PNG / WebP · 本地 ONNX 或云端 LLM</p>
-        </div>
-      </template>
-    </div>
+  <div class="reverse-workbench">
+    <header class="reverse-header">
+      <div>
+        <p class="eyebrow">PROMPT REVERSE</p>
+        <h1>提示词反推</h1>
+        <p>本地模型负责稳定标签，云端模型负责自然描述与绘图提示词。</p>
+      </div>
+      <div class="header-actions">
+        <button class="btn btn-secondary" @click="clearAll">清空</button>
+        <button class="btn btn-primary" :disabled="!canRun" @click="runReverse">
+          {{ isProcessing ? '分析中…' : '开始反推' }}
+        </button>
+      </div>
+    </header>
 
-    <!-- ═══ CONTROL STRIP ═══ -->
-    <div class="cabin-panel rv-strip">
-      <span class="cabin-label">/// CONTROL</span>
-      <div class="cabin-panel-br"></div>
-
-      <!-- Engine & Format row -->
-      <div class="rv-ctrl-row">
-        <div class="rv-seg-group">
-          <span class="rv-seg-label">引擎</span>
-          <div class="rv-seg">
-            <button :class="{ on: engineMode === 'api' }" @click="engineMode = 'api'">☁ API</button>
-            <button :class="{ on: engineMode === 'local' }" @click="engineMode = 'local'">💻 本地</button>
+    <div class="reverse-grid">
+      <section class="source-column">
+        <div class="panel upload-panel">
+          <div
+            class="drop-zone"
+            :class="{ active: isDragover, loaded: imagePreview }"
+            @dragover="onDragOver"
+            @dragleave="onDragLeave"
+            @drop="onDrop"
+            @click="selectFile"
+          >
+            <img v-if="imagePreview" :src="imagePreview" alt="待反推图片" />
+            <div v-else class="empty-upload">
+              <span>＋</span>
+              <strong>选择或拖入一张图片</strong>
+              <small>JPEG、PNG、WebP</small>
+            </div>
+          </div>
+          <div v-if="fileName" class="file-row">
+            <span :title="imagePath">{{ fileName }}</span>
+            <button @click="selectFile">更换</button>
           </div>
         </div>
-        <div class="rv-seg-group" v-if="engineMode === 'api'">
-          <span class="rv-seg-label">格式</span>
-          <div class="rv-seg">
-            <button :class="{ on: outputFormat === 'danbooru' }" @click="outputFormat = 'danbooru'">标签</button>
-            <button :class="{ on: outputFormat === 'natural' }" @click="outputFormat = 'natural'">描述</button>
-            <button :class="{ on: outputFormat === 'both' }" @click="outputFormat = 'both'">全部</button>
+
+        <div class="panel settings-panel">
+          <label>分析方式</label>
+          <div class="mode-switch">
+            <button :class="{ active: engineMode === 'local' }" @click="engineMode = 'local'">本地标签</button>
+            <button :class="{ active: engineMode === 'cloud' }" @click="engineMode = 'cloud'">云端描述</button>
+            <button :class="{ active: engineMode === 'dual' }" @click="engineMode = 'dual'">双引擎</button>
+          </div>
+
+          <template v-if="needsLocal">
+            <label for="reverse-model">本地模型</label>
+            <select id="reverse-model" v-model="modelPath" class="form-input">
+              <option value="" disabled>请选择模型</option>
+              <option v-for="model in models" :key="model.path" :value="model.path">{{ model.name }}</option>
+            </select>
+            <div class="threshold-row">
+              <label for="reverse-threshold">标签阈值</label>
+              <strong>{{ Math.round(threshold * 100) }}%</strong>
+            </div>
+            <input id="reverse-threshold" v-model.number="threshold" type="range" min="0.05" max="0.95" step="0.05" />
+          </template>
+
+          <p v-if="needsCloud" class="setting-note">云端结果会保留完整段落，不再拆成标签。</p>
+          <p v-if="lastError" class="error-message">{{ lastError }}</p>
+        </div>
+      </section>
+
+      <section class="result-column">
+        <div class="result-panel">
+          <div class="result-title">
+            <div><span>01</span><strong>标签</strong><small>{{ tags.length }} 个</small></div>
+            <button :disabled="!tags.length" @click="copyField('tags')">{{ copiedField === 'tags' ? '已复制' : '复制' }}</button>
+          </div>
+          <div class="tag-tools">
+            <input v-model="tagFilter" class="form-input" placeholder="筛选标签" />
+            <input v-model="newTag" class="form-input" placeholder="补充标签" @keyup.enter="addTag" />
+            <button @click="addTag">添加</button>
+          </div>
+          <div v-if="filteredTags.length" class="tag-list">
+            <span v-for="tag in filteredTags" :key="tag">{{ tag }}<button @click="removeTag(tag)">×</button></span>
+          </div>
+          <p v-else class="empty-result">运行本地或双引擎后，标签会显示在这里。</p>
+        </div>
+
+        <div class="result-panel">
+          <div class="result-title">
+            <div><span>02</span><strong>自然描述</strong></div>
+            <button :disabled="!naturalText" @click="copyField('natural')">{{ copiedField === 'natural' ? '已复制' : '复制' }}</button>
+          </div>
+          <textarea v-model="naturalText" placeholder="云端模型生成的自然语言描述" @change="reverse.persist"></textarea>
+        </div>
+
+        <div class="result-panel">
+          <div class="result-title">
+            <div><span>03</span><strong>绘图提示词</strong></div>
+            <button :disabled="!drawingPrompt" @click="copyField('prompt')">{{ copiedField === 'prompt' ? '已复制' : '复制' }}</button>
+          </div>
+          <textarea v-model="drawingPrompt" placeholder="可继续编辑为绘图提示词" @change="reverse.persist"></textarea>
+          <div class="save-actions">
+            <button class="btn btn-secondary" :disabled="!imagePath" @click="saveText">保存同名 .txt</button>
+            <button v-if="galleryImageId" class="btn btn-secondary" :disabled="!tags.length" @click="writeBackToGallery">写回图库</button>
           </div>
         </div>
-      </div>
-
-      <!-- Slider + Checkbox row -->
-      <div class="rv-ctrl-row rv-ctrl-bottom">
-        <div class="rv-slider-group">
-          <span class="rv-slider-label">阈值 <strong>{{ (threshold * 100).toFixed(0) }}%</strong></span>
-          <input type="range" min="0.05" max="0.95" step="0.05" v-model.number="threshold" class="form-range" />
-        </div>
-        <label class="rv-check">
-          <input type="checkbox" v-model="cleanTags" />
-          <span class="rv-check-mark"></span>
-          清洗标签
-        </label>
-      </div>
-
-      <!-- Actions -->
-      <div class="rv-actions">
-        <button
-          class="btn btn-primary rv-go"
-          :disabled="!imageBase64 || isProcessing"
-          @click="runReverse"
-        >{{ isProcessing ? '⌛ 处理中...' : '🔮 开始反推' }}</button>
-        <button class="btn-secondary rv-clr" @click="clearAll">清除</button>
-      </div>
-    </div>
-
-    <!-- ═══ RESULTS ═══ -->
-    <div class="rv-results" v-if="tags.length > 0 || naturalText">
-      <!-- Natural language block -->
-      <div class="cabin-panel rv-nl-block" v-if="naturalText">
-        <span class="cabin-label">/// NATURAL</span>
-        <div class="cabin-panel-br"></div>
-        <div class="rv-nl-label">📝 自然语言描述</div>
-        <p class="rv-nl-text">{{ naturalText }}</p>
-      </div>
-
-      <!-- Tag header -->
-      <div class="rv-tags-head" v-if="tags.length > 0">
-        <span class="rv-tags-count">{{ tags.length }} 个标签</span>
-        <input class="rv-tags-filter" v-model="activeTagFilter" placeholder="筛选标签..." />
-        <button class="btn btn-secondary btn-sm" @click="copyAll">{{ copied ? '✓ 已复制' : '📋 复制全部' }}</button>
-      </div>
-
-      <!-- Tag wall -->
-      <div class="rv-tags-wall" v-if="displayTags.length > 0">
-        <span
-          v-for="(t, i) in displayTags" :key="i"
-          class="rv-tag"
-          :class="{ top: i < Math.ceil(tags.length * 0.3) }"
-        >
-          {{ t }}
-          <button class="rv-tag-x" @click="removeTag(i)">×</button>
-        </span>
-      </div>
+      </section>
     </div>
   </div>
 </template>
 
 <style scoped>
-.rv-root {
-  max-width: 900px;
-  margin: 0 auto;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-/* ═══ HERO UPLOAD ═══ */
-.rv-hero {
-  position: relative;
-  min-height: 260px;
-  border: 2px dashed var(--border-default);
-  border-radius: var(--radius-lg);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  overflow: hidden;
-  transition: all var(--transition-base);
-  background: var(--glass-bg);
-  backdrop-filter: blur(8px);
-}
-.rv-hero.hover {
-  border-color: var(--accent-primary);
-  background: var(--accent-bg);
-  box-shadow: var(--accent-glow);
-  transform: scale(1.01);
-}
-.rv-hero.loaded {
-  border-style: solid;
-  border-color: var(--glass-border);
-  min-height: auto;
-}
-
-.rv-hero-glow {
-  position: absolute;
-  width: 200px; height: 200px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(244,114,182,0.06) 0%, transparent 70%);
-  pointer-events: none;
-  top: 50%; left: 50%;
-  transform: translate(-50%, -50%);
-}
-
-.rv-hero-img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  max-height: 400px;
-  border-radius: var(--radius-md);
-}
-.rv-hero-overlay {
-  position: absolute;
-  bottom: 12px; left: 12px;
-  display: flex; gap: 8px; align-items: center;
-}
-.rv-hero-fn {
-  font-size: 11px;
-  color: var(--text-primary);
-  background: var(--hud-bg);
-  padding: 4px 10px; border-radius: var(--radius-xs);
-  border: 1px solid var(--hud-border);
-}
-.rv-hero-change {
-  font-size: 10px;
-  background: var(--accent-bg);
-  border: 1px solid var(--border-accent);
-  color: var(--accent-primary);
-  padding: 4px 10px;
-  border-radius: var(--radius-xs);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-.rv-hero-change:hover {
-  background: var(--accent-bg-hover);
-}
-
-.rv-hero-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 40px 20px;
-  text-align: center;
-}
-.rv-hero-icon { font-size: 42px; opacity: 0.5; }
-.rv-hero-empty h2 {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-}
-.rv-hero-empty p {
-  font-size: 13px;
-  color: var(--text-tertiary);
-  margin: 0;
-}
-
-/* ═══ CONTROL STRIP ═══ */
-.rv-strip {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 24px 22px 18px;
-}
-
-.rv-ctrl-row {
-  display: flex;
-  align-items: flex-end;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-.rv-ctrl-bottom {
-  align-items: center;
-}
-
-/* ── Segmented control ── */
-.rv-seg-group {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.rv-seg-label {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.rv-seg {
-  display: flex;
-  border-radius: var(--radius-full);
-  background: var(--hud-bg);
-  border: 1px solid var(--hud-border);
-  overflow: hidden;
-}
-.rv-seg button {
-  padding: 6px 14px;
-  border: none;
-  background: transparent;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  font-weight: 500;
-  font-family: var(--font-sans);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  position: relative;
-}
-.rv-seg button:hover {
-  color: var(--text-secondary);
-}
-.rv-seg button.on {
-  color: var(--accent-primary);
-  background: var(--accent-bg);
-}
-.rv-seg button + button::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 20%;
-  height: 60%;
-  width: 1px;
-  background: var(--hud-border);
-}
-
-/* ── Slider ── */
-.rv-slider-group {
-  flex: 1;
-  min-width: 180px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.rv-slider-label {
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-}
-.rv-slider-label strong {
-  color: var(--accent-primary);
-}
-
-/* ── Checkbox ── */
-.rv-check {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  user-select: none;
-  padding: 6px 0;
-}
-.rv-check input { display: none; }
-.rv-check-mark {
-  width: 16px; height: 16px;
-  border: 2px solid var(--border-default);
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all var(--transition-fast);
-  flex-shrink: 0;
-}
-.rv-check input:checked + .rv-check-mark {
-  background: var(--accent-primary);
-  border-color: var(--accent-primary);
-}
-.rv-check input:checked + .rv-check-mark::after {
-  content: '✓';
-  font-size: 10px;
-  color: #fff;
-  font-weight: 700;
-}
-
-/* ── Actions ── */
-.rv-actions {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-}
-.rv-go { flex: 1; }
-.rv-clr {
-  padding: 11px 22px;
-  border-radius: var(--radius-full);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  white-space: nowrap;
-  background: var(--glass-bg);
-  color: var(--text-tertiary);
-  border: 1px solid var(--glass-border);
-}
-.rv-clr:hover {
-  background: var(--glass-bg-hover);
-  border-color: var(--border-accent);
-  color: var(--text-primary);
-}
-
-/* ═══ RESULTS ═══ */
-.rv-results {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-/* ── Natural language ── */
-.rv-nl-block { padding: 20px 20px 16px; }
-.rv-nl-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  margin-bottom: 8px;
-}
-.rv-nl-text {
-  font-size: 13px;
-  line-height: 1.7;
-  color: var(--text-primary);
-  margin: 0;
-  padding: 12px 14px;
-  background: var(--hud-bg);
-  border: 1px solid var(--hud-border);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--hud-inset-shadow);
-}
-
-/* ── Tag header bar ── */
-.rv-tags-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 2px 4px;
-}
-.rv-tags-count {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  font-family: var(--font-mono);
-}
-.rv-tags-filter {
-  flex: 1;
-  max-width: 220px;
-  padding: 6px 12px;
-  background: var(--hud-bg);
-  border: 1px solid var(--hud-border);
-  border-radius: var(--radius-full);
-  color: var(--text-primary);
-  font-size: 11px;
-  font-family: var(--font-sans);
-  transition: all var(--transition-fast);
-}
-.rv-tags-filter:focus {
-  outline: none;
-  border-color: var(--border-accent);
-  box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.1);
-}
-.rv-tags-filter::placeholder { color: var(--text-tertiary); }
-
-/* ── Tag wall ── */
-.rv-tags-wall {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 12px 14px;
-  background: var(--hud-bg);
-  border: 1px solid var(--hud-border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--hud-inset-shadow);
-}
-
-.rv-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px 4px 12px;
-  background: var(--glass-bg);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-full);
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-family: var(--font-sans);
-  transition: all var(--transition-fast);
-  animation: rv-pop-in 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.rv-tag:hover {
-  background: var(--glass-bg-hover);
-  border-color: var(--border-accent);
-  color: var(--text-primary);
-}
-.rv-tag.top {
-  background: var(--accent-bg);
-  border-color: rgba(var(--accent-primary-rgb), 0.2);
-  color: var(--accent-primary);
-}
-.rv-tag-x {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px; height: 14px;
-  padding: 0;
-  border: none;
-  background: rgba(255,255,255,0.04);
-  color: var(--text-tertiary);
-  border-radius: 50%;
-  font-size: 10px;
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  line-height: 1;
-}
-.rv-tag-x:hover {
-  background: rgba(239,68,68,0.2);
-  color: var(--accent-danger);
-}
-
-@keyframes rv-pop-in {
-  0% { transform: scale(0.8); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
+.reverse-workbench { max-width: 1180px; margin: 0 auto; padding: 12px 8px 40px; }
+.reverse-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
+.reverse-header h1 { margin: 2px 0 5px; color: var(--text-primary); font-size: 26px; }
+.reverse-header p { margin: 0; color: var(--text-tertiary); font-size: 13px; }
+.eyebrow { color: var(--accent-primary) !important; font: 700 10px var(--font-mono); letter-spacing: .16em; }
+.header-actions, .save-actions { display: flex; gap: 8px; }
+.reverse-grid { display: grid; grid-template-columns: minmax(300px, .82fr) minmax(480px, 1.35fr); gap: 16px; align-items: start; }
+.source-column, .result-column { display: flex; flex-direction: column; gap: 12px; }
+.panel, .result-panel { background: var(--bg-elevated); border: 1px solid var(--border-default); border-radius: var(--radius-md); }
+.upload-panel, .settings-panel { padding: 14px; }
+.drop-zone { min-height: 330px; display: grid; place-items: center; overflow: hidden; cursor: pointer; border: 1px dashed var(--border-default); border-radius: var(--radius-sm); background: var(--bg-sunken); }
+.drop-zone.active { border-color: var(--accent-primary); background: var(--accent-bg); }
+.drop-zone img { width: 100%; height: 330px; object-fit: contain; }
+.empty-upload { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--text-tertiary); }
+.empty-upload span { font-size: 36px; color: var(--accent-primary); }
+.empty-upload strong { color: var(--text-secondary); }
+.file-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+.file-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.file-row button, .result-title button, .tag-tools button { border: 0; background: transparent; color: var(--accent-primary); cursor: pointer; }
+.settings-panel > label { display: block; margin: 8px 0 6px; font-size: 11px; color: var(--text-tertiary); font-weight: 600; }
+.mode-switch { display: grid; grid-template-columns: repeat(3, 1fr); padding: 3px; background: var(--bg-sunken); border-radius: var(--radius-sm); }
+.mode-switch button { padding: 8px 4px; border: 0; border-radius: 6px; background: transparent; color: var(--text-tertiary); cursor: pointer; }
+.mode-switch button.active { background: var(--accent-bg); color: var(--accent-primary); }
+.threshold-row { display: flex; justify-content: space-between; margin-top: 12px; color: var(--text-tertiary); font-size: 11px; }
+.threshold-row strong { color: var(--accent-primary); }
+.settings-panel input[type="range"] { width: 100%; }
+.setting-note, .error-message { margin: 12px 0 0; font-size: 11px; line-height: 1.6; color: var(--text-tertiary); }
+.error-message { color: var(--accent-danger); }
+.result-panel { padding: 16px; }
+.result-title { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.result-title > div { display: flex; align-items: center; gap: 9px; }
+.result-title span { color: var(--accent-primary); font: 700 10px var(--font-mono); }
+.result-title strong { color: var(--text-primary); font-size: 13px; }
+.result-title small { color: var(--text-tertiary); }
+.result-title button:disabled { opacity: .35; cursor: default; }
+.tag-tools { display: grid; grid-template-columns: 1fr 1fr auto; gap: 7px; margin-bottom: 10px; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 6px; min-height: 52px; }
+.tag-list > span { display: inline-flex; gap: 5px; align-items: center; padding: 5px 9px 5px 11px; border-radius: 999px; background: var(--accent-bg); border: 1px solid var(--border-accent); color: var(--text-secondary); font-size: 11px; }
+.tag-list button { border: 0; background: transparent; color: var(--text-tertiary); cursor: pointer; }
+.empty-result { min-height: 46px; margin: 0; display: grid; place-items: center; color: var(--text-tertiary); font-size: 12px; }
+textarea { width: 100%; min-height: 112px; resize: vertical; box-sizing: border-box; padding: 11px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-default); background: var(--bg-sunken); color: var(--text-primary); font: 12px/1.65 var(--font-sans); }
+textarea:focus { outline: none; border-color: var(--border-accent); }
+.save-actions { justify-content: flex-end; margin-top: 10px; }
+@media (max-width: 900px) {
+  .reverse-grid { grid-template-columns: 1fr; }
+  .reverse-header { align-items: flex-start; flex-direction: column; }
+  .header-actions { width: 100%; }
+  .header-actions .btn { flex: 1; }
 }
 </style>
