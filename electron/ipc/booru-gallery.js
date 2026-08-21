@@ -52,7 +52,7 @@ function loadSites() {
 
 function loadSettings() {
   const fallback = {
-    proxy: 'http://127.0.0.1:7890',
+    proxy: '',
     timeout: 30,
     credentials: {
       danbooru: { username: '', apiKey: '' },
@@ -68,7 +68,7 @@ function loadSettings() {
 
 async function getJson(url, options = {}) {
   try {
-    const response = await net.fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'BakaTools/0.1', ...options.headers } })
+    const response = await net.fetch(url, { headers: { Accept: 'application/json', 'User-Agent': 'BakaTools/0.2', ...options.headers } })
     if (!response.ok) {
       const body = await response.text().catch(() => '')
       throw new Error(friendlyHttpError(options.label || '图站', response.status, body))
