@@ -233,6 +233,8 @@ export const useTaggerStore = defineStore('tagger', () => {
     persistSession()
 
     try {
+      const pendingTaskId = `task_${Date.now()}`
+      taskId.value = pendingTaskId
       const response = await window.taggerV2API.inferBatch({
         modelPath: model.path,
         csvPath: model.csvPath || undefined,
@@ -240,8 +242,9 @@ export const useTaggerStore = defineStore('tagger', () => {
         threshold: threshold.value,
         resolution: model.resolution,
         providers: providers.value,
+        taskId: pendingTaskId,
       })
-      taskId.value = response.taskId || ''
+      taskId.value = response.taskId || pendingTaskId
       if (response.success && response.data) {
         applyInferenceResults(response.data.results)
         return
@@ -265,7 +268,7 @@ export const useTaggerStore = defineStore('tagger', () => {
     if (phase.value !== 'running' && phase.value !== 'stopping') return
     phase.value = 'stopping'
     persistSession()
-    const response = await window.taggerV2API?.cancel(taskId.value)
+    const response = await window.taggerV2API?.cancel(taskId.value || '')
     if (response?.success) {
       phase.value = 'review'
       queue.value.forEach((item) => {

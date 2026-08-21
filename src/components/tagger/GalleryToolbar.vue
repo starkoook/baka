@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { setGallerySortMode } from '@/stores/gallery-sort'
 
 defineProps<{
   title: string
@@ -23,6 +24,12 @@ const emit = defineEmits<{
 
 const importMenu = ref<HTMLElement | null>(null)
 const importMenuOpen = ref(false)
+
+async function onSortChange(event: Event) {
+  const mode = (event.target as HTMLSelectElement).value
+  emit('update:sort', mode)
+  await setGallerySortMode(mode)
+}
 
 function chooseImages() {
   importMenuOpen.value = false
@@ -58,7 +65,7 @@ onBeforeUnmount(() => {
     <select :value="tagState" @change="$emit('update:tagState', ($event.target as HTMLSelectElement).value as any)">
       <option value="all">全部状态</option><option value="tagged">已标注</option><option value="untagged">未标注</option>
     </select>
-    <select :value="sort" @change="$emit('update:sort', ($event.target as HTMLSelectElement).value)">
+    <select :value="sort" @change="onSortChange">
       <option value="modified-desc">最近修改</option><option value="name-asc">名称升序</option><option value="name-desc">名称降序</option>
     </select>
     <div class="view-switch" aria-label="视图方式">

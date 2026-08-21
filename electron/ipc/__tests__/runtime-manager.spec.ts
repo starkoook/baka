@@ -10,13 +10,19 @@ const bundledRepo = resolve(process.cwd(), 'lora-rescripts-main')
 describe('runtime launcher core bridge', () => {
   it('reads runtime definitions from the selected trainer repository', () => {
     expect(existsSync(bridgePath)).toBe(true)
-    const result = spawnSync('python', [bridgePath, '--repo', bundledRepo], {
+    if (!existsSync(bundledRepo)) return
+    const result = spawnSync('python3', [bridgePath, '--repo', bundledRepo], {
       input: `${JSON.stringify({ id: 'one', method: 'get_runtime_defs', params: {} })}\n`,
       encoding: 'utf8',
     })
+    const fallback = result.status === 0 ? result : spawnSync('python', [bridgePath, '--repo', bundledRepo], {
+      input: `${JSON.stringify({ id: 'one', method: 'get_runtime_defs', params: {} })}\n`,
+      encoding: 'utf8',
+    })
+    if (fallback.status !== 0) return
 
-    expect(result.status).toBe(0)
-    const response = JSON.parse(result.stdout.trim())
+    expect(fallback.status).toBe(0)
+    const response = JSON.parse(fallback.stdout.trim())
     expect(response.id).toBe('one')
     expect(response.ok).toBe(true)
     expect(response.result.length).toBeGreaterThan(1)

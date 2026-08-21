@@ -30,17 +30,25 @@ async function restoreRecycleItem(id) {
   const rows = queryAll('SELECT * FROM recycle_items WHERE id = ?', [id])
   const row = rows[0]
   if (!row) return { success: false, error: 'Item not found' }
-  let target = row.original_path
-  if (fs.existsSync(target)) {
-    const ext = path.extname(target)
-    const base = target.slice(0, -ext.length)
-    target = `${base}-restored${ext}`
+  if (!fs.existsSync(row.recycle_path)) {
+    runSql('DELETE FROM recycle_items WHERE id = ?', [id])
+    return { success: false, error: '回收站文件已丢失' }
   }
-  fs.mkdirSync(path.dirname(target), { recursive: true })
-  fs.copyFileSync(row.recycle_path, target)
-  fs.rmSync(row.recycle_path, { force: true })
-  runSql('DELETE FROM recycle_items WHERE id = ?', [id])
-  return { success: true, restoredPath: target }
+  try {
+    let target = row.original_path
+    if (fs.existsSync(target)) {
+      const ext = path.extname(target)
+      const base = target.slice(0, -ext.length)
+      target = `${base}-restored${ext}`
+    }
+    fs.mkdirSync(path.dirname(target), { recursive: true })
+    fs.copyFileSync(row.recycle_path, target)
+    fs.rmSync(row.recycle_path, { force: true })
+    runSql('DELETE FROM recycle_items WHERE id = ?', [id])
+    return { success: true, restoredPath: target }
+  } catch (error) {
+    return { success: false, error: error.message || String(error) }
+  }
 }
 
 async function listRecycleItems() {

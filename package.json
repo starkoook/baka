@@ -1,6 +1,6 @@
 {
   "name": "baka-tools",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Baka TOOLS — 动漫图像 AI 处理工具箱",
   "main": "electron/main.js",
   "scripts": {

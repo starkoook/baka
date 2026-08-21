@@ -21,10 +21,17 @@ function readText(rel) {
   return fs.readFileSync(path.join(ROOT, rel), 'utf8')
 }
 function listJs(dir) {
-  return fs
-    .readdirSync(path.join(ROOT, dir))
-    .filter((f) => f.endsWith('.js'))
-    .map((f) => path.join(dir, f))
+  const out = []
+  function walk(rel) {
+    const abs = path.join(ROOT, rel)
+    for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
+      const next = path.join(rel, entry.name)
+      if (entry.isDirectory()) walk(next)
+      else if (entry.name.endsWith('.js') && !entry.name.includes('.spec.')) out.push(next)
+    }
+  }
+  walk(dir)
+  return out
 }
 function scan(text, regex, map) {
   const out = []
@@ -51,7 +58,7 @@ for (const f of mainFiles) {
   mainHandlers.push(
     ...scan(t, /ipcMain\.(handle|on)\(\s*['"]([^'"]+)['"]/g, (m) => ({ ch: m[2], kind: m[1], file: f }))
   )
-  mainEvents.push(...scan(t, /webContents\.send\(\s*['"]([^'"]+)['"]/g, (m) => ({ ch: m[1], file: f })))
+  mainEvents.push(...scan(t, /(?:webContents|event\.sender)\.send\(\s*['"]([^'"]+)['"]/g, (m) => ({ ch: m[1], file: f })))
 }
 
 const rendererReq = new Set(rendererCalls.filter((c) => c.kind === 'invoke' || c.kind === 'send').map((c) => c.ch))

@@ -2,6 +2,7 @@ const { ipcMain } = require('electron')
 const fs = require('fs')
 const path = require('path')
 const { app } = require('electron')
+const { install: installMediaProtocol } = require('./media-protocol')
 
 function getDirSize(dir) {
   let size = 0
@@ -20,6 +21,9 @@ function getDirSize(dir) {
 }
 
 function registerCacheHandlers() {
+  // Re-register after main.js so filenames containing # or ? are not truncated.
+  installMediaProtocol()
+
   ipcMain.handle('cache:getSize', async () => {
     const userDataPath = app.getPath('userData')
     const dirs = {

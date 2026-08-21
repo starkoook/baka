@@ -58,7 +58,7 @@ const saved = loadConfig()
 applyTheme(saved.theme)
 
 export const useAppStore = defineStore('app', () => {
-  const version = ref('0.1.0')
+  const version = ref(typeof window !== 'undefined' && window.appAPI?.getVersion ? window.appAPI.getVersion() : '0.2.0')
   const status = ref('就绪')
   const lastError = ref('')
   const errorCount = ref(0)

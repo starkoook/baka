@@ -8,6 +8,13 @@ const os = require('os')
 
 const LEGACY_DATA_ROOT = 'D:\\BakaTOOLS'
 
+function joinDataPath(root, name) {
+  const value = String(root || '')
+  const windowsStyle = /\\/.test(value) || /^[A-Za-z]:/.test(value)
+  if (windowsStyle) return value.replace(/[\\/]+$/, '') + '\\' + name
+  return path.join(value, name)
+}
+
 function resolveDataRoot({
   legacyRoot = LEGACY_DATA_ROOT,
   appDataRoot = process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'),
@@ -15,7 +22,7 @@ function resolveDataRoot({
 } = {}) {
   if (process.env.BAKA_DATA_ROOT) return process.env.BAKA_DATA_ROOT
   if (exists(legacyRoot)) return legacyRoot
-  return path.join(appDataRoot, 'BakaTOOLS')
+  return joinDataPath(appDataRoot, 'BakaTOOLS')
 }
 
 const DATA_ROOT = resolveDataRoot()

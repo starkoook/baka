@@ -3,22 +3,22 @@ const path = require('path')
 
 const locks = new Map()
 
-function lockFor(target) {
-  const key = path.resolve(target)
-  if (!locks.has(key)) locks.set(key, Promise.resolve())
-  return locks.get(key)
+function lockKey(target) {
+  return path.resolve(String(target || ''))
 }
 
 async function withLock(target, action) {
-  const previous = lockFor(target)
+  const key = lockKey(target)
+  const previous = locks.get(key) || Promise.resolve()
   let release
   const current = new Promise((resolve) => { release = resolve })
-  locks.set(target, current)
+  locks.set(key, current)
   await previous
   try {
     return await action()
   } finally {
     release()
+    if (locks.get(key) === current) locks.delete(key)
   }
 }
 

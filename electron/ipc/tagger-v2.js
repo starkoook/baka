@@ -51,7 +51,6 @@ function spawnWorker() {
     if (!mainWindow || mainWindow.isDestroyed()) return
 
     if (msg.type === 'progress' || msg.type === 'complete' || msg.type === 'cancelled' || msg.type === 'error') {
-      // Forward to renderer
       mainWindow.webContents.send('taggerV2:progress', {
         taskId: currentTaskId,
         ...msg,
@@ -76,44 +75,48 @@ function registerTaggerV2Handlers(win) {
   mainWindow = win
 
   ipcMain.handle('tagging:preview', async (_event, params) => {
+    const taskId = params?.taskId || `tagging_${Date.now()}`
+    const controller = new AbortController()
+    taggingTasks.set(taskId, controller)
     try {
       await ensureDb()
-      const taskId = params.taskId || `tagging_${Date.now()}`
-      const controller = new AbortController()
-      taggingTasks.set(taskId, controller)
+      const onProgress = (progress) => {
+        mainWindow?.webContents.send('tagging:progress', { taskId, ...progress })
+      }
       const results = await generateTaggingResults({
         ...params,
+        taskId,
         signal: controller.signal,
-        onProgress: (progress) => {
-          mainWindow?.webContents.send('tagging:progress', { taskId, ...progress })
-        },
-      })
-      taggingTasks.delete(taskId)
-      return { success: true, data: results }
+        onProgress,
+      }, onProgress)
+      return { success: true, taskId, data: results }
     } catch (e) {
-      if (params?.taskId) taggingTasks.delete(params.taskId)
-      return { success: false, error: e.message || String(e) }
+      return { success: false, taskId, error: e.message || String(e) }
+    } finally {
+      taggingTasks.delete(taskId)
     }
   })
 
   ipcMain.handle('tagging:generate', async (_event, params) => {
+    const taskId = params?.taskId || `tagging_${Date.now()}`
+    const controller = new AbortController()
+    taggingTasks.set(taskId, controller)
     try {
       await ensureDb()
-      const taskId = params.taskId || `tagging_${Date.now()}`
-      const controller = new AbortController()
-      taggingTasks.set(taskId, controller)
+      const onProgress = (progress) => {
+        mainWindow?.webContents.send('tagging:progress', { taskId, ...progress })
+      }
       const results = await generateTaggingResults({
         ...params,
+        taskId,
         signal: controller.signal,
-        onProgress: (progress) => {
-          mainWindow?.webContents.send('tagging:progress', { taskId, ...progress })
-        },
-      })
-      taggingTasks.delete(taskId)
-      return { success: true, data: results }
+        onProgress,
+      }, onProgress)
+      return { success: true, taskId, data: results }
     } catch (e) {
-      if (params?.taskId) taggingTasks.delete(params.taskId)
-      return { success: false, error: e.message || String(e) }
+      return { success: false, taskId, error: e.message || String(e) }
+    } finally {
+      taggingTasks.delete(taskId)
     }
   })
 
@@ -133,7 +136,6 @@ function registerTaggerV2Handlers(win) {
     return { success: true }
   })
 
-  // ── Custom prompt templates ──
   ipcMain.handle('tagging:listTemplates', async () => {
     try {
       return { success: true, data: { templates: loadTemplates() } }
@@ -177,13 +179,6 @@ function registerTaggerV2Handlers(win) {
     }
   })
 
-  // ── Model list & GPU info (delegated to tagger-models) ──
-  // Handlers registered in tagger-models.js
-
-  // ── Vocabulary search ──
-  // Handlers registered in tagger-vocab.js
-
-  // ── Inference ──
   ipcMain.handle('taggerV2:inferBatch', async (_event, params) => {
     const { modelPath, csvPath, imagePaths, threshold = 0.35, batchSize, resolution = 448, providers } = params
     if (!modelPath || !imagePaths || imagePaths.length === 0) {
@@ -194,8 +189,9 @@ function registerTaggerV2Handlers(win) {
     }
 
     const w = spawnWorker()
-    currentTaskId = `task_${Date.now()}`
+    currentTaskId = params.taskId || `task_${Date.now()}`
     const taskId = currentTaskId
+    mainWindow?.webContents.send('taggerV2:progress', { taskId, type: 'started', completed: 0, total: imagePaths.length })
 
     return new Promise((resolve) => {
       let settled = false
@@ -226,7 +222,6 @@ function registerTaggerV2Handlers(win) {
       activeTask = { taskId, settle }
       w.on('message', onMessage)
 
-      // Send init
       w.send({
         cmd: 'init',
         modelPath,
@@ -237,40 +232,64 @@ function registerTaggerV2Handlers(win) {
     })
   })
 
-  ipcMain.handle('taggerV2:cancel', async () => {
+  ipcMain.handle('taggerV2:cancel', async (_event, taskId) => {
+    const activeId = taskId || currentTaskId
+    if (worker && currentTaskId && (!activeId || activeId === currentTaskId)) {
+      worker.send({ cmd: 'cancel' })
+      return { success: true, taskId: currentTaskId }
+    }
+    const controller = taggingTasks.get(activeId)
+    if (controller) {
+      controller.abort()
+      taggingTasks.delete(activeId)
+      return { success: true, taskId: activeId }
+    }
     if (worker && currentTaskId) {
       worker.send({ cmd: 'cancel' })
-      return { success: true }
+      return { success: true, taskId: currentTaskId }
     }
     return { success: false, error: 'No active task' }
   })
 
   ipcMain.handle('taggerV2:inferSingle', async (_event, params) => {
-    // Single image inference — just wraps batch with one image
-    const { modelPath, csvPath, imagePath, threshold = 0.35 } = params
+    const { modelPath, csvPath, imagePath, threshold = 0.35 } = params || {}
     if (!modelPath || !imagePath) {
       return { success: false, error: 'modelPath and imagePath are required' }
     }
+    if (activeTask) {
+      return { success: false, error: 'Another tagging task is already running' }
+    }
 
     const w = spawnWorker()
+    currentTaskId = `task_${Date.now()}`
+    const taskId = currentTaskId
 
     return new Promise((resolve) => {
-      const doneHandler = (msg) => {
-        if (msg.type === 'ready') {
-          w.send({ cmd: 'infer', imagePaths: [imagePath], threshold, batchSize: 1 })
-        } else if (msg.type === 'complete') {
-          w.removeListener('message', doneHandler)
-          const tags = msg.results[0] ? msg.results[0].tags : []
-          resolve({ success: true, data: { tags } })
+      let settled = false
+      const settle = (msg) => {
+        if (settled) return
+        settled = true
+        w.removeListener('message', onMessage)
+        activeTask = null
+        currentTaskId = null
+        if (msg.type === 'complete') {
+          const tags = msg.results?.[0] ? msg.results[0].tags : []
+          resolve({ success: true, taskId, data: { tags } })
         } else if (msg.type === 'cancelled') {
-          w.removeListener('message', doneHandler)
-          resolve({ success: true, data: { tags: [], cancelled: true } })
-        } else if (msg.type === 'error') {
-          w.removeListener('message', doneHandler)
-          resolve({ success: false, error: msg.message })
+          resolve({ success: true, taskId, data: { tags: [], cancelled: true } })
+        } else {
+          resolve({ success: false, taskId, error: msg.message || 'Tagging failed' })
         }
       }
-      w.on('message', doneHandler)
+      const onMessage = (msg) => {
+        if (msg.type === 'ready') {
+          w.send({ cmd: 'infer', imagePaths: [imagePath], threshold, batchSize: 1 })
+        } else if (msg.type === 'complete' || msg.type === 'cancelled' || msg.type === 'error') {
+          settle(msg)
+        }
+      }
+      activeTask = { taskId, settle }
+      w.on('message', onMessage)
       w.send({
         cmd: 'init',
         modelPath,
@@ -281,11 +300,6 @@ function registerTaggerV2Handlers(win) {
     })
   })
 
-  // ── LLM tagging (kept from old system, uses llm.js handler) ──
-  // LLM tagging is handled by the existing llm:tag IPC channel.
-  // The renderer calls it directly via window.llmAPI.tagImage().
-
-  // ── Bulk tag editing ──
   ipcMain.handle('taggerV2:bulkDryRun', async (_event, { imageIds, operation }) => {
     try {
       await ensureDb()
@@ -324,11 +338,24 @@ function registerTaggerV2Handlers(win) {
     }
   })
 
-  // ── Export ──
   ipcMain.handle('taggerV2:exportTags', async (_event, { imageIds, template }) => {
     try {
-      // TODO: implement in Phase 7
-      return { success: true, data: { results: [] } }
+      await ensureDb()
+      const { serializeWeightedCaption } = require('./tag-weight')
+      const results = []
+      for (const imageId of imageIds || []) {
+        const names = await getImageTagNames(imageId)
+        const caption = serializeWeightedCaption(names.map((tag) => ({ tag, weight: 1 })))
+        const rows = queryAll('SELECT path FROM images WHERE id = ?', [imageId])
+        results.push({
+          imageId,
+          path: rows[0]?.path || '',
+          tags: names,
+          caption,
+          template: template || 'txt',
+        })
+      }
+      return { success: true, data: { results, count: results.length } }
     } catch (e) {
       return { success: false, error: e.message }
     }
