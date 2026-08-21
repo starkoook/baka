@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { useGalleryStore } from '@/stores/gallery'
+import { setGallerySortMode } from '@/stores/gallery-sort'
 
 defineProps<{
   title: string
@@ -22,14 +22,13 @@ const emit = defineEmits<{
   importImages: []
 }>()
 
-const galleryStore = useGalleryStore()
 const importMenu = ref<HTMLElement | null>(null)
 const importMenuOpen = ref(false)
 
 async function onSortChange(event: Event) {
   const mode = (event.target as HTMLSelectElement).value
   emit('update:sort', mode)
-  await galleryStore.setSortMode(mode)
+  await setGallerySortMode(mode)
 }
 
 function chooseImages() {
