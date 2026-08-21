@@ -4,6 +4,11 @@ const { getConfigPath } = require('./paths')
 const { buildSelectFilter, distributedFrameIndexes, regionalFrameIndexes, randomPercentFrameIndexes } = require('./video-frame-plan')
 const { execFile, spawn } = require('child_process')
 
+function toolCandidates(name) {
+  const base = String(name || '').replace(/\.exe$/i, '')
+  return process.platform === 'win32' ? [`${base}.exe`, base] : [base, `${base}.exe`]
+}
+
 function binaryPath(name) {
   let customDir = process.env.BAKA_FFMPEG_DIR
   try {
@@ -18,11 +23,11 @@ function binaryPath(name) {
 }
 
 function ensureBinary(name) {
-  const resolved = binaryPath(name)
-  if (!path.isAbsolute(resolved) && resolved === name) {
-    throw new Error(`缺少 ${name}。请把 ${name} 放到 resources/ffmpeg，或在设置中指定 FFmpeg 目录。`)
+  for (const candidate of toolCandidates(name)) {
+    const resolved = binaryPath(candidate)
+    if (path.isAbsolute(resolved) && fs.existsSync(resolved)) return resolved
   }
-  return resolved
+  return toolCandidates(name)[0]
 }
 
 function buildExtractCommand(videoPath, outputPattern, options = {}) {
@@ -51,7 +56,7 @@ function buildConvertCommand(videoPath, outputPath, options = {}) {
 
 function runFfmpeg(args, options = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(ensureBinary('ffmpeg.exe'), args, { windowsHide: true })
+    const child = spawn(ensureBinary('ffmpeg'), args, { windowsHide: true })
     let stderr = ''
     child.stderr.on('data', (chunk) => {
       const text = chunk.toString()
@@ -82,7 +87,7 @@ function runFfmpeg(args, options = {}) {
 function runFfprobe(videoPath) {
   return new Promise((resolve, reject) => {
     execFile(
-      ensureBinary('ffprobe.exe'),
+      ensureBinary('ffprobe'),
       ['-v', 'quiet', '-print_format', 'json', '-show_streams', '-show_format', videoPath],
       { timeout: 30000, windowsHide: true },
       (error, stdout) => {

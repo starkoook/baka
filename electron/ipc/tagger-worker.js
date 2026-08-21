@@ -50,15 +50,12 @@ function loadCsv(csvPath) {
 async function preprocessOne(imagePath, dim, layout = 'nchw') {
   const { data, info } = await sharp(imagePath)
     .resize(dim, dim, { fit: 'inside', background: { r: 255, g: 255, b: 255 } })
-    .toBuffer({ resolveWithObject: true })
-
-  // Convert to RGBA if needed, then strip alpha onto white background
-  const raw = await sharp(data, { raw: { width: info.width, height: info.height, channels: info.channels } })
-    .ensureAlpha()
     .flatten({ background: { r: 255, g: 255, b: 255 } })
     .removeAlpha()
     .raw()
-    .toBuffer()
+    .toBuffer({ resolveWithObject: true })
+
+  const raw = data
 
   // Center-pad to dim×dim
   const padded = Buffer.alloc(dim * dim * 3, 255) // white
