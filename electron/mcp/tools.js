@@ -19,8 +19,6 @@ function fail(msg) {
   return { content: [{ type: 'text', text: JSON.stringify({ success: false, error: msg }, null, 2) }] }
 }
 
-// ── 图库管理 ──
-
 async function handleAddRoot({ folderPath }) {
   try {
     if (!fs.existsSync(folderPath)) return fail('文件夹不存在: ' + folderPath)
@@ -49,6 +47,10 @@ async function handleRemoveRoot({ rootId, deleteImages }) {
   try {
     await ensureDb()
     if (deleteImages) {
+      const imgs = queryAll('SELECT id FROM images WHERE root_id = ?', [rootId])
+      for (const img of imgs) {
+        runSql('DELETE FROM image_tags WHERE image_id = ?', [img.id])
+      }
       runSql('DELETE FROM images WHERE root_id = ?', [rootId])
     } else {
       runSql('UPDATE images SET root_id = NULL WHERE root_id = ?', [rootId])
@@ -62,51 +64,35 @@ async function handleRemoveRoot({ rootId, deleteImages }) {
 async function handleScan({ folderPath }) {
   try {
     await ensureDb()
-    // Get roots to scan
+    const { scanFolder, queryOne, queryAll, runSql } = require('../ipc/gallery')
     let roots
     if (folderPath) {
       const row = queryOne('SELECT * FROM library_roots WHERE path = ?', [folderPath])
-      roots = row ? [row] : []
+      if (!row) {
+        runSql('INSERT OR IGNORE INTO library_roots (path, label) VALUES (?, ?)', [folderPath, path.basename(folderPath)])
+      }
+      roots = queryOne('SELECT * FROM library_roots WHERE path = ?', [folderPath])
+      roots = roots ? [roots] : []
     } else {
       roots = queryAll('SELECT * FROM library_roots')
     }
     if (roots.length === 0) return fail('无注册的图库根目录')
 
-    const IMAGE_EXTENSIONS = require('../ipc/gallery').IMAGE_EXTENSIONS
     let newCount = 0
     let skipCount = 0
+    let errorCount = 0
+    let removedCount = 0
     for (const root of roots) {
       if (!fs.existsSync(root.path)) continue
-      const walkDir = (dir) => {
-        const entries = fs.readdirSync(dir, { withFileTypes: true })
-        for (const e of entries) {
-          const full = path.join(dir, e.name)
-          if (e.isDirectory()) { walkDir(full) }
-          else if (IMAGE_EXTENSIONS.has(path.extname(e.name).toLowerCase())) {
-            const existing = queryOne('SELECT id FROM images WHERE path = ?', [full])
-            if (!existing) {
-              try {
-                const stat = fs.statSync(full)
-                const filename = path.basename(full)
-                const dirname = path.dirname(full)
-                runSql(
-                  'INSERT INTO images (path, filename, dirname, root_id, width, height, file_size, file_modified_at) VALUES (?, ?, ?, ?, 0, 0, ?, ?)',
-                  [full, filename, dirname, root.id, stat.size, stat.mtime.toISOString()]
-                )
-                newCount++
-              } catch (_) {}
-            } else { skipCount++ }
-          }
-        }
-      }
-      walkDir(root.path)
+      const res = await scanFolder(root.path, root.id, null)
+      newCount += res.newCount
+      skipCount += res.skipCount
+      errorCount += res.errorCount
+      removedCount += res.removedCount || 0
     }
-    saveDb()
-    return ok({ newCount, skipCount, scanned: roots.length })
+    return ok({ newCount, skipCount, errorCount, removedCount, scanned: roots.length })
   } catch (e) { return fail(e.message) }
 }
-
-// ── 图片查询 ──
 
 async function handleListImages({ rootId, sort, order, limit, offset }) {
   try {
@@ -134,10 +120,10 @@ async function handleGetThumbnail({ imageId }) {
     await ensureDb()
     const img = queryOne('SELECT * FROM images WHERE id = ?', [imageId])
     if (!img) return fail('图片不存在')
-    const thumbBase64 = await generateThumbnail(img.path)
-    // generateThumbnail returns a base64 data; wrap if needed
-    const base64 = typeof thumbBase64 === 'string'
-      ? (thumbBase64.startsWith('data:') ? thumbBase64 : `data:image/jpeg;base64,${thumbBase64}`)
+    const thumb = await generateThumbnail(img.path)
+    const raw = typeof thumb === 'string' ? thumb : thumb?.base64
+    const base64 = raw
+      ? (String(raw).startsWith('data:') ? raw : `data:image/jpeg;base64,${raw}`)
       : ''
     return ok({ imageId, thumbBase64: base64 })
   } catch (e) { return fail(e.message) }
@@ -156,8 +142,6 @@ async function handleGetStats() {
     })
   } catch (e) { return fail(e.message) }
 }
-
-// ── 标签 ──
 
 async function handleGetImageTags({ imageId }) {
   try {
@@ -195,7 +179,6 @@ async function handleSetImageTags({ imageId, tags }) {
   try {
     await ensureDb()
     if (!Array.isArray(tags)) return fail('tags 必须是数组')
-    // Delete old tags, then insert
     runSql('DELETE FROM image_tags WHERE image_id = ?', [imageId])
     for (const t of tags) {
       let tagId
@@ -247,8 +230,6 @@ async function handleBatchSetTags({ entries }) {
   } catch (e) { return fail(e.message) }
 }
 
-// ── 元数据 ──
-
 async function handleGetMetadata({ imageId }) {
   try {
     await ensureDb()
@@ -278,8 +259,6 @@ async function handleReadFileMeta({ filePath }) {
     return ok(meta)
   } catch (e) { return fail(e.message) }
 }
-
-// ── 标注导出 ──
 
 async function handleSaveCaptionFile({ imageId }) {
   try {
