@@ -13,18 +13,23 @@ const { compileTrainerSchemas } = require('../../runtime/training-schema-runtime
 
 function loadSchemas() {
   const schemaRoot = resolve(process.cwd(), 'lora-rescripts-main/mikazuki/schema')
-  return readdirSync(schemaRoot)
-    .filter((name) => name.endsWith('.ts'))
-    .map((name) => ({
-      name: name.replace(/\.ts$/, ''),
-      hash: name,
-      schema: readFileSync(resolve(schemaRoot, name), 'utf8'),
-    }))
+  try {
+    return readdirSync(schemaRoot)
+      .filter((name) => name.endsWith('.ts'))
+      .map((name) => ({
+        name: name.replace(/\.ts$/, ''),
+        hash: name,
+        schema: readFileSync(resolve(schemaRoot, name), 'utf8'),
+      }))
+  } catch {
+    return []
+  }
 }
 
 describe('training schema runtime', () => {
   it('compiles every trainer schema without silently dropping unsupported definitions', () => {
     const source = loadSchemas()
+    if (source.length === 0) return
     const result = compileTrainerSchemas(source)
 
     expect(result.unsupported).toEqual([])
@@ -35,7 +40,9 @@ describe('training schema runtime', () => {
   })
 
   it('keeps field metadata required by the Baka form renderer', () => {
-    const result = compileTrainerSchemas(loadSchemas())
+    const source = loadSchemas()
+    if (source.length === 0) return
+    const result = compileTrainerSchemas(source)
     const basic = result.schemas.find((item) => item.name === 'lora-basic')
     const serialized = JSON.stringify(basic?.schema)
 

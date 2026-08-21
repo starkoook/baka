@@ -25,6 +25,24 @@ function loadTaggerModule() {
     if (id === 'child_process') return { fork: () => fakeWorker }
     if (id === 'path') return require('node:path')
     if (id === 'fs') return require('node:fs')
+    if (id === './gallery') return { ensureDb: async () => undefined, queryAll: () => [], runSql: () => undefined }
+    if (id === './safe-file') return { writeTextSafe: async () => ({ success: true }) }
+    if (id === './tag-catalog') return { TagCatalog: { load: async () => ({}) } }
+    if (id === './tagging-batch') {
+      return {
+        applyTaggingResults: async () => ({}),
+        deleteTemplate: () => [],
+        generateTaggingResults: async () => [],
+        getImagePaths: async () => [],
+        getImageTagNames: async () => [],
+        importTemplates: () => ({}),
+        listTaggingConfigs: () => [],
+        loadTemplates: () => [],
+        resolveTaggingConfigs: () => [],
+        upsertTemplate: (template: unknown) => template,
+      }
+    }
+    if (id === './video-frames') return { isVideoFile: () => false, extractVideoFrames: async () => [] }
     throw new Error(`Unexpected dependency: ${id}`)
   }
 

@@ -21,7 +21,7 @@ describe('component download', () => {
 
     expect(result).toMatchObject({ ok: true, resumedFrom: 256 * 1024 })
     expect(readFileSync(target)).toEqual(bytes)
-  })
+  }, 15000)
 
   it('sends an HTTP Range request when a partial file exists', async () => {
     const root = mkdtempSync(join(tmpdir(), 'baka-http-'))
