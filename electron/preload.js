@@ -13,7 +13,9 @@ contextBridge.exposeInMainWorld('windowAPI', {
 })
 
 contextBridge.exposeInMainWorld('appAPI', {
-  getVersion: () => '0.1.0',
+  getVersion: () => {
+    try { return require('../package.json').version } catch { return '0.2.0' }
+  },
   getPlatform: () => process.platform,
   getResourcesPath: () => process.resourcesPath || '',
 })
@@ -174,7 +176,6 @@ contextBridge.exposeInMainWorld('shellAPI', {
 })
 
 contextBridge.exposeInMainWorld('taggerV2API', {
-  // Models
   listModels: () => ipcRenderer.invoke('taggerV2:listModels'),
   gpuInfo: () => ipcRenderer.invoke('taggerV2:gpuInfo'),
   setModelDir: (dirPath) => ipcRenderer.invoke('taggerV2:setModelDir', dirPath),
@@ -184,19 +185,15 @@ contextBridge.exposeInMainWorld('taggerV2API', {
   listDownloadableModels: () => ipcRenderer.invoke('taggerV2:listDownloadableModels'),
   downloadModel: (modelId) => ipcRenderer.invoke('taggerV2:downloadModel', modelId),
   onDownloadProgress: (callback) => { ipcRenderer.on('taggerV2:downloadProgress', (_event, data) => callback(data)) },
-  // Inference
   inferSingle: (params) => ipcRenderer.invoke('taggerV2:inferSingle', params),
   inferBatch: (params) => ipcRenderer.invoke('taggerV2:inferBatch', params),
   cancel: (taskId) => ipcRenderer.invoke('taggerV2:cancel', taskId),
   onProgress: (callback) => { ipcRenderer.on('taggerV2:progress', (_event, data) => callback(data)) },
-  // Vocabulary
   searchTags: (query, matchMode, limit, category) => ipcRenderer.invoke('taggerV2:searchTags', query, matchMode, limit, category),
   getCategories: () => ipcRenderer.invoke('taggerV2:getCategories'),
   translateTags: (tags, direction) => ipcRenderer.invoke('taggerV2:translateTags', tags, direction),
-  // Bulk editing
   bulkDryRun: (imageIds, operation) => ipcRenderer.invoke('taggerV2:bulkDryRun', { imageIds, operation }),
   bulkApply: (imageIds, operation) => ipcRenderer.invoke('taggerV2:bulkApply', { imageIds, operation }),
-  // Export
   exportTags: (imageIds, template) => ipcRenderer.invoke('taggerV2:exportTags', { imageIds, template }),
 })
 
