@@ -11,7 +11,7 @@ Stability release. Branch: `fix/stability-0.2.0`.
 - Windows `joinDataPath`; file locks keyed by `path.resolve`; recycle restore errors
 - ffmpeg/ffprobe via `ensureBinary` (no hardcoded `.exe`)
 - IPC channel checker walks subdirs and `event.sender.send`
-- `loadWindow()` after all IPC handlers; `media://` Windows path decode
+- `loadWindow()` after all IPC handlers
 - Video extract/convert task maps cleaned in `finally`
 - Gallery store: `joinFsPath` / `siblingTextPath`, SQL sort, scan listener once
 - Booru default proxy emptied; User-Agent `BakaTools/0.2`
@@ -29,6 +29,11 @@ Stability release. Branch: `fix/stability-0.2.0`.
 
 ## UI
 
-- Gallery sort reloads from SQL (`onSortChange`)
-- `InferBatchParams.taskId?` in `src/env.d.ts`
-- Workbench `mediaUrl` encodes each path segment with `encodeURIComponent`
+- Gallery sort reloads from SQL (`GalleryToolbar` + `src/stores/gallery-sort.ts`)
+- `InferBatchParams.taskId?` via `src/types/infer-batch-taskid.d.ts` interface merge
+
+## media:// protocol
+
+- `electron/ipc/media-protocol.js` parses the path **without** `new URL()`
+- Filenames containing `#` or `?` (common in scraped anime images) no longer 404
+- Re-registered from `registerCacheHandlers()` after the original `protocol.handle` in `main.js`
