@@ -280,6 +280,7 @@ async function mapLimit(items, limit, worker, options = {}) {
 
 async function generateTaggingResults(params, onProgress) {
   await ensureDb()
+  onProgress = onProgress || params?.onProgress
   const imagePaths = params.imagePaths || await getImagePaths(params.imageIds || [])
   if (!imagePaths.length) return []
 
