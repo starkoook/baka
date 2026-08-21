@@ -26,8 +26,31 @@ export const useGalleryStore = defineStore('gallery', () => {
   const currentOffset = ref(0)
   const _reachedEnd = ref(false)
   const pageSize = 100
+  let scanListenerReady = false
 
-  // Tag cache: imageId → TagInfo[]
+  function joinFsPath(parent: string, name: string) {
+    const value = String(parent || '')
+    const sep = /\\/.test(value) && !value.includes('/') ? '\\' : '/'
+    return value.replace(/[\\/]+$/, '') + sep + name
+  }
+
+  function siblingTextPath(imagePath: string) {
+    const normalized = String(imagePath || '')
+    const sep = /\\/.test(normalized) && !normalized.includes('/') ? '\\' : '/'
+    const parts = normalized.replace(/\\/g, '/').split('/')
+    const filename = parts.pop() || ''
+    const dir = normalized.slice(0, normalized.length - filename.length).replace(/[/\\]+$/, '')
+    return joinFsPath(dir, filename.replace(/\.[^.]+$/, '') + '.txt')
+  }
+
+  function sortParams(mode = sortMode.value) {
+    if (mode === 'name-asc') return { sort: 'name', order: 'asc' }
+    if (mode === 'name-desc') return { sort: 'name', order: 'desc' }
+    if (mode === 'size-desc') return { sort: 'size', order: 'desc' }
+    if (mode === 'size-asc') return { sort: 'size', order: 'asc' }
+    return { sort: 'date', order: 'desc' }
+  }
+
   const imageTags = ref<Map<number, TagInfo[]>>(new Map())
 
   const hasMore = computed(() => !_reachedEnd.value && !isLoading.value)
@@ -93,7 +116,7 @@ export const useGalleryStore = defineStore('gallery', () => {
       logStore.success(`同步完成: ${parts.join(', ')}`)
       appStore.setStatus('图库同步完成')
       await loadImages(true)
-      await loadRoots() // refresh sidebar counts
+      await loadRoots()
     } else {
       logStore.error(res.error || '扫描失败')
       appStore.setStatus('扫描出错')
@@ -105,23 +128,29 @@ export const useGalleryStore = defineStore('gallery', () => {
     if (reset) { currentOffset.value = 0; _reachedEnd.value = false }
     isLoading.value = true
 
-    const res = await window.galleryAPI.getImages({
-      rootId: activeRootId.value || undefined,
-      limit: pageSize,
-      offset: reset ? 0 : currentOffset.value,
-    })
+    try {
+      const res = await window.galleryAPI.getImages({
+        rootId: activeRootId.value || undefined,
+        ...sortParams(),
+        limit: pageSize,
+        offset: reset ? 0 : currentOffset.value,
+      })
 
-    if (res.success && res.data) {
-      if (reset) {
-        images.value = res.data
-      } else {
-        const existing = new Set(images.value.map((image) => image.id))
-        images.value.push(...res.data.filter((image) => !existing.has(image.id)))
+      if (res.success && res.data) {
+        if (reset) {
+          images.value = res.data
+        } else {
+          const existing = new Set(images.value.map((image) => image.id))
+          images.value.push(...res.data.filter((image) => !existing.has(image.id)))
+        }
+        currentOffset.value = currentOffset.value + res.data.length
+        if (res.data.length < pageSize) _reachedEnd.value = true
       }
-      currentOffset.value = currentOffset.value + res.data.length
-      if (res.data.length < pageSize) _reachedEnd.value = true
+    } catch (error) {
+      useLogStore().error(error instanceof Error ? error.message : '加载图库失败')
+    } finally {
+      isLoading.value = false
     }
-    isLoading.value = false
   }
 
   async function loadMore() {
@@ -133,7 +162,6 @@ export const useGalleryStore = defineStore('gallery', () => {
     selectedImage.value = image
   }
 
-  // ── Multi-select ──
   function toggleSelect(id: number, multi: boolean = false) {
     const result = applyGallerySelection(
       selectedIds.value,
@@ -222,7 +250,6 @@ export const useGalleryStore = defineStore('gallery', () => {
     saveDatasets()
   }
 
-  // ── Tag management ──
   async function fetchTags(imageId: number) {
     if (!window.galleryAPI) return
     const res = await window.galleryAPI.getImageTags(imageId)
@@ -249,8 +276,6 @@ export const useGalleryStore = defineStore('gallery', () => {
     }
   }
 
-  // ── Send to Tagger ──
-  // V1 标注界面已移除; 选中图片的跳转改由 Gallery.vue 通过 router.push('/gallery') 处理
   function sendToTagger() {}
 
   function setActiveRoot(rootId: number | null) {
@@ -258,18 +283,16 @@ export const useGalleryStore = defineStore('gallery', () => {
     loadImages(true)
   }
 
-  // ── Dataset ──
   interface DatasetEntry { name: string; folderPath: string; addedAt: string; imagePaths: string[] }
   interface DatasetImageItem { path: string; filename: string; caption: string; hasCaption: boolean; txtPath?: string; thumb?: string }
 
   const datasets = ref<DatasetEntry[]>([])
   const activeDatasetId = ref<string | null>(null)
   const datasetImageItems = ref<DatasetImageItem[]>([])
-  const DATASET_LIST_KEY = 'baka-datasets'  // unified key with standalone Dataset.vue
+  const DATASET_LIST_KEY = 'baka-datasets'
 
   function loadDatasets() {
     try {
-      // Read from both old and new keys, merge
       const seen = new Set<string>()
       const merged: DatasetEntry[] = []
 
@@ -290,31 +313,27 @@ export const useGalleryStore = defineStore('gallery', () => {
         }
       }
 
-      // New key first, then old key (new overwrites old on duplicate folderPath)
       const r = localStorage.getItem(DATASET_LIST_KEY)
       if (r) ingest(r)
 
-      // Migrate from old key
       const old = localStorage.getItem('baka-datasets-v2')
       if (old) {
         ingest(old)
-        // Once migrated, remove old key
         localStorage.removeItem('baka-datasets-v2')
       }
 
       datasets.value = merged
-      if (merged.length > 0) saveDatasets()  // persist merged result to new key
+      if (merged.length > 0) saveDatasets()
     } catch { datasets.value = [] }
   }
   function saveDatasets() { localStorage.setItem(DATASET_LIST_KEY, JSON.stringify(datasets.value)) }
 
   async function createDataset(name: string, parentPath: string, imagePaths: string[] = []) {
-    const folderPath = parentPath + '\\' + name
+    const folderPath = joinFsPath(parentPath, name)
     if (window.fsAPI) {
       const r = await window.fsAPI.createFolder(folderPath)
       if (!r.success) { useLogStore().error(r.error || '创建失败'); return null }
 
-      // Copy selected images into the new dataset folder
       if (imagePaths.length > 0) {
         const moveRes = await window.fsAPI.moveImages({
           filePaths: imagePaths,
@@ -322,7 +341,6 @@ export const useGalleryStore = defineStore('gallery', () => {
           keepOriginal: true,
         })
         if (moveRes.success && moveRes.data?.destPaths) {
-          // Use actual destination paths (handles dedup renaming)
           imagePaths = moveRes.data.destPaths
         } else {
           useLogStore().warn('图片拷贝失败: ' + (moveRes.error || '未知'))
@@ -340,7 +358,6 @@ export const useGalleryStore = defineStore('gallery', () => {
     const existing = new Set(ds.imagePaths)
     const newPaths: string[] = []
 
-    // Copy images into the dataset folder
     if (window.fsAPI && imagePaths.length > 0) {
       const moveRes = await window.fsAPI.moveImages({
         filePaths: imagePaths,
@@ -355,7 +372,6 @@ export const useGalleryStore = defineStore('gallery', () => {
           }
         }
       } else {
-        // Fallback: store original paths if copy fails
         for (const p of imagePaths) {
           if (!existing.has(p)) { ds.imagePaths.push(p); newPaths.push(p) }
         }
@@ -381,7 +397,6 @@ export const useGalleryStore = defineStore('gallery', () => {
   }
 
   function importFolderDataset(name: string, folderPath: string, imagePaths: string[]) {
-    // Direct import — images already in the folder, no copying needed
     if (datasets.value.find(d => d.folderPath === folderPath)) {
       useLogStore().warn('该文件夹已是数据集')
       return null
@@ -406,14 +421,10 @@ export const useGalleryStore = defineStore('gallery', () => {
       return
     }
 
-    // Build items synchronously — no async gaps, no flicker
     const paths: string[] = ds.imagePaths.filter((p: any) => typeof p === 'string')
     const items: DatasetImageItem[] = paths.map((p: string) => {
       const filename = p.split(/[/\\]/).pop() || p
-      const base = filename.replace(/\.[^.]+$/, '')
-      const sep = p.includes('\\') ? '\\' : '/'
-      const txtPath = p.substring(0, p.lastIndexOf(sep) + 1) + base + '.txt'
-      return { path: p, filename, caption: '', hasCaption: false, txtPath }
+      return { path: p, filename, caption: '', hasCaption: false, txtPath: siblingTextPath(p) }
     })
 
     datasetImageItems.value = items
@@ -433,7 +444,7 @@ export const useGalleryStore = defineStore('gallery', () => {
           item.caption = r.text
           item.hasCaption = true
         }
-      } catch (_) { /* skip — .txt missing or unreadable */ }
+      } catch (_) { /* skip */ }
     }
   }
 
@@ -458,14 +469,12 @@ export const useGalleryStore = defineStore('gallery', () => {
   }
 
   async function loadDatasetCaptions(datasetId: string) {
-    // Refresh captions for currently loaded items
     if (datasetImageItems.value.length === 0) return
     await loadCaptionsForItems(datasetImageItems.value)
   }
   async function saveDatasetCaption(item: DatasetImageItem, caption: string) {
     if (!item.txtPath) {
-      const base = item.filename.replace(/\.[^.]+$/, '')
-      item.txtPath = item.path.replace(/[/\\][^/\\]+$/, '\\' + base + '.txt')
+      item.txtPath = siblingTextPath(item.path)
     }
     if (window.fsAPI) {
       const r = await window.fsAPI.saveCaption({ txtPath: item.txtPath, caption })
@@ -480,8 +489,7 @@ export const useGalleryStore = defineStore('gallery', () => {
     for (const item of datasetImageItems.value) {
       if (!item.caption) continue
       if (!item.txtPath) {
-        const base = item.filename.replace(/\.[^.]+$/, '')
-        item.txtPath = item.path.replace(/[/\\][^/\\]+$/, '\\' + base + '.txt')
+        item.txtPath = siblingTextPath(item.path)
       }
       await window.fsAPI.saveCaption({ txtPath: item.txtPath, caption: item.caption })
       item.hasCaption = true; count++
@@ -489,11 +497,11 @@ export const useGalleryStore = defineStore('gallery', () => {
     useLogStore().success(`已导出 ${count} 个标注文件`)
   }
 
-  // Initialize
   loadDatasets()
 
   function setupScanListener() {
-    if (!window.galleryAPI) return
+    if (!window.galleryAPI || scanListenerReady) return
+    scanListenerReady = true
     window.galleryAPI.onScanProgress((progress: ScanProgress) => {
       scanProgress.value = progress
     })
