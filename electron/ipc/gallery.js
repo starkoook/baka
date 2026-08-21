@@ -109,7 +109,7 @@ async function initDb(root = undefined) {
   const currentVersion = queryOne('SELECT MAX(version) as v FROM schema_version')
   const version = currentVersion ? (currentVersion.v || 0) : 0
 
-  if (version \u003c 1) {
+  if (version < 1) {
     db.run(`
       CREATE TABLE IF NOT EXISTS tagger_models (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -153,7 +153,7 @@ async function initDb(root = undefined) {
     runSql('INSERT OR REPLACE INTO schema_version (version) VALUES (1)')
   }
 
-  if (version \u003c 2) {
+  if (version < 2) {
     const cols = ['sd_prompt TEXT', 'sd_negative TEXT', 'sd_steps INTEGER', 'sd_cfg REAL',
       'sd_sampler TEXT', 'sd_seed INTEGER', 'sd_model TEXT', 'sd_generator TEXT', 'sd_has_meta INTEGER DEFAULT 0']
     for (const col of cols) {
@@ -162,17 +162,17 @@ async function initDb(root = undefined) {
     runSql('INSERT OR REPLACE INTO schema_version (version) VALUES (2)')
   }
 
-  if (version \u003c 3) {
+  if (version < 3) {
     try { db.run('ALTER TABLE images ADD COLUMN sd_loras TEXT') } catch (_) {}
     runSql('INSERT OR REPLACE INTO schema_version (version) VALUES (3)')
   }
 
-  if (version \u003c 4) {
+  if (version < 4) {
     try { db.run('ALTER TABLE images ADD COLUMN sd_metadata TEXT') } catch (_) {}
     runSql('INSERT OR REPLACE INTO schema_version (version) VALUES (4)')
   }
 
-  if (version \u003c 5) {
+  if (version < 5) {
     db.run(`
       CREATE TABLE IF NOT EXISTS file_versions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -197,7 +197,7 @@ async function initDb(root = undefined) {
     runSql('INSERT OR REPLACE INTO schema_version (version) VALUES (5)')
   }
 
-  if (version \u003c 6) {
+  if (version < 6) {
     try { db.run('ALTER TABLE image_tags ADD COLUMN weight REAL NOT NULL DEFAULT 1') } catch (_) {}
     runSql('INSERT OR REPLACE INTO schema_version (version) VALUES (6)')
   }
@@ -210,7 +210,7 @@ function queryAll(sql, params = []) {
   const results = []
   const stmt = db.prepare(sql)
   try {
-    if (params.length \u003e 0) stmt.bind(params)
+    if (params.length > 0) stmt.bind(params)
     while (stmt.step()) {
       results.push(stmt.getAsObject())
     }
@@ -223,7 +223,7 @@ function queryAll(sql, params = []) {
 function queryOne(sql, params = []) {
   const stmt = db.prepare(sql)
   try {
-    if (params.length \u003e 0) stmt.bind(params)
+    if (params.length > 0) stmt.bind(params)
     return stmt.step() ? stmt.getAsObject() : null
   } finally {
     stmt.free()
@@ -286,7 +286,7 @@ async function scanFolder(folderPath, rootId, mainWindow) {
   }
   walk(folderPath)
   console.log('[scanFolder] walk done, entries=', entries.length)
-  const diskPaths = new Set(entries.map(e =\u003e e.path))
+  const diskPaths = new Set(entries.map(e => e.path))
   const total = entries.length
   let current = 0
   let newCount = 0
@@ -316,12 +316,12 @@ async function scanFolder(folderPath, rootId, mainWindow) {
 
   const prepared = []
   const BATCH = 5
-  for (let i = 0; i \u003c entries.length; i += BATCH) {
+  for (let i = 0; i < entries.length; i += BATCH) {
     const batch = entries.slice(i, i + BATCH)
     for (const e of batch) {
       try {
         const existing = queryOne('SELECT id, file_modified_at, sd_metadata FROM images WHERE path = ?', [e.path])
-        if (existing \u0026\u0026 existing.file_modified_at === e.mtime \u0026\u0026 existing.sd_metadata !== null) {
+        if (existing && existing.file_modified_at === e.mtime && existing.sd_metadata !== null) {
           skipCount++
           current++
           continue
@@ -348,7 +348,7 @@ async function scanFolder(folderPath, rootId, mainWindow) {
       }
       current++
     }
-    if (mainWindow \u0026\u0026 !mainWindow.isDestroyed()) {
+    if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('gallery:scanProgress', {
         current, total,
         status: `同步中 ${current}/${total}`,
@@ -395,7 +395,7 @@ function classifyDroppedPaths(paths) {
     try {
       const stat = fs.statSync(filePath)
       if (stat.isDirectory()) folderPaths.push(filePath)
-      else if (stat.isFile() \u0026\u0026 DROPPED_IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase())) imagePaths.push(filePath)
+      else if (stat.isFile() && DROPPED_IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase())) imagePaths.push(filePath)
       else unsupportedCount++
     } catch (_) {
       unsupportedCount++
@@ -408,7 +408,7 @@ async function importImageFiles(filePaths) {
   const sharp = require('sharp')
   const { parseMetadata } = require('./metadata')
   const paths = [...new Set(Array.isArray(filePaths) ? filePaths : [])]
-    .filter((filePath) =\u003e DROPPED_IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase()))
+    .filter((filePath) => DROPPED_IMAGE_EXTENSIONS.has(path.extname(filePath).toLowerCase()))
   let importedCount = 0
   let skipCount = 0
   let errorCount = 0
@@ -422,7 +422,7 @@ async function importImageFiles(filePaths) {
       }
       const mtime = stat.mtime.toISOString()
       const existing = queryOne('SELECT id, file_modified_at, sd_metadata FROM images WHERE path = ?', [filePath])
-      if (existing \u0026\u0026 existing.file_modified_at === mtime \u0026\u0026 existing.sd_metadata !== null) {
+      if (existing && existing.file_modified_at === mtime && existing.sd_metadata !== null) {
         skipCount++
         continue
       }
@@ -498,7 +498,7 @@ async function readFileMetaFromPath(filePath) {
 }
 
 function registerGalleryHandlers(mainWindow) {
-  ipcMain.handle('gallery:inspectDroppedPaths', async (_event, paths) =\u003e {
+  ipcMain.handle('gallery:inspectDroppedPaths', async (_event, paths) => {
     try {
       return { success: true, data: classifyDroppedPaths(paths) }
     } catch (e) {
@@ -506,7 +506,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:importFiles', async (_event, paths) =\u003e {
+  ipcMain.handle('gallery:importFiles', async (_event, paths) => {
     try {
       await ensureDb()
       return { success: true, data: await importImageFiles(paths) }
@@ -515,7 +515,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:addRoot', async (_event, folderPath) =\u003e {
+  ipcMain.handle('gallery:addRoot', async (_event, folderPath) => {
     try {
       console.log('[gallery:addRoot] folderPath=', folderPath)
       await ensureDb()
@@ -528,7 +528,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:getRoots', async () =\u003e {
+  ipcMain.handle('gallery:getRoots', async () => {
     try {
       await ensureDb()
       const roots = queryAll('SELECT * FROM library_roots ORDER BY added_at DESC')
@@ -542,7 +542,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:removeRoot', async (_event, { rootId, deleteImages }) =\u003e {
+  ipcMain.handle('gallery:removeRoot', async (_event, { rootId, deleteImages }) => {
     try {
       await ensureDb()
       if (deleteImages) {
@@ -565,7 +565,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:scan', async (_event, folderPath) =\u003e {
+  ipcMain.handle('gallery:scan', async (_event, folderPath) => {
     try {
       console.log('[gallery:scan] START folderPath=', folderPath)
       await ensureDb()
@@ -600,7 +600,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:getImages', async (_event, { rootId, sort, order, limit, offset }) =\u003e {
+  ipcMain.handle('gallery:getImages', async (_event, { rootId, sort, order, limit, offset }) => {
     try {
       await ensureDb()
       const sortCol = sort === 'name' ? 'filename'
@@ -623,7 +623,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:getThumbnail', async (_event, imageId) =\u003e {
+  ipcMain.handle('gallery:getThumbnail', async (_event, imageId) => {
     try {
       await ensureDb()
       const image = queryOne('SELECT * FROM images WHERE id = ?', [imageId])
@@ -635,7 +635,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:getStats', async () =\u003e {
+  ipcMain.handle('gallery:getStats', async () => {
     try {
       await ensureDb()
       const totalImages = queryOne('SELECT COUNT(*) as count FROM images')
@@ -654,7 +654,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:getImageTags', async (_event, imageId) =\u003e {
+  ipcMain.handle('gallery:getImageTags', async (_event, imageId) => {
     try {
       await ensureDb()
       const tags = queryAll(`
@@ -669,12 +669,12 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:batchGetTags', async (_event, imageIds) =\u003e {
+  ipcMain.handle('gallery:batchGetTags', async (_event, imageIds) => {
     try {
       await ensureDb()
       if (!imageIds || imageIds.length === 0) return { success: true, data: {} }
       const result = {}
-      const placeholders = imageIds.map(() =\u003e '?').join(',')
+      const placeholders = imageIds.map(() => '?').join(',')
       const rows = queryAll(`
         SELECT it.image_id, t.name as tag, t.category, it.confidence, it.source, it.weight
         FROM image_tags it JOIN tags t ON t.id = it.tag_id
@@ -692,7 +692,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:setImageTags', async (_event, { imageId, tags }) =\u003e {
+  ipcMain.handle('gallery:setImageTags', async (_event, { imageId, tags }) => {
     try {
       await ensureDb()
       runSql('DELETE FROM image_tags WHERE image_id = ?', [imageId])
@@ -710,10 +710,10 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:saveAnnotation', async (_event, request) =\u003e {
+  ipcMain.handle('gallery:saveAnnotation', async (_event, request) => {
     await ensureDb()
     const result = await saveAnnotation({
-      writeDatabase: async ({ imageId, imagePath, tags }) =\u003e {
+      writeDatabase: async ({ imageId, imagePath, tags }) => {
         const image = queryOne('SELECT id, path FROM images WHERE id = ?', [imageId])
         if (!image) throw new Error('Image not found in gallery')
         if (path.resolve(image.path) !== path.resolve(imagePath)) throw new Error('Image path no longer matches gallery record')
@@ -738,7 +738,7 @@ function registerGalleryHandlers(mainWindow) {
           throw error
         }
       },
-      writeCaption: async ({ imagePath, tags }) =\u003e {
+      writeCaption: async ({ imagePath, tags }) => {
         const captionPath = imagePath.replace(/\.[^.]+$/, '') + '.txt'
         const written = await writeTextSafe(captionPath, serializeWeightedCaption(tags))
         if (!written?.success) throw new Error(written?.error || '写入标注文件失败')
@@ -752,7 +752,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:updateImagePaths', async (_event, mappings) =\u003e {
+  ipcMain.handle('gallery:updateImagePaths', async (_event, mappings) => {
     try {
       await ensureDb()
       db.run('BEGIN TRANSACTION')
@@ -776,7 +776,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:batchSetTags', async (_event, { entries }) =\u003e {
+  ipcMain.handle('gallery:batchSetTags', async (_event, { entries }) => {
     try {
       await ensureDb()
       let updated = 0
@@ -803,7 +803,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:getMetadata', async (_event, imageId) =\u003e {
+  ipcMain.handle('gallery:getMetadata', async (_event, imageId) => {
     try {
       await ensureDb()
       const image = queryOne('SELECT * FROM images WHERE id = ?', [imageId])
@@ -812,8 +812,8 @@ function registerGalleryHandlers(mainWindow) {
         try {
           const cached = JSON.parse(image.sd_metadata)
           const rawText = cached.rawMetadata ? JSON.stringify(cached.rawMetadata) : ''
-          const hasRawLoraSignal = /lora|LoraLoader|LoRALoader|lora_str|temp_lora_str|\u003clora:/i.test(rawText)
-          const cachedHasLoras = Array.isArray(cached.loras) \u0026\u0026 cached.loras.length \u003e 0
+          const hasRawLoraSignal = /lora|LoraLoader|LoRALoader|lora_str|temp_lora_str|<lora:/i.test(rawText)
+          const cachedHasLoras = Array.isArray(cached.loras) && cached.loras.length > 0
           const hasExtractedMetadata = (
             cached.prompt !== undefined ||
             cached.negative !== undefined ||
@@ -824,8 +824,8 @@ function registerGalleryHandlers(mainWindow) {
             cached.seed !== undefined ||
             cachedHasLoras
           )
-          const needsLoraReparse = hasRawLoraSignal \u0026\u0026 !cachedHasLoras
-          if ((hasExtractedMetadata \u0026\u0026 !needsLoraReparse) || !cached.rawMetadata) {
+          const needsLoraReparse = hasRawLoraSignal && !cachedHasLoras
+          if ((hasExtractedMetadata && !needsLoraReparse) || !cached.rawMetadata) {
             return { success: true, data: { ...cached, width: image.width, height: image.height } }
           }
         } catch (_) {}
@@ -844,7 +844,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:saveCaptionFile', async (_event, imageId) =\u003e {
+  ipcMain.handle('gallery:saveCaptionFile', async (_event, imageId) => {
     try {
       await ensureDb()
       const image = queryOne('SELECT * FROM images WHERE id = ?', [imageId])
@@ -853,7 +853,7 @@ function registerGalleryHandlers(mainWindow) {
         SELECT t.name, it.weight FROM image_tags it JOIN tags t ON t.id = it.tag_id
         WHERE it.image_id = ? ORDER BY it.confidence DESC
       `, [imageId])
-      const caption = serializeWeightedCaption(tags.map((t) =\u003e ({ tag: t.name, weight: t.weight })))
+      const caption = serializeWeightedCaption(tags.map((t) => ({ tag: t.name, weight: t.weight })))
       const txtPath = image.path.replace(/\.[^.]+$/, '') + '.txt'
       const written = await writeTextSafe(txtPath, caption)
       if (!written?.success) throw new Error(written?.error || '写入标注文件失败')
@@ -863,7 +863,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:batchSaveCaptions', async (_event, imageIds) =\u003e {
+  ipcMain.handle('gallery:batchSaveCaptions', async (_event, imageIds) => {
     try {
       await ensureDb()
       let count = 0
@@ -875,7 +875,7 @@ function registerGalleryHandlers(mainWindow) {
           WHERE it.image_id = ? ORDER BY it.confidence DESC
         `, [imageId])
         if (tags.length === 0) continue
-        const caption = serializeWeightedCaption(tags.map((t) =\u003e ({ tag: t.name, weight: t.weight })))
+        const caption = serializeWeightedCaption(tags.map((t) => ({ tag: t.name, weight: t.weight })))
         const txtPath = image.path.replace(/\.[^.]+$/, '') + '.txt'
         const written = await writeTextSafe(txtPath, caption)
         if (!written?.success) throw new Error(written?.error || '写入标注文件失败')
@@ -887,7 +887,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:readFileMeta', async (_event, filePath) =\u003e {
+  ipcMain.handle('gallery:readFileMeta', async (_event, filePath) => {
     try {
       const meta = await readFileMetaFromPath(filePath)
       return { success: true, data: meta }
