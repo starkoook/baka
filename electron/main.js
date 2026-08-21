@@ -5,7 +5,6 @@ if (process.env.ELECTRON_RUN_AS_NODE) {
   delete env.ELECTRON_RUN_AS_NODE
   spawn(process.execPath, process.argv.slice(1), { env, stdio: 'inherit' })
     .on('exit', (code) => process.exit(code || 0))
-  // Halt this process — wait for child to exit
   return
 }
 
@@ -46,7 +45,6 @@ const path = require('path')
 const os = require('os')
 const { execSync } = require('child_process')
 
-// ── Custom scheme for local media (images/videos) in the renderer ──
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'media',
@@ -54,21 +52,17 @@ protocol.registerSchemesAsPrivileged([
   },
 ])
 
-// Disable Chromium's built-in focus ring (the black rectangle on click)
 app.commandLine.appendSwitch('disable-features', 'FocusRingEnabled')
 
 let mainWindow = null
 const videoTasks = new Map()
 const isDev = !app.isPackaged
 
-// ── userData 重定向到 D 盘(与 paths.js 的 DATA_ROOT 同处),避免 Electron 默认写 C 盘 ──
-// 所有用 app.getPath('userData') 的代码(runtime-manager/training/cache/渲染端 localStorage)自动落到 D
 try {
   const { getDataRoot } = require('./ipc/paths')
   app.setPath('userData', path.join(getDataRoot(), 'userdata'))
 } catch (e) { console.error('[main] userData 重定向失败:', e.message) }
 
-// Register LLM IPC handlers
 registerLLMHandlers()
 registerWorkflowHandlers()
 registerAssetHandlers()
@@ -93,7 +87,6 @@ function createWindow() {
     },
   })
 
-  // ── Capture all renderer console output → log panel ──
   mainWindow.webContents.on('console-message', (_event, level, message) => {
     const type = level === 3 ? 'error' : level === 2 ? 'warn' : 'info'
     mainWindow?.webContents.send('log:entry', { time: new Date().toLocaleTimeString('zh-CN', { hour12: false }), type, message })
@@ -110,8 +103,14 @@ function createWindow() {
   })
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173')
     mainWindow.webContents.openDevTools({ mode: 'detach' })
+  }
+}
+
+function loadWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  if (isDev) {
+    mainWindow.loadURL('http://localhost:5173')
   } else {
     mainWindow.loadFile(join(__dirname, '../dist/renderer/index.html'))
   }
@@ -124,7 +123,6 @@ ipcMain.on('window:maximize', () => {
 ipcMain.on('window:close', () => { mainWindow?.close() })
 ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
 
-// ── List image files in a folder ──
 ipcMain.handle('fs:listImages', async (_event, folderPath) => {
   const imageExts = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
   try {
@@ -140,7 +138,6 @@ ipcMain.handle('fs:listImages', async (_event, folderPath) => {
   }
 })
 
-// ── Read text file as UTF-8 string ──
 ipcMain.handle('fs:readText', async (_event, filePath) => {
   try {
     const content = fs.readFileSync(filePath, 'utf-8')
@@ -150,12 +147,10 @@ ipcMain.handle('fs:readText', async (_event, filePath) => {
   }
 })
 
-// ── Check if file exists ──
 ipcMain.handle('fs:exists', async (_event, filePath) => {
   try { return fs.existsSync(filePath) } catch { return false }
 })
 
-// ── Read image file as base64 ──
 ipcMain.handle('fs:readImageBase64', async (_event, filePath) => {
   try {
     const buffer = fs.readFileSync(filePath)
@@ -167,7 +162,6 @@ ipcMain.handle('fs:readImageBase64', async (_event, filePath) => {
   }
 })
 
-// ── Write file from base64 (for drag-drop) ──
 ipcMain.handle('fs:writeBase64', async (_event, { filePath, base64 }) => {
   try {
     const buffer = Buffer.from(base64, 'base64')
@@ -180,7 +174,6 @@ ipcMain.handle('fs:writeBase64', async (_event, { filePath, base64 }) => {
   }
 })
 
-// ── Copy file ──
 ipcMain.handle('fs:copyFile', async (_event, { src, dest, destDir }) => {
   try {
     if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true })
@@ -191,7 +184,6 @@ ipcMain.handle('fs:copyFile', async (_event, { src, dest, destDir }) => {
   }
 })
 
-// ── Read thumbnail (max 256px) ──
 ipcMain.handle('fs:readThumb', async (_event, filePath) => {
   try {
     const sharp = require('sharp')
@@ -202,7 +194,6 @@ ipcMain.handle('fs:readThumb', async (_event, filePath) => {
   }
 })
 
-// ── Dataset: list image+txt pairs ──
 ipcMain.handle('fs:listDataset', async (_event, folderPath) => {
   const imageExts = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp'])
   try {
@@ -226,7 +217,6 @@ ipcMain.handle('fs:listDataset', async (_event, folderPath) => {
   }
 })
 
-// ── Save caption to txt file ──
 ipcMain.handle('fs:saveCaption', async (_event, { txtPath, caption }) => {
   try {
     const actualPath = txtPath || ''
@@ -238,7 +228,6 @@ ipcMain.handle('fs:saveCaption', async (_event, { txtPath, caption }) => {
   }
 })
 
-// ── Create new folder ──
 ipcMain.handle('fs:createFolder', async (_event, folderPath) => {
   try {
     if (!fs.existsSync(folderPath)) { fs.mkdirSync(folderPath, { recursive: true }); return { success: true, path: folderPath } }
@@ -246,16 +235,27 @@ ipcMain.handle('fs:createFolder', async (_event, folderPath) => {
   } catch (e) { return { success: false, error: e.message } }
 })
 
-// ── Move/copy images to folder ──
 ipcMain.handle('fs:moveImages', async (_event, { filePaths, destFolder, keepOriginal }) => {
   return moveImages({ filePaths, destFolder, keepOriginal })
 })
 
 ipcMain.handle('fs:writeTextSafe', async (_event, params) => {
-  if (fs.existsSync(params.filePath)) await createHistoryRecord(params.filePath)
-  return writeTextSafe(params.filePath, params.text)
+  try {
+    if (!params?.filePath) return { success: false, error: '没有文件路径' }
+    if (fs.existsSync(params.filePath)) await createHistoryRecord(params.filePath)
+    return writeTextSafe(params.filePath, params.text ?? '')
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
 })
-ipcMain.handle('fs:writeBytesSafe', async (_event, params) => writeBytesSafe(params.filePath, Buffer.from(params.base64, 'base64')))
+ipcMain.handle('fs:writeBytesSafe', async (_event, params) => {
+  try {
+    if (!params?.filePath) return { success: false, error: '没有文件路径' }
+    return writeBytesSafe(params.filePath, Buffer.from(params.base64 || '', 'base64'))
+  } catch (e) {
+    return { success: false, error: e.message }
+  }
+})
 ipcMain.handle('fs:deleteMedia', async (_event, params) => {
   const results = []
   const failures = []
@@ -303,10 +303,10 @@ ipcMain.handle('video:probe', async (_event, videoPath) => {
 })
 
 ipcMain.handle('video:extract', async (_event, params) => {
+  const taskId = params?.taskId || `video_${Date.now()}`
+  const controller = new AbortController()
+  videoTasks.set(taskId, controller)
   try {
-    const taskId = params.taskId || `video_${Date.now()}`
-    const controller = new AbortController()
-    videoTasks.set(taskId, controller)
     const frames = await extractFrames(params.videoPath, params.outputDir, {
       ...params,
       signal: controller.signal,
@@ -314,19 +314,19 @@ ipcMain.handle('video:extract', async (_event, params) => {
         mainWindow?.webContents.send('video:progress', { taskId, ...progress })
       },
     })
-    videoTasks.delete(taskId)
-    return { success: true, data: { frames } }
+    return { success: true, taskId, data: { frames } }
   } catch (e) {
-    if (params.taskId) videoTasks.delete(params.taskId)
-    return { success: false, error: e.message }
+    return { success: false, taskId, error: e.message }
+  } finally {
+    videoTasks.delete(taskId)
   }
 })
 
 ipcMain.handle('video:convert', async (_event, params) => {
+  const taskId = params?.taskId || `video_${Date.now()}`
+  const controller = new AbortController()
+  videoTasks.set(taskId, controller)
   try {
-    const taskId = params.taskId || `video_${Date.now()}`
-    const controller = new AbortController()
-    videoTasks.set(taskId, controller)
     const outputPath = await convertVideo(params.videoPath, params.outputPath, {
       codec: params.codec,
       signal: controller.signal,
@@ -334,11 +334,11 @@ ipcMain.handle('video:convert', async (_event, params) => {
         mainWindow?.webContents.send('video:progress', { taskId, ...progress })
       },
     })
-    videoTasks.delete(taskId)
-    return { success: true, outputPath }
+    return { success: true, taskId, outputPath }
   } catch (e) {
-    if (params.taskId) videoTasks.delete(params.taskId)
-    return { success: false, error: e.message }
+    return { success: false, taskId, error: e.message }
+  } finally {
+    videoTasks.delete(taskId)
   }
 })
 
@@ -367,7 +367,6 @@ ipcMain.handle('video:setFfmpegDir', async (_event, dirPath) => {
   }
 })
 
-// ── Scan directory for ONNX models ──
 ipcMain.handle('fs:scanModels', async (_event, dirPath) => {
   try {
     const files = fs.readdirSync(dirPath)
@@ -386,10 +385,8 @@ ipcMain.handle('fs:scanModels', async (_event, dirPath) => {
   }
 })
 
-// ── System monitor ──
 function getGPUInfo() {
   try {
-    // Try nvidia-smi on Windows
     const out = execSync('nvidia-smi --query-gpu=name,memory.used,memory.total,temperature.gpu,utilization.gpu --format=csv,noheader,nounits', {
       timeout: 3000, encoding: 'utf-8', windowsHide: true,
     }).trim()
@@ -402,7 +399,6 @@ function getGPUInfo() {
       gpuUsage: parseFloat(parts[4]) || 0,
     }
   } catch (_) {
-    // Fallback: try checking if OpenGL/Vulkan is available
     try {
       const out = execSync('wmic path win32_VideoController get Name,AdapterRAM /format:csv 2>nul', {
         timeout: 3000, encoding: 'utf-8', windowsHide: true, shell: 'cmd',
@@ -429,7 +425,6 @@ ipcMain.handle('system:stats', async () => {
   const freeMem = os.freemem()
   const cpus = os.cpus()
 
-  // Average CPU usage across all cores
   const cpuIdle = cpus.reduce((sum, c) => sum + c.times.idle, 0) / cpus.length
   const cpuTotal = cpus.reduce((sum, c) => sum + Object.values(c.times).reduce((a, b) => a + b, 0), 0) / cpus.length
   const cpuUsage = Math.round(((1 - cpuIdle / cpuTotal) * 100))
@@ -468,17 +463,24 @@ app.whenReady().then(async () => {
     await session.defaultSession.setProxy({ proxyRules: `http=${gallerySettings.proxy};https=${gallerySettings.proxy}` })
   }
   protocol.handle('media', (request) => {
-    const url = new URL(request.url)
-    const filePath = decodeURIComponent(url.pathname.replace(/^\//, ''))
-    if (!filePath || !fs.existsSync(filePath)) {
+    try {
+      const url = new URL(request.url)
+      let filePath = decodeURIComponent(url.pathname || '')
+      if (process.platform === 'win32' && filePath.startsWith('/')) filePath = filePath.slice(1)
+      else if (filePath.startsWith('/') && fs.existsSync(filePath.slice(1)) && !fs.existsSync(filePath)) {
+        filePath = filePath.slice(1)
+      }
+      if (!filePath || !fs.existsSync(filePath)) {
+        return new Response('Not found', { status: 404 })
+      }
+      return net.fetch(pathToFileURL(filePath).toString())
+    } catch {
       return new Response('Not found', { status: 404 })
     }
-    return net.fetch(pathToFileURL(filePath).toString())
   })
 
   createWindow()
 
-  // ── Folder selection dialog ──
   ipcMain.handle('dialog:selectFolder', async () => {
     const result = await dialog.showOpenDialog(null, {
       properties: ['openDirectory'],
@@ -488,7 +490,6 @@ app.whenReady().then(async () => {
     return result.filePaths[0]
   })
 
-  // ── Image file selection dialog ──
   ipcMain.handle('dialog:selectImages', async () => {
     const result = await dialog.showOpenDialog(null, {
       properties: ['openFile', 'multiSelections'],
@@ -499,7 +500,6 @@ app.whenReady().then(async () => {
     return result.filePaths
   })
 
-  // ── Single image selection (for custom tool previews) ──
   ipcMain.handle('dialog:selectImage', async () => {
     const result = await dialog.showOpenDialog(null, {
       properties: ['openFile'],
@@ -510,7 +510,6 @@ app.whenReady().then(async () => {
     return result.filePaths[0]
   })
 
-  // ── Media selection (images + videos) for the node workbench ──
   ipcMain.handle('dialog:selectMedia', async () => {
     const result = await dialog.showOpenDialog(null, {
       properties: ['openFile', 'multiSelections'],
@@ -521,7 +520,6 @@ app.whenReady().then(async () => {
     return result.filePaths
   })
 
-  // ── Video selection for the node workbench ──
   ipcMain.handle('dialog:selectVideos', async () => {
     const result = await dialog.showOpenDialog(null, {
       properties: ['openFile', 'multiSelections'],
@@ -532,7 +530,6 @@ app.whenReady().then(async () => {
     return result.filePaths
   })
 
-  // ── Model file selection dialog ──
   ipcMain.handle('dialog:selectModels', async () => {
     const result = await dialog.showOpenDialog(null, {
       properties: ['openFile', 'multiSelections'],
@@ -543,7 +540,6 @@ app.whenReady().then(async () => {
     return result.filePaths
   })
 
-  // ── Save image (node workbench output) ──
   ipcMain.handle('dialog:saveImage', async (_event, params) => {
     const dataUrl = params?.dataUrl || ''
     const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(dataUrl)
@@ -562,7 +558,6 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ── Save / copy an existing file (node workbench video output) ──
   ipcMain.handle('dialog:saveFile', async (_event, params) => {
     const sourcePath = params?.sourcePath || ''
     const result = await dialog.showSaveDialog(null, {
@@ -578,7 +573,6 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ── Save text (node workbench text output) ──
   ipcMain.handle('dialog:saveText', async (_event, params) => {
     const result = await dialog.showSaveDialog(null, {
       title: '保存文本',
@@ -594,7 +588,6 @@ app.whenReady().then(async () => {
     }
   })
 
-  // ── Workflow save / open (node workbench canvas) ──
   ipcMain.handle('dialog:saveWorkflow', async (_event, params) => {
     const content = params?.content || ''
     const result = await dialog.showSaveDialog(null, {
@@ -656,7 +649,8 @@ app.whenReady().then(async () => {
   registerVideoTagHandlers()
   registerNodeHandlers()
 
-  // ── Open file in Explorer ──
+  loadWindow()
+
   ipcMain.handle('shell:openFolder', async (_event, filePath) => {
     try {
       const { shell } = require('electron')
@@ -667,10 +661,12 @@ app.whenReady().then(async () => {
     }
   })
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+      loadWindow()
+    }
   })
 
-  // ── MCP server ──
   startMcpServer().catch(e => console.error('[main] MCP start failed:', e.message))
   purgeExpiredItems(30).catch(() => {})
 })
