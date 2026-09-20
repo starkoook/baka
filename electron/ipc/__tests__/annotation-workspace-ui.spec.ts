@@ -35,10 +35,18 @@ describe('annotation workspace UI', () => {
     expect(page).toContain('returnToGallery')
   })
 
-  it('shows the picture as a white photo frame with playful stickers, and only peeks the mascot when enabled', () => {
+  it('shows the picture as a white photo frame with stickers that stay put while the image scrolls, and no mascot', () => {
     expect(page).toContain('class="preview-sticker preview-sticker--tags"')
     expect(page).toContain('class="preview-sticker preview-sticker--threshold"')
-    expect(page).toContain('v-if="appStore.showMascot" class="tagger-mascot"')
+    expect(page).not.toContain('tagger-mascot')
+    // 滚动区是 .tagger-stage 里面的 .tagger-preview；贴纸 / 指令坞 / 缩放条都不在滚动区内
+    const stageStart = page.indexOf('<div class="tagger-stage">')
+    const previewClose = page.indexOf('</div>', page.indexOf('class="preview-canvas"'))
+    expect(stageStart).toBeGreaterThan(0)
+    expect(page.indexOf('class="preview-sticker preview-sticker--tags"')).toBeGreaterThan(previewClose)
+    expect(page.indexOf('<nav class="tagger-dock"')).toBeGreaterThan(page.indexOf('</div>', page.indexOf('class="preview-empty"')))
+    expect(page).toMatch(/\.tagger-preview\s*\{[^}]*overflow:\s*auto/)
+    expect(page).toMatch(/\.tagger-stage\s*\{[^}]*overflow:\s*hidden/)
     expect(page).not.toContain('class="tagger-rail"')
     expect(page).not.toContain('tagger-identity')
     // 相框、队列、编辑器都是白卡片，不再写死深色值

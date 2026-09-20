@@ -389,35 +389,40 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
           </div>
         </div>
 
-        <div
-          class="tagger-preview"
-          :class="{ 'is-pannable': zoom > 1, 'is-panning': panning }"
-          ref="previewRef"
-          @wheel="onPreviewWheel"
-          @contextmenu.prevent="openPreviewMenu"
-          @pointerdown="onPanStart"
-          @pointermove="onPanMove"
-          @pointerup="onPanEnd"
-          @pointercancel="onPanEnd"
-          @dblclick="zoomFit"
-        >
-          <div class="preview-canvas" :style="{ width: canvasW ? `${canvasW}px` : '100%', height: canvasH ? `${canvasH}px` : '100%' }">
-            <img
-              v-if="previewSrc"
-              :src="previewSrc"
-              :alt="currentFilename"
-              @load="onPreviewImageLoad"
-            />
+        <!-- 相框：滚动区在里面，贴纸 / 提示浮层不跟着滚 -->
+        <div class="tagger-stage">
+          <div
+            class="tagger-preview"
+            :class="{ 'is-pannable': zoom > 1, 'is-panning': panning }"
+            ref="previewRef"
+            @wheel="onPreviewWheel"
+            @contextmenu.prevent="openPreviewMenu"
+            @pointerdown="onPanStart"
+            @pointermove="onPanMove"
+            @pointerup="onPanEnd"
+            @pointercancel="onPanEnd"
+            @dblclick="zoomFit"
+          >
+            <div class="preview-canvas" :style="{ width: canvasW ? `${canvasW}px` : '100%', height: canvasH ? `${canvasH}px` : '100%' }">
+              <img
+                v-if="previewSrc"
+                :src="previewSrc"
+                :alt="currentFilename"
+                @load="onPreviewImageLoad"
+              />
+            </div>
           </div>
           <span v-if="previewSrc && taggerStore.currentItem" class="preview-sticker preview-sticker--tags" aria-hidden="true"><b>{{ currentTagCount }}</b> 个标签</span>
           <span v-if="previewSrc" class="preview-sticker preview-sticker--threshold" aria-hidden="true">置信度 <b>{{ taggerStore.threshold.toFixed(2) }}</b></span>
-          <img v-if="appStore.showMascot" class="tagger-mascot" src="/mascot.png" alt="" aria-hidden="true" />
           <div v-if="previewLoading" class="preview-loading"><span></span>正在读取图片</div>
           <div v-else-if="!previewSrc" class="preview-empty">
             <strong>{{ taggerStore.queue.length ? '图片无法预览' : '先准备一批图片吧' }}</strong>
             <span>{{ taggerStore.queue.length ? '文件可能被移动了，可以从队列中重试或重新添加。' : '从图库选择图片送过来，或者点击左下角继续添加。' }}</span>
           </div>
-      <nav class="tagger-dock" aria-label="标注命令">
+        </div>
+
+        <!-- 指令坞和缩放条挂在工作区上，不在滚动区里，也不跟相框一起倾斜 -->
+        <nav class="tagger-dock" aria-label="标注命令">
         <div class="tagger-modes" role="tablist" aria-label="标注模式">
           <button
             v-for="mode in pageModes"
@@ -601,12 +606,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
         </div>
       </nav>
 
-          <div v-if="previewSrc" class="preview-zoom" aria-label="图片缩放">
-            <button type="button" title="缩小" @click="zoomOut">−</button>
-            <span class="preview-zoom__value">{{ Math.round(zoom * 100) }}%</span>
-            <button type="button" title="放大" @click="zoomIn">＋</button>
-            <button type="button" title="适应窗口" @click="zoomFit">适应</button>
-          </div>
+        <div v-if="previewSrc" class="preview-zoom" aria-label="图片缩放">
+          <button type="button" title="缩小" @click="zoomOut">−</button>
+          <span class="preview-zoom__value">{{ Math.round(zoom * 100) }}%</span>
+          <button type="button" title="放大" @click="zoomIn">＋</button>
+          <button type="button" title="适应窗口" @click="zoomFit">适应</button>
         </div>
 
         <div class="tagger-preview__progress">
@@ -760,10 +764,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
 .tagger-preview__toolbar button:disabled { opacity: .35; cursor: not-allowed; }
 
 /* 白色相框 */
-.tagger-preview { position: relative; flex: 1; min-height: 0; display: flex; overflow: auto; border-radius: 30px; background: var(--surface-primary); box-shadow: var(--surface-shadow-lg); transform: rotate(-0.6deg); transform-origin: 50% 60%; scrollbar-width: none; }
+/* 相框：本身不滚动，只负责白底、圆角、纸纹和轻微倾斜；滚动发生在里面的 .tagger-preview */
+.tagger-stage { position: relative; flex: 1; min-height: 0; display: flex; margin: 6px 10px 4px 6px; border-radius: 30px; background: var(--surface-primary); box-shadow: var(--surface-shadow-lg); transform: rotate(-0.6deg); transform-origin: 50% 60%; overflow: hidden; }
+.tagger-stage::before { content: ''; position: absolute; inset: 0; opacity: .6; pointer-events: none; background-image: radial-gradient(var(--line-strong) 1px, transparent 1.2px); background-size: 22px 22px; }
+.tagger-preview { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; overflow: auto; border-radius: inherit; scrollbar-width: none; }
 .tagger-preview::-webkit-scrollbar { display: none; }
-.tagger-workspace > .tagger-preview { margin: 6px 10px 4px 6px; }
-.tagger-preview::before { content: ''; position: absolute; inset: 0; opacity: .6; pointer-events: none; background-image: radial-gradient(var(--line-strong) 1px, transparent 1.2px); background-size: 22px 22px; }
 .preview-canvas { position: relative; z-index: 1; margin: auto; flex: none; display: flex; align-items: center; justify-content: center; }
 .preview-canvas img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 18px; box-shadow: var(--ink-shadow); transform: rotate(0.6deg); }
 .preview-loading { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--ink-tertiary); font-size: 12.5px; }
@@ -781,17 +786,16 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
 .preview-sticker--threshold b { color: var(--accent-lavender-strong); }
 
 /* 小人从右下角探头 */
-.tagger-mascot { position: absolute; z-index: 2; right: -10px; bottom: -6px; height: 300px; width: auto; pointer-events: none; opacity: .95; filter: drop-shadow(0 14px 22px rgba(74,45,61,.22)); clip-path: inset(0 0 58% 0); transform: translateY(58%); }
-
 /* 缩放条：移到右上角，避开小人 */
-.preview-zoom { position: absolute; right: 16px; top: 16px; z-index: 3; display: flex; align-items: center; gap: 4px; padding: 4px 6px; border: 0; border-radius: var(--radius-pill); background: var(--ink-primary); box-shadow: var(--ink-shadow); }
-.preview-zoom button { min-width: 26px; height: 26px; padding: 0 8px; border: 0; border-radius: var(--radius-pill); background: rgba(255,255,255,.1); color: rgba(255,255,255,.85); font: inherit; font-size: 13px; cursor: pointer; }
-.preview-zoom button:hover { background: rgba(255,255,255,.22); color: #fff; }
-.preview-zoom__value { min-width: 46px; text-align: center; color: rgba(255,255,255,.85); font: 11px var(--font-mono); }
+.preview-zoom { position: absolute; right: 26px; top: 78px; z-index: 5; display: flex; align-items: center; gap: 4px; padding: 4px 6px; border: 0; border-radius: var(--radius-pill); background: var(--chrome-bg); backdrop-filter: blur(12px); box-shadow: var(--surface-shadow); }
+.preview-zoom button { min-width: 26px; height: 26px; padding: 0 8px; border: 0; border-radius: var(--radius-pill); background: var(--brand-tint); color: var(--ink-secondary); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.preview-zoom button:hover { background: var(--brand-soft); color: var(--brand-hover); }
+.preview-zoom__value { min-width: 46px; text-align: center; color: var(--ink-primary); font: 11px var(--font-mono); font-weight: 700; }
 
 /* 相框下面那行：模型 / 阈值 / 设备 或 进度 */
 .tagger-preview__progress { flex: none; margin: 10px 4px 0; padding: 0 6px; border: 0; }
-.run-summary { height: 32px; display: flex; align-items: center; gap: 10px; padding: 0 12px; color: var(--ink-tertiary); font-size: 11.5px; font-weight: 600; }
+.run-summary { min-height: 32px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 4px 12px; color: var(--ink-tertiary); font-size: 11.5px; font-weight: 600; }
+.run-summary > span { white-space: nowrap; }
 .run-summary span + span::before { content: '·'; margin-right: 10px; color: var(--ink-quaternary); }
 .run-error { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-radius: var(--radius-pill); background: var(--danger-bg); font-size: 11.5px; }
 .run-error strong { color: var(--danger-foreground); font-weight: 800; }
@@ -799,7 +803,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
 .run-error__console { border: 0; background: var(--surface-primary); color: var(--danger-foreground); border-radius: var(--radius-pill); padding: 5px 12px; font: inherit; font-size: 11px; font-weight: 700; cursor: pointer; }
 
 /* 底部白色指令坞 */
-.tagger-dock { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 40px); padding: 8px 12px; border: 0; border-radius: var(--radius-pill); background: var(--chrome-bg); backdrop-filter: blur(14px); box-shadow: var(--surface-shadow-lg); }
+.tagger-dock { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 40px); padding: 8px 12px; border: 0; border-radius: var(--radius-pill); background: var(--chrome-bg); backdrop-filter: blur(14px); box-shadow: var(--surface-shadow-lg); }
 .tagger-modes { display: flex; gap: 2px; padding: 3px; border-radius: var(--radius-pill); background: var(--surface-secondary); }
 .tagger-modes button { height: 30px; padding: 0 12px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--ink-tertiary); font: inherit; font-size: 12px; font-weight: 800; white-space: nowrap; cursor: pointer; transition: background-color 140ms ease, color 140ms ease; }
 .tagger-modes button.is-active { background: var(--brand-primary); color: var(--brand-on-primary); box-shadow: 0 6px 14px rgba(var(--brand-primary-rgb), .3); }
@@ -826,7 +830,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
 @media (max-width: 1200px) {
   .tagger-layout { gap: 10px; }
   .tagger-workspace { min-width: 280px; }
-  .tagger-mascot { display: none; }
 }
 @media (max-width: 760px) {
   .tagger-page { padding: 6px; overflow-x: hidden; }
@@ -837,6 +840,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
 }
 @media (prefers-reduced-motion: reduce) {
   .dock-tile, .dock-tile__label, .tagger-preview__toolbar button { transition: none; }
-  .tagger-preview, .preview-canvas img { transform: none; }
+  .tagger-stage, .preview-canvas img { transform: none; }
 }
 </style>
