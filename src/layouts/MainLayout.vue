@@ -5,9 +5,11 @@ import TitleBar from '@/components/titlebar/TitleBar.vue'
 import AppSidebar from '@/components/sidebar/AppSidebar.vue'
 import StatusBar from '@/components/statusbar/StatusBar.vue'
 import ToolPicker from '@/components/sidebar/ToolPicker.vue'
+import { useAppLogs } from '@/composables/useAppLogs'
 
 const route = useRoute()
 const lockPageScroll = computed(() => route.path === '/gallery' || route.path === '/tagger')
+useAppLogs()
 </script>
 
 <template>

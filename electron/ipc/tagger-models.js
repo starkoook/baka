@@ -121,10 +121,12 @@ function scanModels(dirPath) {
 function detectProviders() {
   try {
     const ort = require('onnxruntime-node')
-    const available = ort.env.executionProviders || []
-    // Order by preference: CUDA > DML > CPU
-    const preferred = ['cuda', 'dml', 'coreml', 'cpu']
-    return preferred.filter((p) => available.includes(p))
+    const backends = typeof ort.listSupportedBackends === 'function'
+      ? ort.listSupportedBackends().map((item) => String(item.name || item).toLowerCase())
+      : []
+    const preferred = ['dml', 'cpu']
+    const found = preferred.filter((name) => backends.includes(name))
+    return found.length ? found : ['cpu']
   } catch (_) {
     return ['cpu']
   }
@@ -226,6 +228,22 @@ function registerModelHandlers() {
         installed: fs.existsSync(path.join(dirPath, `${model.id}.onnx`)),
       })),
     }
+  })
+
+  ipcMain.handle('taggerV2:deleteModel', async (_event, modelPath) => {
+    try {
+      const dirPath = getModelDirFromConfig()
+      const resolved = path.resolve(String(modelPath || ''))
+      const modelDir = path.resolve(dirPath)
+      const inside = resolved === modelDir || resolved.startsWith(modelDir + path.sep)
+      if (!inside || !resolved.toLowerCase().endsWith('.onnx')) {
+        return { success: false, error: '只能删除模型目录里的 .onnx 文件' }
+      }
+      if (fs.existsSync(resolved)) fs.unlinkSync(resolved)
+      const csv = resolved.replace(/\.onnx$/i, '.csv')
+      if (fs.existsSync(csv)) fs.unlinkSync(csv)
+      return { success: true, data: { models: scanModels(dirPath) } }
+    } catch (e) { return { success: false, error: e.message } }
   })
 
   ipcMain.handle('taggerV2:downloadModel', async (event, modelId) => {

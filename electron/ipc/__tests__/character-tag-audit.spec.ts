@@ -23,6 +23,12 @@ describe('character tag audit', () => {
     expect(applied[1].tags).toEqual(['2girls'])
   })
 
+  it('applies parentByChild when merging child tags', () => {
+    const items = [{ path: 'a.png', tags: ['hatsune_miku_(append)', 'hatsune_miku'] }]
+    const applied = applyInventoryDecisions(items, [], new Map([['hatsune_miku_(append)', 'hatsune_miku']]))
+    expect(applied[0].tags).toEqual(['hatsune_miku'])
+  })
+
   it('runs LLM audit with text prompt', async () => {
     const result = await auditInventory({
       inventory: [{ tag: 'hatsune_miku', count: 5, paths: [] }],

@@ -1,7 +1,13 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 
+const router = useRouter()
 const appStore = useAppStore()
+
+function openConsole() {
+  void router.push('/console')
+}
 </script>
 
 <template>
@@ -9,7 +15,7 @@ const appStore = useAppStore()
     <div class="status-left">
       <template v-if="appStore.lastError">
         <span class="status-dot error" aria-hidden="true"></span>
-        <span class="status-text error-text" role="alert">{{ appStore.lastError }}</span>
+        <button class="status-text error-text" type="button" role="alert" title="打开控制台" @click="openConsole">{{ appStore.lastError }}</button>
         <button class="status-dismiss" type="button" @click="appStore.clearError()" title="清除错误">清除</button>
       </template>
       <template v-else>
@@ -18,9 +24,10 @@ const appStore = useAppStore()
       </template>
     </div>
     <div class="status-right">
-      <button v-if="appStore.errorCount > 0" class="status-err-badge" type="button" @click="appStore.clearErrorHistory()">
+      <button v-if="appStore.errorCount > 0" class="status-err-badge" type="button" @click="openConsole">
         {{ appStore.errorCount }} 个错误
       </button>
+      <button class="status-console" type="button" title="打开控制台" @click="openConsole">控制台</button>
       <span class="status-item">v{{ appStore.version }}</span>
     </div>
   </footer>
@@ -41,4 +48,7 @@ const appStore = useAppStore()
 .status-err-badge { padding: 2px 8px; border-radius: 10px; background: var(--danger-bg); color: var(--danger-foreground); font-size: 10px; }
 .status-err-badge:hover { background: rgba(239, 68, 68, .18); }
 .status-item { color: var(--text-secondary); }
+.status-text.error-text { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-align: left; }
+.status-console { border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 11px; cursor: pointer; padding: 2px 6px; border-radius: 8px; }
+.status-console:hover { background: var(--brand-soft); color: var(--brand-primary); }
 </style>

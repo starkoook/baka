@@ -1,6 +1,6 @@
 <script setup lang="ts">
-defineProps<{ image: GalleryImage; tags: TagInfo[] }>()
-defineEmits<{ openMetadata: []; sendToTagger: []; audit: []; reveal: []; delete: [] }>()
+defineProps<{ image: GalleryImage | null; tags: TagInfo[] }>()
+defineEmits<{ openMetadata: []; sendToTagger: []; batchTools: []; audit: []; reveal: []; delete: [] }>()
 
 function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -9,7 +9,7 @@ function formatSize(bytes: number) {
 </script>
 
 <template>
-  <aside class="gallery-inspector">
+  <aside v-if="image" class="gallery-inspector">
     <div class="inspector-heading"><span>图片详情</span><small>单击选择 · 双击查看</small></div>
     <div class="file-title" :title="image.filename">{{ image.filename }}</div>
     <dl>
@@ -23,6 +23,7 @@ function formatSize(bytes: number) {
     <div class="inspector-actions">
       <button class="primary" @click="$emit('openMetadata')">查看图片与元数据</button>
       <button @click="$emit('sendToTagger')">送去标注</button>
+      <button @click="$emit('batchTools')">批量工具</button>
       <button @click="$emit('audit')">角色审计</button>
       <button class="danger" @click="$emit('delete')">移入回收站</button>
       <button class="text" @click="$emit('reveal')">打开文件位置</button>

@@ -232,3 +232,20 @@
   --cabin-bg: var(--light-panel-cabin);
   --panel-bg: var(--light-panel-cabin);
 }
+
+/* Settings design tokens — sidebar/cards/rows. Theme-aware via existing ink/brand vars. */
+:root {
+  --settings-sidebar-width: 216px;
+  --settings-card-radius: 10px;
+  --settings-row-height: 44px;
+  --settings-row-pad-x: 16px;
+  --settings-row-pad-y: 10px;
+  --settings-muted: var(--ink-tertiary);
+  --settings-accent: var(--brand-primary);
+  --settings-accent-soft: var(--brand-soft);
+  --settings-sidebar-bg: var(--hud-bg);
+  --settings-card-bg: var(--surface-primary);
+  --settings-card-border: var(--line-subtle);
+  --settings-nav-hover: var(--glass-bg-hover);
+  --settings-divider: var(--line-subtle);
+}

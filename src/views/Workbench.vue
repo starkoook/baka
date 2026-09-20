@@ -16,9 +16,11 @@ import {
   visibleWorldRect,
   worldToMinimap,
 } from '@/features/workbench/minimap'
+import SequenceEditor from '@/components/sequence/SequenceEditor.vue'
 
 const appStore = useAppStore()
 const wbStore = useWorkbenchStore()
+const sequenceOpen = ref(false)
 
 const NODE_WIDTH = 220
 const TITLE_HEIGHT = 38
@@ -2195,6 +2197,7 @@ function duplicateSelected() {
 
 // ---------- 键盘快捷键 ----------
 function onKeyDown(event: KeyboardEvent) {
+  if (sequenceOpen.value) return
   const target = event.target as HTMLElement
   if (target.closest('textarea, input, [contenteditable="true"]')) return
   if (event.code === 'Space' && !target.closest('button')) {
@@ -2253,6 +2256,7 @@ function onKeyDown(event: KeyboardEvent) {
 }
 
 function onKeyUp(event: KeyboardEvent) {
+  if (sequenceOpen.value) return
   if (event.code === 'Space') spaceDown.value = false
 }
 
@@ -2653,8 +2657,10 @@ onUnmounted(() => {
       <button class="wb-btn wb-btn--primary" type="button" title="添加节点" @click="wbStore.toggleRail('nodes')">＋ 添加节点</button>
       <button class="wb-btn wb-btn--icon" type="button" title="撤销 (Ctrl+Z)" :disabled="undoStack.length === 0" @click="undo">↶</button>
       <button class="wb-btn wb-btn--icon" type="button" title="重做 (Ctrl+Shift+Z)" :disabled="redoStack.length === 0" @click="redo">↷</button>
+      <button class="wb-btn" type="button" title="序列帧编辑器" @click="sequenceOpen = true">序列帧</button>
       <span class="workbench__hint">右键添加节点 · 左键拖动平移 · 空格+左键框选 · Ctrl+D 复制 · Ctrl+Z 撤销</span>
     </div>
+    <SequenceEditor v-if="sequenceOpen" @close="sequenceOpen = false" />
 
     <!-- 左栏面板 -->
     <section v-if="wbStore.railOpen" class="wb-rail__panel" :class="{ 'wb-rail--reduced': wbStore.reduceMotion }">

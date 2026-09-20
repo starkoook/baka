@@ -12,6 +12,7 @@ const referenceImagePaths = ref<string[]>([])
 const busy = ref(false)
 const error = ref('')
 const status = ref('')
+const parentByChild = ref<Record<string, string>>({})
 
 async function loadInventory() {
   if (!window.characterAuditAPI || !props.imageIds.length) return
@@ -25,6 +26,7 @@ async function loadInventory() {
   }
   inventory.value = response.data.inventory
   items.value = response.data.items
+  parentByChild.value = response.data.parentByChild || {}
   decisions.value = response.data.inventory.map((entry) => ({
     tag: entry.tag,
     type: 'keep' as const,
@@ -68,7 +70,11 @@ async function applyAudit() {
   if (!window.characterAuditAPI || !items.value.length) return
   busy.value = true
   error.value = ''
-  const response = await window.characterAuditAPI.apply({ items: items.value, decisions: decisions.value })
+  const response = await window.characterAuditAPI.apply({
+    items: items.value,
+    decisions: decisions.value,
+    parentByChild: parentByChild.value,
+  })
   busy.value = false
   if (!response.success) {
     error.value = response.error || '应用失败'

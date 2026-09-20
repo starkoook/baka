@@ -4,7 +4,7 @@ import { ref, watch } from 'vue'
 const STORAGE_KEY = 'baka-tools-config'
 const TOOL_POSTERS_KEY = 'baka-tools-tool-posters'
 
-export type ToolPosterKey = 'gallery' | 'booruGallery' | 'tagger' | 'training' | 'upscale' | 'workbench' | 'video' | 'imageTools'
+export type ToolPosterKey = 'gallery' | 'booruGallery' | 'tagger' | 'training' | 'upscale' | 'workbench' | 'video' | 'imageTools' | 'console'
 export type ToolPosters = Record<ToolPosterKey, string | null>
 
 const DEFAULT_TOOL_POSTERS: ToolPosters = {
@@ -16,6 +16,7 @@ const DEFAULT_TOOL_POSTERS: ToolPosters = {
   workbench: null,
   video: null,
   imageTools: null,
+  console: null,
 }
 
 function loadToolPosters(): ToolPosters {

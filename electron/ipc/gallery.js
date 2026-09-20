@@ -6,6 +6,7 @@ const { getDbPath, getThumbDir } = require('./paths')
 const { saveAnnotation } = require('./annotation-save')
 const { writeTextSafe } = require('./safe-file')
 const { serializeWeightedCaption } = require('./tag-weight')
+const { stampMetadataCache, parseCachedMetadata, galleryCacheNeedsReparse, galleryIndexCacheIsReusable, isModelLoraBlobPrompt } = require('./metadata-cache')
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
 const DROPPED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp'])
@@ -215,6 +216,29 @@ async function initDb(root = undefined) {
     runSql('INSERT OR REPLACE INTO schema_version (version) VALUES (6)')
   }
 
+  // v7: Invalidate cached model/LoRA blobs stored as the positive prompt so WeiLin XML is reparsed.
+  if (version < 7) {
+    try {
+      db.run(`
+        UPDATE images SET sd_metadata = NULL
+        WHERE sd_prompt IS NOT NULL
+          AND TRIM(sd_prompt) NOT LIKE '<%'
+          AND (
+            sd_prompt LIKE '%.safetensors%'
+            OR sd_prompt LIKE '%.ckpt%'
+            OR sd_prompt LIKE '[%'
+          )
+          AND (
+            sd_prompt LIKE '%text_encoder_weight%'
+            OR sd_prompt LIKE '%loraWorks%'
+            OR sd_prompt LIKE '%lora_str%'
+            OR sd_prompt LIKE '%"lora"%'
+          )
+      `)
+    } catch (_) {}
+    runSql('INSERT OR REPLACE INTO schema_version (version) VALUES (7)')
+  }
+
   saveDb(dbRoot)
   return db
 }
@@ -248,6 +272,61 @@ function queryOne(sql, params = []) {
 function runSql(sql, params = [], persist = true) {
   db.run(sql, params)
   if (persist) saveDb()
+}
+
+function persistImageSdMetadata(imageId, meta, persist = true) {
+  const stored = { ...meta }
+  delete stored.thumbBase64
+  runSql(
+    `UPDATE images SET sd_prompt=?, sd_negative=?, sd_steps=?, sd_cfg=?, sd_sampler=?, sd_seed=?, sd_model=?, sd_generator=?, sd_loras=?, sd_metadata=?, sd_has_meta=? WHERE id=?`,
+    [stored.prompt ?? null, stored.negative ?? null, stored.steps ?? null, stored.cfg ?? null,
+      stored.sampler ?? null, stored.seed ?? null, stored.model ?? null, stored.generator ?? null,
+      JSON.stringify(stored.loras || []), JSON.stringify(stampMetadataCache(stored)), stored.hasMetadata ? 1 : 0, imageId],
+    persist
+  )
+}
+
+function resolveGalleryPrompt(existingPrompt, meta) {
+  if (!meta || typeof meta !== 'object') return meta
+  if (isModelLoraBlobPrompt(meta.prompt)) meta.prompt = undefined
+  const existingIsBlob = isModelLoraBlobPrompt(existingPrompt)
+  const existingIsReal = typeof existingPrompt === 'string' && existingPrompt.trim() && !existingIsBlob
+  if (existingIsReal && !(typeof meta.prompt === 'string' && meta.prompt.trim())) {
+    meta.prompt = existingPrompt
+  }
+  return meta
+}
+
+function applyParsedMetaToRow(image, meta, persist = true) {
+  if (!meta || typeof meta !== 'object') return meta
+  const existingPrompt = image && image.sd_prompt
+  resolveGalleryPrompt(existingPrompt, meta)
+  if (!image || !image.id) return meta
+  const existingIsBlob = isModelLoraBlobPrompt(existingPrompt)
+  const existingIsReal = typeof existingPrompt === 'string' && existingPrompt.trim() && !existingIsBlob
+  const freshIsReal = typeof meta.prompt === 'string' && meta.prompt.trim()
+  if (existingIsReal && !freshIsReal) return meta
+  if (existingIsReal && !meta.hasMetadata) return meta
+  persistImageSdMetadata(image.id, meta, persist)
+  return meta
+}
+
+/** Reparse rows whose sd_prompt is still a model+LoRA blob. Lazy and cheap; does not rebuild thumbs. */
+function repairStaleBlobPromptRows({ limit = 4 } = {}) {
+  const { parseMetadata } = require('./metadata')
+  const rows = queryAll('SELECT id, path, sd_prompt FROM images')
+  const blobs = rows.filter((row) => isModelLoraBlobPrompt(row.sd_prompt))
+  let repaired = 0
+  for (const row of blobs.slice(0, limit)) {
+    try {
+      if (!row.path || !fs.existsSync(row.path)) continue
+      const meta = parseMetadata(row.path)
+      applyParsedMetaToRow(row, meta, false)
+      repaired++
+    } catch (_) {}
+  }
+  if (repaired) saveDb()
+  return { repaired, remaining: Math.max(0, blobs.length - repaired) }
 }
 
 // ── Thumbnail generation ──
@@ -341,9 +420,21 @@ async function scanFolder(folderPath, rootId, mainWindow) {
       const batch = entries.slice(i, i + BATCH)
       for (const e of batch) {
         try {
-          const existing = queryOne('SELECT id, file_modified_at, sd_metadata FROM images WHERE path = ?', [e.path])
-          if (existing && existing.file_modified_at === e.mtime && existing.sd_metadata !== null) {
+          const existing = queryOne('SELECT id, file_modified_at, sd_metadata, sd_prompt FROM images WHERE path = ?', [e.path])
+          if (existing && existing.file_modified_at === e.mtime && galleryIndexCacheIsReusable(existing.sd_metadata) && !isModelLoraBlobPrompt(existing.sd_prompt)) {
             skipCount++
+            current++
+            continue
+          }
+          if (existing && existing.file_modified_at === e.mtime) {
+            // Stale blob caption: reparse metadata only, keep the thumbnail.
+            try {
+              let sdMeta = { hasMetadata: false }
+              try { sdMeta = parseMetadata(e.path) } catch (_) {}
+              resolveGalleryPrompt(existing.sd_prompt, sdMeta)
+              persistImageSdMetadata(existing.id, sdMeta, false)
+              newCount++
+            } catch (_) { errorCount++ }
             current++
             continue
           }
@@ -353,13 +444,14 @@ async function scanFolder(folderPath, rootId, mainWindow) {
 
           let sdMeta = { hasMetadata: false }
           try { sdMeta = parseMetadata(e.path) } catch (_) {}
+          resolveGalleryPrompt(existing && existing.sd_prompt, sdMeta)
 
           const values = [
             e.filename, e.dirname, rootId, imgMeta.width || 0, imgMeta.height || 0, e.size, e.mtime, hash,
             sdMeta.prompt ?? null, sdMeta.negative ?? null, sdMeta.steps ?? null, sdMeta.cfg ?? null,
             sdMeta.sampler ?? null, sdMeta.seed ?? null, sdMeta.model ?? null, sdMeta.generator ?? null,
             JSON.stringify(sdMeta.loras || []),
-            JSON.stringify(sdMeta),
+            JSON.stringify(stampMetadataCache(sdMeta)),
             sdMeta.hasMetadata ? 1 : 0,
           ]
           if (existing) {
@@ -442,9 +534,19 @@ async function importImageFiles(filePaths) {
           continue
         }
         const mtime = stat.mtime.toISOString()
-        const existing = queryOne('SELECT id, file_modified_at, sd_metadata FROM images WHERE path = ?', [filePath])
-        if (existing && existing.file_modified_at === mtime && existing.sd_metadata !== null) {
+        const existing = queryOne('SELECT id, file_modified_at, sd_metadata, sd_prompt FROM images WHERE path = ?', [filePath])
+        if (existing && existing.file_modified_at === mtime && galleryIndexCacheIsReusable(existing.sd_metadata) && !isModelLoraBlobPrompt(existing.sd_prompt)) {
           skipCount++
+          continue
+        }
+        if (existing && existing.file_modified_at === mtime) {
+          try {
+            let sdMeta = { hasMetadata: false }
+            try { sdMeta = parseMetadata(filePath) } catch (_) {}
+            resolveGalleryPrompt(existing.sd_prompt, sdMeta)
+            persistImageSdMetadata(existing.id, sdMeta, false)
+            importedCount++
+          } catch (_) { errorCount++ }
           continue
         }
 
@@ -452,12 +554,13 @@ async function importImageFiles(filePaths) {
         const imgMeta = await sharp(filePath).metadata()
         let sdMeta = { hasMetadata: false }
         try { sdMeta = parseMetadata(filePath) } catch (_) {}
+        resolveGalleryPrompt(existing && existing.sd_prompt, sdMeta)
 
         const values = [
           path.basename(filePath), path.dirname(filePath), imgMeta.width || 0, imgMeta.height || 0,
           stat.size, mtime, hash, sdMeta.prompt ?? null, sdMeta.negative ?? null,
           sdMeta.steps ?? null, sdMeta.cfg ?? null, sdMeta.sampler ?? null, sdMeta.seed ?? null,
-          sdMeta.model ?? null, sdMeta.generator ?? null, JSON.stringify(sdMeta.loras || []), JSON.stringify(sdMeta), sdMeta.hasMetadata ? 1 : 0,
+          sdMeta.model ?? null, sdMeta.generator ?? null, JSON.stringify(sdMeta.loras || []), JSON.stringify(stampMetadataCache(sdMeta)), sdMeta.hasMetadata ? 1 : 0,
         ]
         if (existing) {
           runSql(
@@ -513,6 +616,11 @@ async function readFileMetaFromPath(filePath) {
   try {
     const thumbBuf = await sharp(filePath).resize(384, 384, { fit: 'inside' }).jpeg({ quality: 80 }).toBuffer()
     meta.thumbBase64 = thumbBuf.toString('base64')
+  } catch (_) {}
+  try {
+    await ensureDb()
+    const row = queryOne('SELECT id, path, sd_prompt FROM images WHERE path = ?', [filePath])
+    if (row) applyParsedMetaToRow(row, meta)
   } catch (_) {}
   return meta
 }
@@ -833,42 +941,27 @@ function registerGalleryHandlers(mainWindow) {
       const image = queryOne('SELECT * FROM images WHERE id = ?', [imageId])
       if (!image) return { success: false, error: 'Image not found' }
 
-      // Return the complete stored metadata when the v4 cache is available.
-      if (image.sd_metadata) {
-        try {
-          const cached = JSON.parse(image.sd_metadata)
-          const rawText = cached.rawMetadata ? JSON.stringify(cached.rawMetadata) : ''
-          const hasRawLoraSignal = /lora|LoraLoader|LoRALoader|lora_str|temp_lora_str|<lora:/i.test(rawText)
-          const cachedHasLoras = Array.isArray(cached.loras) && cached.loras.length > 0
-          const hasExtractedMetadata = (
-            cached.prompt !== undefined ||
-            cached.negative !== undefined ||
-            cached.model !== undefined ||
-            cached.steps !== undefined ||
-            cached.cfg !== undefined ||
-            cached.sampler !== undefined ||
-            cached.seed !== undefined ||
-            cachedHasLoras
-          )
-          const needsLoraReparse = hasRawLoraSignal && !cachedHasLoras
-          if ((hasExtractedMetadata && !needsLoraReparse) || !cached.rawMetadata) {
-            return { success: true, data: { ...cached, width: image.width, height: image.height } }
-          }
-        } catch (_) {
-          // Reparse invalid legacy cache below.
-        }
+      // Viewer open: always parse the file so a stale model+LoRA blob cannot hide a real caption.
+      const { parseMetadata } = require('./metadata')
+      let meta = null
+      try {
+        if (image.path && fs.existsSync(image.path)) meta = parseMetadata(image.path)
+      } catch (_) {}
+
+      if (meta) {
+        applyParsedMetaToRow(image, meta)
+        return { success: true, data: { ...meta, width: image.width, height: image.height } }
       }
 
-      // Fallback: parse fresh and upgrade this row to the complete cache.
-      const { parseMetadata } = require('./metadata')
-      const meta = parseMetadata(image.path)
-      runSql(
-        `UPDATE images SET sd_prompt=?, sd_negative=?, sd_steps=?, sd_cfg=?, sd_sampler=?, sd_seed=?, sd_model=?, sd_generator=?, sd_loras=?, sd_metadata=?, sd_has_meta=? WHERE id=?`,
-        [meta.prompt ?? null, meta.negative ?? null, meta.steps ?? null, meta.cfg ?? null,
-          meta.sampler ?? null, meta.seed ?? null, meta.model ?? null, meta.generator ?? null,
-          JSON.stringify(meta.loras || []), JSON.stringify(meta), meta.hasMetadata ? 1 : 0, imageId]
-      )
-      return { success: true, data: { ...meta, width: image.width, height: image.height } }
+      if (image.sd_metadata) {
+        try {
+          const cached = parseCachedMetadata(image.sd_metadata)
+          if (cached && !galleryCacheNeedsReparse(cached)) {
+            return { success: true, data: { ...cached, width: image.width, height: image.height } }
+          }
+        } catch (_) {}
+      }
+      return { success: true, data: { hasMetadata: false, width: image.width, height: image.height } }
     } catch (e) {
       return { success: false, error: e.message }
     }
@@ -926,4 +1019,4 @@ function registerGalleryHandlers(mainWindow) {
   })
 }
 
-module.exports = { registerGalleryHandlers, initDb, ensureDb, queryAll, queryOne, runSql, saveDb, generateThumbnail, hashPath, readFileMetaFromPath, classifyDroppedPaths, importImageFiles, IMAGE_EXTENSIONS }
+module.exports = { registerGalleryHandlers, initDb, ensureDb, queryAll, queryOne, runSql, saveDb, generateThumbnail, hashPath, readFileMetaFromPath, classifyDroppedPaths, importImageFiles, persistImageSdMetadata, applyParsedMetaToRow, repairStaleBlobPromptRows, IMAGE_EXTENSIONS }

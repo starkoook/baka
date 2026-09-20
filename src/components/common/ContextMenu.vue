@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 
 export interface ContextMenuItem {
   label: string
   danger?: boolean
   group?: string
-  action: () => void
+  action?: () => void
+  disabled?: boolean
+  separator?: boolean
 }
 
 const props = defineProps<{
@@ -22,11 +24,27 @@ const filtered = computed(() => {
   if (!props.searchable) return props.items
   const q = search.value.trim().toLowerCase()
   if (!q) return props.items
-  return props.items.filter(
-    (item) =>
-      item.label.toLowerCase().includes(q) || (item.group || '').toLowerCase().includes(q),
-  )
+  return props.items.filter((item) => {
+    if (item.separator) return true
+    return item.label.toLowerCase().includes(q) || (item.group || '').toLowerCase().includes(q)
+  })
 })
+
+function onItemClick(item: ContextMenuItem) {
+  if (item.separator || item.disabled) return
+  item.action?.()
+  emit('close')
+}
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    emit('close')
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', onKeydown))
+onUnmounted(() => window.removeEventListener('keydown', onKeydown))
 </script>
 
 <template>
@@ -41,20 +59,24 @@ const filtered = computed(() => {
         @pointerdown.stop
       />
       <template v-for="(item, index) in filtered" :key="index">
-        <span
-          v-if="item.group && (index === 0 || filtered[index - 1].group !== item.group)"
-          class="ctx-menu__group"
-        >
-          {{ item.group }}
-        </span>
-        <button
-          class="ctx-menu__item"
-          :class="{ 'ctx-menu__item--danger': item.danger }"
-          type="button"
-          @click="item.action(); emit('close')"
-        >
-          {{ item.label }}
-        </button>
+        <div v-if="item.separator" class="ctx-menu__sep"></div>
+        <template v-else>
+          <span
+            v-if="item.group && (index === 0 || filtered[index - 1].group !== item.group)"
+            class="ctx-menu__group"
+          >
+            {{ item.group }}
+          </span>
+          <button
+            class="ctx-menu__item"
+            :class="{ 'ctx-menu__item--danger': item.danger, 'ctx-menu__item--disabled': item.disabled }"
+            type="button"
+            :disabled="item.disabled"
+            @click="onItemClick(item)"
+          >
+            {{ item.label }}
+          </button>
+        </template>
       </template>
       <p v-if="searchable && !filtered.length" class="ctx-menu__empty">没有匹配的节点</p>
     </div>
@@ -95,6 +117,21 @@ const filtered = computed(() => {
 .ctx-menu__item:hover { background: var(--brand-soft); color: var(--brand-primary); }
 .ctx-menu__item--danger { color: #ff8a78; }
 .ctx-menu__item--danger:hover { background: rgba(255, 137, 117, 0.1); color: #ff9a86; }
+.ctx-menu__item--disabled,
+.ctx-menu__item:disabled {
+  opacity: .38;
+  cursor: not-allowed;
+}
+.ctx-menu__item--disabled:hover,
+.ctx-menu__item:disabled:hover {
+  background: transparent;
+  color: var(--text-secondary);
+}
+.ctx-menu__sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--line-subtle, rgba(255,255,255,.08));
+}
 .ctx-menu__search {
   display: block;
   width: 100%;

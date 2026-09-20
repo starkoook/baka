@@ -180,7 +180,7 @@ async function callLLM(params) {
   let imageBase64 = params.imageBase64
   const mimeType = params.mimeType || 'image/jpeg'
 
-  if (!apiKey) throw new Error('API Key 未配置，请在设置中填写')
+  if (!apiKey) throw new Error('先到设置 → 接口填写 API 密钥')
 
   // Build prompt
   const threshold = params.threshold
@@ -597,6 +597,10 @@ function registerLLMHandlers() {
     }
     const list = loadApiConfigs()
     const id = cfg.id || 'cfg_' + Date.now().toString(36)
+    const targetRpm = cfg.targetRpm === undefined || cfg.targetRpm === null || cfg.targetRpm === ''
+      ? 5
+      : Math.max(0, Number(cfg.targetRpm) || 0)
+    const requestMode = cfg.requestMode === 'concurrent' ? 'concurrent' : 'queue'
     const entry = {
       id,
       name: String(cfg.name).trim(),
@@ -604,6 +608,8 @@ function registerLLMHandlers() {
       baseUrl: cfg.baseUrl || '',
       apiKey: cfg.apiKey || '',
       model: cfg.model || '',
+      targetRpm,
+      requestMode,
     }
     const idx = list.findIndex((c) => c.id === id)
     if (idx >= 0) list[idx] = entry
@@ -612,6 +618,12 @@ function registerLLMHandlers() {
       const storage = getSafeStorage()
       const payload = storage ? protectApiKeyFields(list, storage) : list
       fs.writeFileSync(apiConfigsPath(), JSON.stringify(payload, null, 2), 'utf-8')
+      saveApiConfig({
+        provider: entry.provider,
+        baseUrl: entry.baseUrl,
+        apiKey: entry.apiKey,
+        model: entry.model,
+      })
       return { success: true, config: entry }
     } catch (e) {
       return { success: false, error: e.message }
@@ -631,4 +643,4 @@ function registerLLMHandlers() {
   })
 }
 
-module.exports = { registerLLMHandlers, imageGeneration, callLLM, buildPrompt, parseOutput, parseTagList }
+module.exports = { registerLLMHandlers, imageGeneration, callLLM, buildPrompt, parseOutput, parseTagList, loadApiConfigs, loadConfig }

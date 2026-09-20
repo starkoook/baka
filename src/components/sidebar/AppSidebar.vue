@@ -1,15 +1,67 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/common/AppIcon.vue'
-import { APP_NAVIGATION, isNavigationItemActive } from '@/features/navigation/app-navigation'
-import { useAppStore } from '@/stores/app'
+import { APP_NAVIGATION, isNavigationItemActive, type AppNavigationId } from '@/features/navigation/app-navigation'
+import { getSettingsReturnTarget } from '@/features/navigation/workspace-history'
+import { useAppStore, type ToolPosterKey } from '@/stores/app'
 import { useWorkbenchStore } from '@/stores/workbench'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
 const wbStore = useWorkbenchStore()
+
+const WORKSPACE_POSTER_KEY: Partial<Record<string, ToolPosterKey>> = {
+  '/gallery': 'gallery',
+  '/booru-gallery': 'booruGallery',
+  '/tagger': 'tagger',
+  '/training': 'training',
+  '/training/runtime': 'training',
+  '/upscale': 'upscale',
+  '/workbench': 'workbench',
+  '/video': 'video',
+  '/image-tools': 'imageTools',
+}
+
+const WORKSPACE_ICON: Partial<Record<string, AppNavigationId>> = {
+  '/gallery': 'gallery',
+  '/booru-gallery': 'gallery',
+  '/tagger': 'tagger',
+  '/training': 'training',
+  '/training/runtime': 'training',
+}
+
+const settingsReturnTarget = computed(() => {
+  if (route.path !== '/settings') return null
+  return getSettingsReturnTarget()
+})
+
+const settingsReturnIcon = computed<AppNavigationId>(() => {
+  const target = settingsReturnTarget.value
+  if (!target) return 'tools'
+  return WORKSPACE_ICON[target.route] ?? 'tools'
+})
+
+const settingsReturnPoster = ref('')
+
+watch(
+  [settingsReturnTarget, () => appStore.toolPosters],
+  async () => {
+    const target = settingsReturnTarget.value
+    settingsReturnPoster.value = ''
+    if (!target) return
+    const key = WORKSPACE_POSTER_KEY[target.route]
+    if (!key) return
+    const path = appStore.toolPosters[key]
+    if (!path || !window.fsAPI) return
+    const result = await window.fsAPI.readImageBase64(path)
+    if (result.success && settingsReturnTarget.value?.route === target.route) {
+      settingsReturnPoster.value = 'data:' + result.mime + ';base64,' + result.base64
+    }
+  },
+  { immediate: true, deep: true },
+)
 
 const isWorkbench = computed(() => route.path === '/workbench')
 
@@ -28,6 +80,22 @@ function navigateTo(path: string) {
 
 <template>
   <aside class="app-sidebar" aria-label="主导航">
+    <button
+      v-if="settingsReturnTarget"
+      class="nav-return"
+      type="button"
+      :title="`返回${settingsReturnTarget.shortLabel}`"
+      :aria-label="`返回${settingsReturnTarget.shortLabel}`"
+      @click="navigateTo(settingsReturnTarget.route)"
+    >
+      <img
+        v-if="settingsReturnPoster"
+        class="nav-return__img"
+        :src="settingsReturnPoster"
+        alt=""
+      />
+      <AppIcon v-else :name="settingsReturnIcon" />
+    </button>
     <nav class="sidebar-nav" :style="activeRailStyle" aria-label="应用页面">
       <span class="sidebar-active-rail" aria-hidden="true"></span>
       <div v-for="item in APP_NAVIGATION" :key="item.id" class="nav-entry">
@@ -78,6 +146,17 @@ function navigateTo(path: string) {
     <div class="sidebar-footer">
       <button
         class="tool-picker-toggle"
+        :class="{ active: route.path === '/console' }"
+        type="button"
+        aria-label="控制台"
+        title="控制台"
+        @click="navigateTo('/console')"
+      >
+        <span class="console-glyph" aria-hidden="true">&gt;_</span>
+        <span class="nav-label">控制台</span>
+      </button>
+      <button
+        class="tool-picker-toggle"
         :class="{ active: appStore.toolPickerOpen }"
         type="button"
         aria-label="工具选择"
@@ -94,6 +173,11 @@ function navigateTo(path: string) {
 
 <style scoped>
 .app-sidebar { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 0; border: 0; background: color-mix(in srgb, var(--app-bg) 88%, var(--brand-soft)); }
+.nav-return { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; flex: none; width: 40px; height: 40px; margin: 14px auto 0; padding: 0; border: 0; border-radius: 50%; background: var(--brand-soft); color: var(--brand-primary); box-shadow: 0 0 0 1px color-mix(in srgb, var(--brand-primary) 28%, transparent), 0 0 12px color-mix(in srgb, var(--brand-primary) 42%, transparent); cursor: pointer; animation: nav-return-in 220ms cubic-bezier(.2, .8, .2, 1); }
+.nav-return:hover { transform: scale(1.06); }
+.nav-return:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 2px; }
+.nav-return__img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+@keyframes nav-return-in { from { opacity: 0; transform: scale(.86); } to { opacity: 1; transform: scale(1); } }
 .nav-item { font: inherit; border: 0; cursor: pointer; }
 .sidebar-nav { position: relative; display: grid; gap: 4px; padding: 16px 10px 12px; border: 0; }
 .sidebar-active-rail { position: absolute; z-index: 2; top: 16px; left: 5px; width: 3px; height: 40px; border-radius: 999px; background: var(--brand-primary); box-shadow: 0 0 10px color-mix(in srgb, var(--brand-primary) 72%, transparent); transform: translateY(calc(var(--active-navigation-index) * 44px)); transition: transform 240ms cubic-bezier(.2, .8, .2, 1); pointer-events: none; }
@@ -107,6 +191,7 @@ function navigateTo(path: string) {
 .tool-picker-toggle:hover, .tool-picker-toggle.active { background: var(--brand-soft); color: var(--brand-primary); }
 .tool-picker-toggle :deep(svg) { flex: none; }
 .tool-picker-toggle .nav-label { display: none; }
+.console-glyph { font-family: var(--font-mono); font-size: 12px; font-weight: 700; letter-spacing: -0.04em; }
 .sidebar-version { display: none; padding-left: 10px; }
 
 .sidebar-workbench {
@@ -182,7 +267,8 @@ function navigateTo(path: string) {
 
 /* icon-mode tooltips */
 .nav-item::after,
-.tool-picker-toggle::after {
+.tool-picker-toggle::after,
+.nav-return::after {
   content: attr(aria-label);
   position: absolute;
   left: calc(100% + 12px);
@@ -204,7 +290,8 @@ function navigateTo(path: string) {
 }
 .nav-item:hover::after,
 .tool-picker-toggle:hover::after,
-.tool-picker-toggle.active::after {
+.tool-picker-toggle.active::after,
+.nav-return:hover::after {
   opacity: 1;
   transform: translateY(-50%) translateX(0);
 }
@@ -224,6 +311,7 @@ function navigateTo(path: string) {
   .sidebar-workbench__btn { transition: none !important; transform: none !important; }
   .nav-item,
   .nav-item :deep(svg),
-  .nav-label { animation: none !important; transition: none !important; transform: none !important; }
+  .nav-label,
+  .nav-return { animation: none !important; transition: none !important; transform: none !important; }
 }
 </style>

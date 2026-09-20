@@ -5,6 +5,24 @@ const { ensureDb, queryAll } = require('./gallery')
 const { buildInventory, applyInventoryDecisions, auditInventory } = require('./character-tag-audit')
 const { writeImageTagsAndCaption } = require('./tagging-batch')
 const { callLLM } = require('./llm')
+const { TagCatalog } = require('./tag-catalog')
+
+let catalogPromise = null
+function getTagCatalog() {
+  if (!catalogPromise) {
+    catalogPromise = TagCatalog.load({
+      zhPath: path.join(__dirname, '../../resources/tag-data/danbooru-0-zh.csv'),
+      characterPath: path.join(__dirname, '../../resources/tag-data/danbooru_character_tags.csv'),
+    }).catch(() => new TagCatalog([]))
+  }
+  return catalogPromise
+}
+
+async function resolveParentByChild(explicit) {
+  if (explicit && Object.keys(explicit).length) return explicit
+  const catalog = await getTagCatalog()
+  return Object.fromEntries(catalog.parentByChild || [])
+}
 
 function getAuditItems(imageIds) {
   if (imageIds?.length) {
@@ -98,7 +116,8 @@ function registerCharacterTagAuditHandlers() {
       await ensureDb()
       const items = getAuditItems(params.imageIds || [])
       const inventory = buildInventory(items).sort((a, b) => b.count - a.count)
-      return { success: true, data: { items, inventory } }
+      const parentByChild = await resolveParentByChild()
+      return { success: true, data: { items, inventory, parentByChild } }
     } catch (e) {
       return { success: false, error: e.message || String(e) }
     }
@@ -153,7 +172,7 @@ function registerCharacterTagAuditHandlers() {
       await ensureDb()
       const items = params.items || []
       const decisions = params.decisions || []
-      const parentByChild = new Map(Object.entries(params.parentByChild || {}))
+      const parentByChild = new Map(Object.entries(await resolveParentByChild(params.parentByChild || {})))
       const applied = applyInventoryDecisions(items, decisions, parentByChild)
       const failures = []
       let updated = 0

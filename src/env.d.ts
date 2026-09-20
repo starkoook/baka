@@ -40,6 +40,8 @@ declare global {
     baseUrl: string
     apiKey: string
     model: string
+    targetRpm?: number
+    requestMode?: 'queue' | 'concurrent'
   }
 
   interface CacheAPI {
@@ -52,7 +54,7 @@ declare global {
     getConfig: () => Promise<LLMConfig>
     saveConfig: (config: Partial<LLMConfig>) => Promise<{ success: boolean; error?: string }>
     listModels: (params?: { provider?: string; baseUrl?: string; apiKey?: string }) => Promise<{ success: boolean; models?: string[]; error?: string }>
-    getProfiles: () => Promise<string[]>
+    getProfiles: () => Promise<{ profiles: string[]; activeProfile: string }>
     test: (params: { provider: string; apiKey: string; baseUrl: string; model: string }) => Promise<{ success: boolean; error?: string }>
     saveProfile: (params: { name: string; config: Partial<LLMConfig> }) => Promise<void>
     switchProfile: (name: string) => Promise<void>
@@ -316,6 +318,38 @@ declare global {
     onScanProgress: (callback: (progress: ScanProgress) => void) => void
   }
 
+  interface AnnotationToolOptions {
+    type: 'format-convert' | 'normalize' | 'find-replace' | 'add-fields'
+    options?: Record<string, any>
+  }
+
+  interface AnnotationBatchResult {
+    imagePath: string
+    changed: boolean
+    error?: string
+  }
+
+  interface AnnotationToolsAPI {
+    transformText: (params: {
+      text: string
+      tool: AnnotationToolOptions
+    }) => Promise<{ success: boolean; data?: { text: string }; error?: string }>
+    preview: (params: {
+      imagePaths: string[]
+      tool: AnnotationToolOptions
+    }) => Promise<{ success: boolean; data?: { samples: { imagePath: string; before: string; after: string }[] }; error?: string }>
+    applyBatch: (params: {
+      imagePaths: string[]
+      tool: AnnotationToolOptions
+    }) => Promise<{ success: boolean; data?: { updated: number; total: number; results: AnnotationBatchResult[]; historyIds: number[]; failures: { imagePath: string; error: string }[] }; error?: string }>
+    undoBatch: (historyIds: number[]) => Promise<{ success: boolean; data?: { restored: string[]; failures: { id: number; error: string }[] }; error?: string }>
+    applyOverride: (params: {
+      imagePaths: string[]
+      texts: string[]
+    }) => Promise<{ success: boolean; data?: { updated: number; total: number; results: AnnotationBatchResult[]; historyIds: number[]; failures: { imagePath: string; error: string }[] }; error?: string }>
+    listHistory: (imagePath: string) => Promise<{ success: boolean; data?: { versions: { id: number; version_path: string; created_at: string }[] }; error?: string }>
+  }
+
   interface ModelInfo {
     name: string
     path: string
@@ -358,9 +392,18 @@ declare global {
     csvPath?: string
     imagePaths: string[]
     threshold?: number
+    generalThreshold?: number
+    characterThreshold?: number
+    addCharacter?: boolean
+    addCopyright?: boolean
+    replaceUnderscores?: boolean
     batchSize?: number
     resolution?: number
     providers?: string[]
+    normalization?: string
+    padColor?: number[]
+    resizeMode?: string
+    taskId?: string
   }
 
   interface InferSingleParams {
@@ -418,6 +461,7 @@ declare global {
     openModelDir: () => Promise<{ success: boolean; error?: string }>
     listDownloadableModels: () => Promise<{ success: boolean; data?: { id: string; name: string; repo: string; installed: boolean }[]; error?: string }>
     downloadModel: (modelId: string) => Promise<{ success: boolean; data?: { dirPath: string; models: ModelInfo[] }; error?: string }>
+    deleteModel: (modelPath: string) => Promise<{ success: boolean; data?: { models: ModelInfo[] }; error?: string }>
     onDownloadProgress: (callback: (event: { modelId: string; received: number; total: number }) => void) => void
     inferSingle: (params: InferSingleParams) => Promise<{ success: boolean; data?: { tags: TagResultV2[] }; error?: string }>
     inferBatch: (params: InferBatchParams) => Promise<{ success: boolean; taskId?: string; data?: { results: { path: string; tags: TagResultV2[]; error?: string }[]; count: number; cancelled?: boolean }; error?: string }>
@@ -450,10 +494,20 @@ declare global {
     providers?: string[]
     resolution?: number
     batchSize?: number
-    writeMode?: 'replace' | 'append' | 'skip_existing' | 'empty_only'
+    writeMode?: 'replace' | 'append' | 'skip_existing' | 'empty_only' | 'skip' | 'overwrite' | 'merge' | 'mergePrefix' | 'mergeSuffix'
+    conflict?: 'skip' | 'overwrite' | 'merge' | 'mergePrefix' | 'mergeSuffix'
+    scope?: 'selected' | 'all' | 'unannotated'
     prefix?: string
     suffix?: string
     replaceUnderscores?: boolean
+    generalThreshold?: number
+    characterThreshold?: number
+    addCharacter?: boolean
+    addCopyright?: boolean
+    autoSaveAfterTagging?: boolean
+    normalization?: string
+    padColor?: number[]
+    resizeMode?: string
     taskId?: string
     mergeStrategy?: 'union' | 'intersect' | 'difference' | 'a_only' | 'b_only'
   }
@@ -476,7 +530,7 @@ declare global {
   interface TaggingAPI {
     generate: (params: TaggingOptions) => Promise<{ success: boolean; data?: TaggingResult[]; error?: string }>
     preview: (params: TaggingOptions) => Promise<{ success: boolean; data?: TaggingResult[]; error?: string }>
-    apply: (params: { results: TaggingResult[]; writeMode?: 'replace' | 'append' | 'skip_existing' | 'empty_only' }) => Promise<{ success: boolean; data?: { updated: number; failures: { path: string; error: string }[] }; error?: string }>
+    apply: (params: { results: TaggingResult[]; writeMode?: 'replace' | 'append' | 'skip_existing' | 'empty_only' | 'skip' | 'overwrite' | 'merge' | 'mergePrefix' | 'mergeSuffix'; conflict?: 'skip' | 'overwrite' | 'merge' | 'mergePrefix' | 'mergeSuffix' }) => Promise<{ success: boolean; data?: { updated: number; failures: { path: string; error: string }[] }; error?: string }>
     cancel: (taskId: string) => Promise<{ success: boolean; error?: string }>
     listTemplates: () => Promise<{ success: boolean; data?: { templates: TaggingPromptTemplate[] }; error?: string }>
     saveTemplate: (template: TaggingPromptTemplate) => Promise<{ success: boolean; data?: { template: TaggingPromptTemplate; templates: TaggingPromptTemplate[] }; error?: string }>
@@ -484,6 +538,21 @@ declare global {
     importTemplates: (entries: TaggingPromptTemplate[]) => Promise<{ success: boolean; data?: { count: number; templates: TaggingPromptTemplate[] }; error?: string }>
     listConfigs: () => Promise<{ success: boolean; data?: { configs: WorkbenchApiConfig[] }; error?: string }>
     onProgress: (callback: (progress: { taskId: string; completed: number; total: number; currentFile?: string }) => void) => void
+  }
+
+  interface TaggerSettings {
+    generalThreshold: number
+    characterThreshold: number
+    addCharacter: boolean
+    addCopyright: boolean
+    replaceUnderscores: boolean
+    autoSaveAfterTagging: boolean
+    localModelDir: string
+  }
+
+  interface TaggerSettingsAPI {
+    get: () => Promise<{ success: boolean; data?: TaggerSettings; error?: string }>
+    save: (partial: Partial<TaggerSettings>) => Promise<{ success: boolean; data?: TaggerSettings; error?: string }>
   }
 
   interface CharacterAuditItem {
@@ -508,7 +577,7 @@ declare global {
   interface CharacterAuditAPI {
     inventory: (params: { imageIds?: number[] }) => Promise<{
       success: boolean
-      data?: { items: CharacterAuditItem[]; inventory: CharacterAuditInventoryEntry[] }
+      data?: { items: CharacterAuditItem[]; inventory: CharacterAuditInventoryEntry[]; parentByChild?: Record<string, string> }
       error?: string
     }>
     run: (params: { imageIds?: number[]; triggerWords?: string[]; referenceImagePaths?: string[] }) => Promise<{
@@ -778,8 +847,10 @@ declare global {
     systemAPI: SystemAPI
     fsAPI: FsAPI
     galleryAPI: GalleryAPI
+    annotationToolsAPI: AnnotationToolsAPI
     taggerV2API: TaggerV2API
     taggingAPI: TaggingAPI
+    taggerSettingsAPI: TaggerSettingsAPI
     characterAuditAPI: CharacterAuditAPI
     imageToolsAPI: ImageToolsAPI
     promptAPI: PromptAPI
@@ -789,7 +860,13 @@ declare global {
     historyAPI: HistoryAPI
     cacheAPI: CacheAPI
     shellAPI: { openFolder: (filePath: string) => Promise<{ success: boolean; error?: string }> }
-    logAPI: { onEntry: (cb: (entry: { time: string; type: string; message: string }) => void) => void }
+    logAPI: {
+      onEntry: (cb: (entry: { time: string; type: string; message: string; source?: string }) => void) => void
+      getHistory?: (limit?: number) => Promise<{ success: boolean; data?: { entries: Array<{ time: string; type: string; message: string; source?: string }>; path?: string } }>
+      clear?: () => Promise<{ success: boolean }>
+      append?: (entry: { type?: string; message?: string; source?: string }) => Promise<{ success: boolean }>
+      path?: () => Promise<{ success: boolean; data?: { path: string } }>
+    }
     trainingAPI?: TrainingAPI
     runtimeAPI?: RuntimeAPI
     trainingComponentsAPI?: TrainingComponentsAPI

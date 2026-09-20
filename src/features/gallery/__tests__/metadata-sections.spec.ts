@@ -58,4 +58,37 @@ describe('metadata sections', () => {
       { key: 'rawMetadata', label: '原始元数据', value: JSON.stringify({ prompt: { '1': { class_type: 'WeiLinLoraLoader' } }, custom: 'kept' }, null, 2) },
     ])
   })
+
+  it('does not show a model+LoRA blob as \u6b63\u5411\u63d0\u793a\u8bcd', () => {
+    const style = '\u98ce\u683c'
+    const userString = `qwen3vl_4b_fp8_scaled (1).safetensors, ${JSON.stringify([
+      { name: `krea2${style}\\wlop_c1-st4000`, weight: 0.4, text_encoder_weight: 1, hidden: false, display_name: 'a.safetensors', lora: 'a.safetensors', trigger_weight: 1, loraWorks: '' },
+      { name: 'second', weight: 0.4, text_encoder_weight: 1, hidden: false, display_name: 'b.safetensors', lora: 'b.safetensors', trigger_weight: 1, loraWorks: '' },
+      { name: 'third', weight: 0.5, text_encoder_weight: 1, hidden: false, display_name: 'c.safetensors', lora: 'c.safetensors', trigger_weight: 1, loraWorks: '' },
+      { name: 'fourth', weight: 1, text_encoder_weight: 1, hidden: false, display_name: 'd.safetensors', lora: 'd.safetensors', trigger_weight: 1, loraWorks: '' },
+    ])}`
+    const result = buildMetadataSections({ prompt: userString, model: 'x' }, [])
+    expect(result.generation.some((field) => field.label === '\u6b63\u5411\u63d0\u793a\u8bcd')).toBe(false)
+    expect(result.generation.map((field) => field.key)).not.toContain('prompt')
+    expect(result.overview).toContainEqual({ key: 'model', label: '\u6a21\u578b', value: 'x' })
+  })
+
+  it('still shows a real caption as \u6b63\u5411\u63d0\u793a\u8bcd', () => {
+    const result = buildMetadataSections({ prompt: '1girl, solo, smile', model: 'x' }, [])
+    expect(result.generation).toContainEqual({ key: 'prompt', label: '\u6b63\u5411\u63d0\u793a\u8bcd', value: '1girl, solo, smile' })
+  })
+
+  it('does not show a bare LoRA JSON array as \u6b63\u5411\u63d0\u793a\u8bcd', () => {
+    const prompt = JSON.stringify([
+      { name: 'style\\foo', weight: 0.5, text_encoder_weight: 1, loraWorks: '' },
+    ])
+    const result = buildMetadataSections({ prompt, model: 'x' }, [])
+    expect(result.generation.map((field) => field.key)).not.toContain('prompt')
+  })
+
+  it('still shows WeiLin artwork XML as \u6b63\u5411\u63d0\u793a\u8bcd', () => {
+    const prompt = '<artwork id="celestial_conservatory_waltz_masterpiece"><scene>waltz</scene></artwork>'
+    const result = buildMetadataSections({ prompt, model: 'x' }, [])
+    expect(result.generation).toContainEqual({ key: 'prompt', label: '\u6b63\u5411\u63d0\u793a\u8bcd', value: prompt })
+  })
 })

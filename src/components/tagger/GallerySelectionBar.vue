@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineProps<{ count: number; hasDatasets: boolean }>()
-defineEmits<{ sendToTagger: []; addToDataset: []; copyMove: []; organize: []; editTags: []; audit: []; delete: []; clear: [] }>()
+defineEmits<{ sendToTagger: []; addToDataset: []; copyMove: []; organize: []; editTags: []; batchTools: []; audit: []; delete: []; clear: [] }>()
 </script>
 
 <template>
@@ -12,6 +12,7 @@ defineEmits<{ sendToTagger: []; addToDataset: []; copyMove: []; organize: []; ed
     <button @click="$emit('copyMove')">复制或移动</button>
     <button @click="$emit('organize')">按标签归集</button>
     <button @click="$emit('editTags')">批量改标签</button>
+    <button @click="$emit('batchTools')">批量工具</button>
     <button @click="$emit('audit')">角色审计</button>
     <button class="danger" @click="$emit('delete')">移入回收站</button>
     <button class="clear" @click="$emit('clear')">取消选择</button>

@@ -68,7 +68,7 @@ describe('gallery rescan persistence', () => {
   it('imports only explicit image paths in one transaction', () => {
     const block = gallerySource.match(/async function importImageFiles[\s\S]*?function registerGalleryHandlers/)?.[0] ?? ''
 
-    expect(block).toContain('SELECT id, file_modified_at, sd_metadata FROM images WHERE path = ?')
+    expect(block).toContain('SELECT id, file_modified_at, sd_metadata, sd_prompt FROM images WHERE path = ?')
     expect(block).toContain('generateThumbnail(filePath)')
     expect(block).toContain("db.run('BEGIN TRANSACTION')")
     expect(block).toContain("db.run('COMMIT')")
@@ -78,14 +78,35 @@ describe('gallery rescan persistence', () => {
   it('persists LoRA metadata and restores it from the gallery cache', () => {
     expect(gallerySource).toContain('sd_loras TEXT')
     expect(gallerySource).toContain('JSON.stringify(sdMeta.loras || [])')
-    expect(gallerySource).toContain('JSON.parse(image.sd_metadata)')
+    expect(gallerySource).toContain("require('./metadata-cache')")
+    expect(gallerySource).toContain('parseCachedMetadata(image.sd_metadata)')
   })
 
-  it('persists the complete metadata object and reparses legacy cache rows once', () => {
+  it('persists the complete metadata object and reparses stale caption cache rows', () => {
     expect(gallerySource).toContain('sd_metadata TEXT')
-    expect(gallerySource).toContain('JSON.stringify(sdMeta)')
-    expect(gallerySource).toContain('JSON.parse(image.sd_metadata)')
-    expect(gallerySource).toContain('existing.sd_metadata !== null')
+    expect(gallerySource).toContain('JSON.stringify(stampMetadataCache(sdMeta))')
+    expect(gallerySource).toContain('parseCachedMetadata(image.sd_metadata)')
+    expect(gallerySource).toContain('galleryIndexCacheIsReusable(existing.sd_metadata)')
+    expect(gallerySource).toContain('galleryCacheNeedsReparse(cached)')
+  })
+
+  it('reparses a cached model+LoRA blob on viewer open, readFileMeta, and folder scan', () => {
+    expect(gallerySource).toContain('isModelLoraBlobPrompt')
+    expect(gallerySource).toContain('SELECT id, file_modified_at, sd_metadata, sd_prompt FROM images WHERE path = ?')
+    expect(gallerySource).toContain('applyParsedMetaToRow')
+    expect(gallerySource).toContain('always parse the file')
+    expect(gallerySource).toContain('parseMetadata(image.path)')
+    expect(gallerySource).toContain('applyParsedMetaToRow(image, meta)')
+    expect(gallerySource).toContain('applyParsedMetaToRow(row, meta)')
+    expect(gallerySource).toContain('Stale blob caption: reparse metadata only')
+    expect(gallerySource).toContain('function repairStaleBlobPromptRows')
+    expect(gallerySource).toContain('!isModelLoraBlobPrompt(existing.sd_prompt)')
+  })
+
+  it('adds schema version 7 to invalidate cached LoRA blobs stored as prompts', () => {
+    expect(gallerySource).toContain("runSql('INSERT OR REPLACE INTO schema_version (version) VALUES (7)')")
+    expect(gallerySource).toContain('UPDATE images SET sd_metadata = NULL')
+    expect(gallerySource).toContain("TRIM(sd_prompt) NOT LIKE '<%'")
   })
 
   it('creates file version and recycle item tables at schema version 5', () => {

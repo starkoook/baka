@@ -2,12 +2,12 @@
  * Tagger v2 IPC Handler — Orchestrates inference worker and bridges renderer<->worker.
  */
 const { ipcMain } = require('electron')
-const { fork } = require('child_process')
 const path = require('path')
 const fs = require('fs')
 const { ensureDb, queryAll, runSql } = require('./gallery')
-const { writeTextSafe } = require('./safe-file')
 const { TagCatalog } = require('./tag-catalog')
+const { runOnnxInference } = require('./onnx-inference')
+const { resolveInferOptions, resolveTaggingProviders } = require('./tagger-settings')
 const {
   applyTaggingResults,
   deleteTemplate,
@@ -19,6 +19,7 @@ const {
   loadTemplates,
   resolveTaggingConfigs,
   upsertTemplate,
+  writeImageTagsAndCaption,
 } = require('./tagging-batch')
 const { isVideoFile, extractVideoFrames } = require('./video-frames')
 
@@ -37,39 +38,6 @@ function getTagCatalog() {
     }).catch(() => new TagCatalog([]))
   }
   return catalogPromise
-}
-
-function getWorkerPath() {
-  return path.join(__dirname, 'tagger-worker.js')
-}
-
-function spawnWorker() {
-  if (worker) return worker
-  worker = fork(getWorkerPath(), [], { stdio: ['pipe', 'pipe', 'pipe', 'ipc'] })
-
-  worker.on('message', (msg) => {
-    if (!mainWindow || mainWindow.isDestroyed()) return
-
-    if (msg.type === 'progress' || msg.type === 'complete' || msg.type === 'cancelled' || msg.type === 'error') {
-      // Forward to renderer
-      mainWindow.webContents.send('taggerV2:progress', {
-        taskId: currentTaskId,
-        ...msg,
-      })
-    }
-
-    if (msg.type === 'log') {
-      console.error('[tagger-worker]', msg.message)
-    }
-  })
-
-  worker.on('exit', (code) => {
-    console.error('[tagger-worker] exited with code', code)
-    worker = null
-    activeTask?.settle({ type: 'error', message: 'Worker process exited unexpectedly' })
-  })
-
-  return worker
 }
 
 function registerTaggerV2Handlers(win) {
@@ -92,7 +60,9 @@ function registerTaggerV2Handlers(win) {
       return { success: true, data: results }
     } catch (e) {
       if (params?.taskId) taggingTasks.delete(params.taskId)
-      return { success: false, error: e.message || String(e) }
+      const message = e.message || String(e)
+      try { require('./app-log').writeAppLog('error', '[标注预览] ' + message, 'tagging') } catch (_) {}
+      return { success: false, error: message }
     }
   })
 
@@ -113,7 +83,9 @@ function registerTaggerV2Handlers(win) {
       return { success: true, data: results }
     } catch (e) {
       if (params?.taskId) taggingTasks.delete(params.taskId)
-      return { success: false, error: e.message || String(e) }
+      const message = e.message || String(e)
+      try { require('./app-log').writeAppLog('error', '[标注] ' + message, 'tagging') } catch (_) {}
+      return { success: false, error: message }
     }
   })
 
@@ -185,7 +157,7 @@ function registerTaggerV2Handlers(win) {
 
   // ── Inference ──
   ipcMain.handle('taggerV2:inferBatch', async (_event, params) => {
-    const { modelPath, csvPath, imagePaths, threshold = 0.35, batchSize, resolution = 448, providers } = params
+    const { modelPath, csvPath, imagePaths, batchSize, resolution = 448, providers } = params || {}
     if (!modelPath || !imagePaths || imagePaths.length === 0) {
       return { success: false, error: 'modelPath and imagePaths are required' }
     }
@@ -193,92 +165,74 @@ function registerTaggerV2Handlers(win) {
       return { success: false, error: 'Another tagging task is already running' }
     }
 
-    const w = spawnWorker()
-    currentTaskId = `task_${Date.now()}`
+    const options = resolveInferOptions(params)
+    const controller = new AbortController()
+    currentTaskId = params.taskId || `task_${Date.now()}`
     const taskId = currentTaskId
+    activeTask = { taskId, abort: () => controller.abort() }
 
-    return new Promise((resolve) => {
-      let settled = false
-      const settle = (msg) => {
-        if (settled) return
-        settled = true
-        w.removeListener('message', onMessage)
-        activeTask = null
-        currentTaskId = null
-
-        if (msg.type === 'complete') {
-          const results = Array.isArray(msg.results) ? msg.results : []
-          resolve({ success: true, taskId, data: { results, count: results.length } })
-        } else if (msg.type === 'cancelled') {
-          const results = Array.isArray(msg.results) ? msg.results : []
-          resolve({ success: true, taskId, data: { results, count: results.length, cancelled: true } })
-        } else {
-          resolve({ success: false, taskId, error: msg.message || 'Tagging failed' })
-        }
-      }
-      const onMessage = (msg) => {
-        if (msg.type === 'ready') {
-          w.send({ cmd: 'infer', imagePaths, threshold, batchSize: batchSize || 4 })
-        } else if (msg.type === 'complete' || msg.type === 'cancelled' || msg.type === 'error') {
-          settle(msg)
-        }
-      }
-      activeTask = { taskId, settle }
-      w.on('message', onMessage)
-
-      // Send init
-      w.send({
-        cmd: 'init',
+    try {
+      const results = await runOnnxInference({
         modelPath,
         csvPath: csvPath || modelPath.replace(/\.onnx$/i, '.csv'),
+        imagePaths,
+        batchSize: batchSize || 4,
         resolution,
-        providers: providers || ['cpu'],
+        providers: resolveTaggingProviders({ ...params, providers }),
+        normalization: params.normalization,
+        padColor: params.padColor,
+        resizeMode: params.resizeMode,
+        inputLayout: params.inputLayout,
+        signal: controller.signal,
+        onProgress: (progress) => {
+          if (!mainWindow || mainWindow.isDestroyed()) return
+          mainWindow.webContents.send('taggerV2:progress', { taskId, ...progress })
+        },
+        ...options,
       })
-    })
+      return { success: true, taskId, data: { results, count: results.length, cancelled: controller.signal.aborted } }
+    } catch (error) {
+      const message = error.message || String(error)
+      try { require('./app-log').writeAppLog('error', '[标注] inferBatch: ' + message, 'tagging') } catch (_) {}
+      return { success: false, taskId, error: message }
+    } finally {
+      activeTask = null
+      currentTaskId = null
+    }
   })
 
   ipcMain.handle('taggerV2:cancel', async () => {
-    if (worker && currentTaskId) {
-      worker.send({ cmd: 'cancel' })
+    if (activeTask?.abort) {
+      activeTask.abort()
       return { success: true }
     }
     return { success: false, error: 'No active task' }
   })
 
   ipcMain.handle('taggerV2:inferSingle', async (_event, params) => {
-    // Single image inference — just wraps batch with one image
-    const { modelPath, csvPath, imagePath, threshold = 0.35 } = params
+    const { modelPath, csvPath, imagePath } = params || {}
     if (!modelPath || !imagePath) {
       return { success: false, error: 'modelPath and imagePath are required' }
     }
-
-    const w = spawnWorker()
-
-    return new Promise((resolve) => {
-      const doneHandler = (msg) => {
-        if (msg.type === 'ready') {
-          w.send({ cmd: 'infer', imagePaths: [imagePath], threshold, batchSize: 1 })
-        } else if (msg.type === 'complete') {
-          w.removeListener('message', doneHandler)
-          const tags = msg.results[0] ? msg.results[0].tags : []
-          resolve({ success: true, data: { tags } })
-        } else if (msg.type === 'cancelled') {
-          w.removeListener('message', doneHandler)
-          resolve({ success: true, data: { tags: [], cancelled: true } })
-        } else if (msg.type === 'error') {
-          w.removeListener('message', doneHandler)
-          resolve({ success: false, error: msg.message })
-        }
-      }
-      w.on('message', doneHandler)
-      w.send({
-        cmd: 'init',
+    try {
+      const options = resolveInferOptions(params)
+      const results = await runOnnxInference({
         modelPath,
         csvPath: csvPath || modelPath.replace(/\.onnx$/i, '.csv'),
+        imagePaths: [imagePath],
+        batchSize: 1,
         resolution: params.resolution || 448,
-        providers: params.providers || ['cpu'],
+        providers: resolveTaggingProviders(params),
+        normalization: params.normalization,
+        padColor: params.padColor,
+        resizeMode: params.resizeMode,
+        ...options,
       })
-    })
+      const tags = results[0] ? results[0].tags : []
+      return { success: true, data: { tags, cancelled: results[0]?.cancelled } }
+    } catch (error) {
+      return { success: false, error: error.message || String(error) }
+    }
   })
 
   // ── LLM tagging (kept from old system, uses llm.js handler) ──
@@ -312,7 +266,7 @@ function registerTaggerV2Handlers(win) {
           const before = await getImageTagNames(imageId)
           const catalog = operation.type === 'cleanup' ? await getTagCatalog() : null
           const after = applyTagOperation(before, operation, catalog)
-          await writeImageTagsAndCaption(imageId, after)
+          await writeImageTagsAndCaption(imageId, null, after)
           updated++
         } catch (error) {
           failures.push({ imageId, error: error.message })
@@ -369,32 +323,11 @@ function cleanupTags(tags, catalog = null) {
   })
 }
 
-async function writeImageTagsAndCaption(imageId, tags) {
-  const imageRows = queryAll('SELECT path FROM images WHERE id = ?', [imageId])
-  const imagePath = imageRows[0]?.path
-  if (!imagePath) throw new Error('Image not found')
-
-  runSql('DELETE FROM image_tags WHERE image_id = ?', [imageId])
-  for (const tag of tags) {
-    runSql('INSERT OR IGNORE INTO tags (name, category) VALUES (?, ?)', [tag, 'general'])
-    const tagRow = queryAll('SELECT id FROM tags WHERE name = ?', [tag])[0]
-    if (tagRow) {
-      runSql('INSERT OR REPLACE INTO image_tags (image_id, tag_id, confidence, source) VALUES (?, ?, ?, ?)',
-        [imageId, tagRow.id, null, 'manual'])
-    }
-  }
-
-  const captionPath = imagePath.replace(/\.[^.]+$/, '') + '.txt'
-  const result = await writeTextSafe(captionPath, tags.join(', '))
-  if (!result.success) throw new Error(result.error || 'Failed to write caption')
-}
-
 function shutdownWorker() {
-  if (worker) {
-    try { worker.send({ cmd: 'shutdown' }) } catch (_) {}
-    worker = null
-  }
-  activeTask?.settle({ type: 'cancelled', results: [] })
+  worker = null
+  if (activeTask?.abort) activeTask.abort()
+  activeTask = null
+  currentTaskId = null
 }
 
 module.exports = { registerTaggerV2Handlers, shutdownWorker, applyTagOperation }

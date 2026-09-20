@@ -1,15 +1,79 @@
 <script setup lang="ts">
-import { useLogStore } from '@/stores/logs'; import { ref, watch, nextTick, onMounted } from 'vue'
-const logStore = useLogStore(); const filter = ref<'all'|'error'|'warn'|'info'>('all'); const logList = ref<HTMLElement | null>(null)
+import { useLogStore } from '@/stores/logs'
+import { ref, watch, nextTick, onMounted } from 'vue'
+import { toPlainLogEntry } from '@/lib/ipc-payload'
+
+const logStore = useLogStore()
+const filter = ref<'all' | 'error' | 'warn' | 'info'>('all')
+const logList = ref<HTMLElement | null>(null)
 const filtered = ref<any[]>([])
-function applyFilter() { if (filter.value === 'all') filtered.value = [...logStore.logs]; else filtered.value = logStore.logs.filter(e => e.type === filter.value) }
-watch(() => logStore.logs.length, () => applyFilter()); watch(filter, () => applyFilter())
-async function scrollBottom() { await nextTick(); if (logList.value) logList.value.scrollTop = logList.value.scrollHeight }
+const logPath = ref('')
+const loading = ref(false)
+
+function applyFilter() {
+  if (filter.value === 'all') filtered.value = [...logStore.logs]
+  else filtered.value = logStore.logs.filter((entry) => entry.type === filter.value)
+}
+
+watch(() => logStore.logs.length, () => applyFilter())
+watch(filter, () => applyFilter())
+
+async function scrollBottom() {
+  await nextTick()
+  if (logList.value) logList.value.scrollTop = logList.value.scrollHeight
+}
 watch(() => filtered.value.length, () => scrollBottom())
-onMounted(() => { applyFilter(); if (window.logAPI) window.logAPI.onEntry(() => applyFilter()); if (window.trainingAPI) window.trainingAPI.onLog(() => applyFilter()) })
-function copyLogs() { navigator.clipboard.writeText(filtered.value.map(e => `[${e.time}] ${e.type.toUpperCase()}: ${e.message}`).join('\n')) }
-const types = ['all','error','warn','info'] as const; const labels: Record<string,string> = { all:'全部', error:'错误', warn:'警告', info:'信息' }
-const sym: Record<string,string> = { error:'✕', warn:'⚠', info:'○', success:'✓' }
+
+async function loadHistory() {
+  if (!window.logAPI?.getHistory) {
+    applyFilter()
+    return
+  }
+  loading.value = true
+  try {
+    const response = await window.logAPI.getHistory(500)
+    if (response?.success && response.data?.entries) {
+      logStore.hydrate(response.data.entries.map((entry) => toPlainLogEntry(entry)), response.data.path)
+      logPath.value = response.data.path || logStore.filePath || ''
+    }
+  } catch (error) {
+    logStore.error('无法读取日志文件：' + ((error as Error).message || error))
+  } finally {
+    loading.value = false
+    applyFilter()
+  }
+}
+
+async function clearLogs() {
+  logStore.clear()
+  try { await window.logAPI?.clear?.() } catch { /* */ }
+  applyFilter()
+}
+
+onMounted(() => {
+  applyFilter()
+  void loadHistory()
+  if (window.logAPI?.onEntry) {
+    window.logAPI.onEntry((entry) => {
+      logStore.ingest(toPlainLogEntry(entry))
+      applyFilter()
+    })
+  }
+  if (window.trainingAPI) {
+    window.trainingAPI.onLog((entry: any) => {
+      logStore.ingest(toPlainLogEntry({ type: entry?.type || 'info', message: entry?.message || String(entry || ''), time: entry?.time, source: 'training' }))
+      applyFilter()
+    })
+  }
+})
+
+function copyLogs() {
+  navigator.clipboard.writeText(filtered.value.map((entry) => '[' + entry.time + '] ' + entry.type.toUpperCase() + ': ' + entry.message).join('\n'))
+}
+
+const types = ['all', 'error', 'warn', 'info'] as const
+const labels: Record<string, string> = { all: '全部', error: '错误', warn: '警告', info: '信息' }
+const sym: Record<string, string> = { error: '✕', warn: '⚠', info: '○', success: '✓' }
 </script>
 
 <template>
@@ -37,8 +101,9 @@ const sym: Record<string,string> = { error:'✕', warn:'⚠', info:'○', succes
           >{{ labels[t] }}</button>
         </div>
         <div class="cl-spacer"></div>
+        <button class="btn-secondary cl-act" @click="loadHistory">↻ 刷新</button>
         <button class="btn-secondary cl-act" @click="copyLogs">📋 复制</button>
-        <button class="btn-secondary cl-act" @click="logStore.clear(); applyFilter()">🗑 清空</button>
+        <button class="btn-secondary cl-act" @click="clearLogs">🗑 清空</button>
       </div>
     </div>
 
@@ -55,7 +120,8 @@ const sym: Record<string,string> = { error:'✕', warn:'⚠', info:'○', succes
     <div v-else class="cl-empty-hud">
       <div class="cl-empty-glow"></div>
       <span class="cl-empty-blink">_</span>
-      <p>暂无日志 · 系统运行正常</p>
+      <p>{{ loading ? '正在读取日志…' : '暂无日志。标注和运行错误会写到这里，也会保存在数据目录 logs/app.jsonl' }}</p>
+      <p v-if="logPath" class="cl-path">{{ logPath }}</p>
     </div>
   </div>
 </template>
@@ -242,6 +308,12 @@ const sym: Record<string,string> = { error:'✕', warn:'⚠', info:'○', succes
   font-size: 12px;
   color: var(--text-tertiary);
   opacity: 0.6;
+}
+.cl-path {
+  max-width: 80%;
+  word-break: break-all;
+  font-size: 10px !important;
+  opacity: 0.45 !important;
 }
 
 @keyframes cl-blink {

@@ -14,7 +14,6 @@ const { app, BrowserWindow, ipcMain, dialog, protocol, net, session } = require(
 const { registerLLMHandlers } = require('./ipc/llm')
 const { registerUpdaterHandlers } = require('./ipc/updater')
 const { registerCacheHandlers } = require('./ipc/cache')
-const { registerTaggerHandlers } = require('./ipc/tagger')
 const { registerTrainingHandlers } = require('./ipc/training')
 const { registerRuntimeManagerHandlers } = require('./ipc/runtime-manager')
 const { registerComponentManagerHandlers } = require('./ipc/component-manager')
@@ -40,6 +39,9 @@ const { moveToRecycle, restoreRecycleItem, listRecycleItems, purgeExpiredItems }
 const { moveImages } = require('./ipc/move-images-safe')
 const { runFfprobe, parseProbe, extractFrames, convertVideo } = require('./ipc/video-processing')
 const { registerVideoTagHandlers } = require('./ipc/video-tag')
+const { registerAnnotationToolsHandlers } = require('./ipc/annotation-tools')
+const { registerTaggerSettingsHandlers } = require('./ipc/tagger-settings')
+const { registerLogHandlers, writeAppLog } = require('./ipc/app-log')
 const { ensureDb, runSql, importImageFiles } = require('./ipc/gallery')
 const fs = require('fs')
 const path = require('path')
@@ -93,10 +95,10 @@ function createWindow() {
     },
   })
 
-  // ── Capture all renderer console output → log panel ──
+  // ── Capture renderer console + persist so 控制台 can reopen later ──
   mainWindow.webContents.on('console-message', (_event, level, message) => {
     const type = level === 3 ? 'error' : level === 2 ? 'warn' : 'info'
-    mainWindow?.webContents.send('log:entry', { time: new Date().toLocaleTimeString('zh-CN', { hour12: false }), type, message })
+    writeAppLog(type, message, 'renderer-console')
   })
 
   mainWindow.on('maximize', () => {
@@ -640,8 +642,7 @@ app.whenReady().then(async () => {
 
   registerUpdaterHandlers(mainWindow)
   registerCacheHandlers()
-  registerTaggerHandlers()
-  registerTrainingHandlers(mainWindow)
+    registerTrainingHandlers(mainWindow)
   registerRuntimeManagerHandlers(mainWindow)
   registerComponentManagerHandlers(mainWindow)
   registerTrainingHttpHandlers(mainWindow)
@@ -652,9 +653,13 @@ app.whenReady().then(async () => {
   registerEffectsHandlers()
   registerTaggerV2Handlers(mainWindow)
   registerCharacterTagAuditHandlers()
+  registerAnnotationToolsHandlers()
+  registerTaggerSettingsHandlers()
   registerImageToolsHandlers()
   registerVideoTagHandlers()
   registerNodeHandlers()
+  registerLogHandlers(() => mainWindow)
+  writeAppLog('info', 'Baka TOOLS 已启动', 'main')
 
   // ── Open file in Explorer ──
   ipcMain.handle('shell:openFolder', async (_event, filePath) => {
@@ -679,4 +684,14 @@ app.on('window-all-closed', () => {
   shutdownWorker()
   stopMcpServer().catch(e => console.error('[main] MCP stop failed:', e.message))
   if (process.platform !== 'darwin') app.quit()
+})
+
+process.on('uncaughtException', (error) => {
+  try { writeAppLog('error', 'uncaughtException: ' + (error && error.stack || error && error.message || error), 'main') } catch (_) {}
+  console.error('[main] uncaughtException', error)
+})
+process.on('unhandledRejection', (reason) => {
+  const message = reason && reason.stack || reason && reason.message || String(reason)
+  try { writeAppLog('error', 'unhandledRejection: ' + message, 'main') } catch (_) {}
+  console.error('[main] unhandledRejection', reason)
 })

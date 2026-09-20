@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "D:\Claude\ccc\baka-tools"
+cd /d "%~dp0"
 
 echo Building baka-tools...
 echo.
@@ -19,7 +19,7 @@ if %errorlevel% equ 0 (
 ) else (
     echo.
     echo FAILED - Run this in cmd instead:
-    echo   cd /d D:\Claude\ccc\baka-tools
+    echo   cd /d "%~dp0"
     echo   npm run build:renderer
 )
 

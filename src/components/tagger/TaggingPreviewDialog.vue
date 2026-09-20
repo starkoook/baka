@@ -1,22 +1,43 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { compiledPrompt, loadLlmPromptState } from './llm-prompt-state'
+import { toIpcPayload } from '@/lib/ipc-payload'
 
 const props = defineProps<{
   visible: boolean
   imagePaths: string[]
+  selectedImagePaths?: string[]
   modelPath?: string
   csvPath?: string | null
   threshold?: number
   providers?: string[]
+  initialSource?: 'local' | 'llm' | 'combined'
+  normalization?: string
+  padColor?: number[]
+  resizeMode?: string
+  inputLayout?: string
+  resolution?: number
 }>()
 
-const emit = defineEmits<{ close: []; applied: [] }>()
+const emit = defineEmits<{ close: []; applied: []; failed: [message: string] }>()
 
-const source = ref<'local' | 'llm' | 'natural' | 'combined'>('llm')
+function reportError(message: string) {
+  const text = visibleLlmError(message)
+  error.value = text
+  try { void window.logAPI?.append?.(toIpcPayload({ type: 'error', message: '[标注] ' + text, source: 'tagging' })) } catch { /* */ }
+  emit('failed', text)
+}
+
+type Source = 'local' | 'llm' | 'natural' | 'combined'
+type Conflict = 'skip' | 'overwrite' | 'mergePrefix' | 'mergeSuffix'
+
+const source = ref<Source>('local')
+const modeKey = ref('local')
 const outputFormat = ref<'danbooru' | 'natural' | 'both'>('danbooru')
 const templateId = ref('danbooru-tags')
 const customPrompt = ref('')
-const writeMode = ref<'replace' | 'append' | 'skip_existing' | 'empty_only'>('replace')
+const scope = ref<'selected' | 'all' | 'unannotated'>('unannotated')
+const conflict = ref<Conflict>('skip')
 const mergeStrategy = ref<'union' | 'intersect' | 'difference' | 'a_only' | 'b_only'>('b_only')
 const concurrency = ref(2)
 const targetRpm = ref(0)
@@ -26,7 +47,6 @@ const error = ref('')
 const results = ref<TaggingResult[]>([])
 const taskId = ref('')
 const progressText = ref('')
-
 const customTemplates = ref<TaggingPromptTemplate[]>([])
 const apiConfigs = ref<WorkbenchApiConfig[]>([])
 
@@ -37,85 +57,189 @@ const builtinTemplates: TaggingPromptTemplate[] = [
 ]
 
 const allTemplates = computed(() => [...builtinTemplates, ...customTemplates.value])
-const isCustomTemplate = computed(() => customTemplates.value.some((template) => template.id === templateId.value))
-const activeResult = computed(() => results.value[0] ?? null)
-const selectedConfigLabel = computed(() => {
-  if (!selectedConfigIds.value.length) return '默认设置'
-  const names = selectedConfigIds.value
-    .map((id) => apiConfigs.value.find((config) => config.id === id)?.name)
-    .filter(Boolean)
-  return names.length ? names.join('、') : '默认设置'
-})
+const selectedCount = computed(() => props.selectedImagePaths?.length ?? 0)
+const canStart = computed(() => props.imagePaths.length > 0 && !busy.value)
 
-function toggleConfig(id: string) {
-  const index = selectedConfigIds.value.indexOf(id)
-  if (index >= 0) selectedConfigIds.value.splice(index, 1)
-  else selectedConfigIds.value.push(id)
+const MISSING_API_KEY_HINT = '先到设置 → 接口填写 API 密钥'
+
+function visibleLlmError(message?: string, fallback = '生成失败') {
+  const text = String(message || '')
+  if (/API Key/i.test(text) || text.includes('未配置') || text.includes('密钥') || text.includes(MISSING_API_KEY_HINT)) {
+    return MISSING_API_KEY_HINT
+  }
+  return text || fallback
 }
 
-function toggleAllConfigs() {
-  if (selectedConfigIds.value.length === apiConfigs.value.length) {
+
+function applyModeKey(key: string) {
+  modeKey.value = key
+  if (key === 'local') {
+    source.value = 'local'
     selectedConfigIds.value = []
-  } else {
-    selectedConfigIds.value = apiConfigs.value.map((config) => config.id)
+    return
+  }
+  if (key === 'combined') {
+    source.value = 'combined'
+    selectedConfigIds.value = apiConfigs.value[0] ? [apiConfigs.value[0].id] : []
+    return
+  }
+  source.value = 'llm'
+  const id = key.startsWith('llm:') ? key.slice(4) : ''
+  selectedConfigIds.value = id ? [id] : []
+}
+
+function syncPromptState() {
+  const prompt = loadLlmPromptState()
+  outputFormat.value = prompt.outputFormat
+  templateId.value = prompt.templateId
+  customPrompt.value = compiledPrompt(prompt)
+}
+
+function selectedApiConfig(): WorkbenchApiConfig | null {
+  const id = selectedConfigIds.value[0]
+  return apiConfigs.value.find((cfg) => cfg.id === id) || apiConfigs.value[0] || null
+}
+
+function schedulingFromConfig(cfg: WorkbenchApiConfig | null) {
+  const rpm = cfg && cfg.targetRpm !== undefined && cfg.targetRpm !== null
+    ? Math.max(0, Number(cfg.targetRpm) || 0)
+    : 5
+  return {
+    targetRpm: rpm,
+    concurrency: cfg?.requestMode === 'concurrent' ? 4 : 1,
   }
 }
 
 function buildParams(): TaggingOptions {
-  const nextOutputFormat = source.value === 'natural' ? 'natural' : outputFormat.value
-  const resolvedTemplate = allTemplates.value.find((template) => template.id === templateId.value)
+  const prompt = loadLlmPromptState()
+  const compiled = compiledPrompt(prompt)
+  customPrompt.value = compiled
+  outputFormat.value = prompt.outputFormat
+  templateId.value = prompt.templateId
+  const cfg = selectedApiConfig()
+  const ids = selectedConfigIds.value.length
+    ? selectedConfigIds.value
+    : (apiConfigs.value.length ? apiConfigs.value.map((item) => item.id) : (cfg?.id ? [cfg.id] : []))
+  const schedule = schedulingFromConfig(cfg)
+  concurrency.value = schedule.concurrency
+  targetRpm.value = schedule.targetRpm
+  const nextOutputFormat = source.value === 'natural' ? 'natural' : prompt.outputFormat
+  const imagePaths = scope.value === 'selected'
+    ? (props.selectedImagePaths?.length ? [...props.selectedImagePaths] : props.imagePaths.slice(0, 1))
+    : [...props.imagePaths]
   return {
     source: source.value,
     outputFormat: nextOutputFormat,
-    templateId: templateId.value,
-    customPrompt: customPrompt.value || resolvedTemplate?.prompt || undefined,
-    imagePaths: props.imagePaths,
+    templateId: prompt.templateId,
+    customPrompt: compiled,
+    imagePaths,
     taskId: taskId.value,
-    writeMode: writeMode.value,
+    scope: scope.value,
+    conflict: conflict.value,
+    writeMode: conflict.value,
     mergeStrategy: source.value === 'combined' ? mergeStrategy.value : undefined,
-    concurrency: concurrency.value,
+    concurrency: schedule.concurrency,
     retries: 2,
-    targetRpm: targetRpm.value,
-    apiConfigIds: selectedConfigIds.value.length ? selectedConfigIds.value : undefined,
+    targetRpm: schedule.targetRpm,
+    apiConfigIds: [...ids],
     modelPath: props.modelPath || undefined,
     csvPath: props.csvPath || undefined,
     threshold: props.threshold ?? 0.35,
-    providers: props.providers || ['cpu'],
+    providers: props.providers?.length ? [...props.providers] : ['cpu'],
+    normalization: props.normalization,
+    padColor: Array.isArray(props.padColor) ? [...props.padColor] : undefined,
+    resizeMode: props.resizeMode,
+    inputLayout: props.inputLayout,
+    resolution: props.resolution,
   }
 }
 
 async function generate() {
-  if (props.imagePaths.length === 0 || !window.taggingAPI) return
-  busy.value = true
-  error.value = ''
+  if (props.imagePaths.length === 0 || !window.taggingAPI) return false
   results.value = []
   taskId.value = `tagging_${Date.now()}`
   progressText.value = ''
-  const response = await window.taggingAPI.generate(buildParams())
-  busy.value = false
-  if (!response.success || !response.data?.length) {
-    error.value = response.error || '生成失败'
-    return
+  const response = await window.taggingAPI.generate(toIpcPayload(buildParams()))
+  if (!response.success) {
+    reportError(response.error || '生成失败')
+    return false
   }
+  if (!response.data?.length) {
+    reportError('当前范围内没有可标注的图片。')
+    return false
+  }
+  const firstErr = response.data.find((item) => item.error)?.error
+  const allFailed = response.data.every((item) => item.error && !(item.tags && item.tags.length))
+  if (allFailed) {
+    reportError(firstErr || response.error || '生成失败')
+    results.value = response.data
+    return false
+  }
+  if (firstErr) reportError(firstErr)
   results.value = response.data
+  return await apply()
+}
+
+async function apply() {
+  if (!results.value.length || !window.taggingAPI) return false
+  const response = await window.taggingAPI.apply(toIpcPayload({
+    results: results.value,
+    conflict: conflict.value,
+    writeMode: conflict.value,
+  }))
+  if (!response.success) {
+    reportError(visibleLlmError(response.error, '写入失败'))
+    return false
+  }
+  return true
 }
 
 function cancel() {
   if (taskId.value) void window.taggingAPI.cancel(taskId.value)
 }
 
-async function apply() {
-  if (!results.value.length || !window.taggingAPI) return
-  const response = await window.taggingAPI.apply({ results: results.value, writeMode: writeMode.value })
-  if (!response.success) {
-    error.value = response.error || '写入失败'
-    return
+async function startAnnotate() {
+  if (!canStart.value || !window.taggingAPI) return
+  applyModeKey(modeKey.value)
+  syncPromptState()
+  busy.value = true
+  error.value = ''
+  try {
+    if ((source.value === 'local' || source.value === 'combined') && !props.modelPath) {
+      reportError('请先选择一个可用的标注模型。')
+      return
+    }
+    if (source.value !== 'local') {
+      const hasConfig = Boolean(selectedApiConfig() || apiConfigs.value.length)
+      let hasFallbackKey = false
+      try {
+        const cfg = await window.llmAPI?.getConfig()
+        hasFallbackKey = Boolean(String(cfg?.apiKey || '').trim())
+      } catch {
+        hasFallbackKey = false
+      }
+      if (!hasConfig && !hasFallbackKey) {
+        reportError(MISSING_API_KEY_HINT)
+        return
+      }
+    }
+    const generated = await generate()
+    if (!generated) return
+    emit('applied')
+    emit('close')
+  } finally {
+    busy.value = false
   }
-  emit('applied')
-  emit('close')
 }
 
-onMounted(async () => {
+async function resetDialog() {
+  syncPromptState()
+  conflict.value = 'skip'
+  error.value = ''
+  progressText.value = ''
+  results.value = []
+  busy.value = false
+  scope.value = selectedCount.value > 0 ? 'selected' : 'unannotated'
   if (!window.taggingAPI) return
   const [templateResponse, configResponse] = await Promise.all([
     window.taggingAPI.listTemplates(),
@@ -123,146 +247,153 @@ onMounted(async () => {
   ])
   if (templateResponse.success) customTemplates.value = templateResponse.data?.templates ?? []
   if (configResponse.success) apiConfigs.value = configResponse.data?.configs ?? []
+  const requested = props.initialSource || 'local'
+  if (requested === 'llm') {
+    const first = apiConfigs.value[0]
+    applyModeKey(first ? ('llm:' + first.id) : 'llm:')
+  } else if (requested === 'combined') {
+    applyModeKey('combined')
+  } else {
+    applyModeKey('local')
+  }
+}
 
+watch(() => props.visible, (visible) => {
+  if (visible) void resetDialog()
+})
+
+watch(selectedCount, (count) => {
+  if (count === 0 && scope.value === 'selected') scope.value = 'unannotated'
+})
+
+onMounted(async () => {
+  if (!window.taggingAPI) return
   window.taggingAPI.onProgress((progress) => {
     if (progress.taskId === taskId.value) progressText.value = `${progress.completed} / ${progress.total}`
   })
+  if (props.visible) await resetDialog()
 })
 </script>
 
 <template>
   <Teleport to="body">
     <div v-if="visible" class="dialog-backdrop" @click.self="emit('close')">
-      <section class="dialog-card">
-        <div><p>TAGGING PIPELINE</p><h2>统一打标</h2></div>
+      <section class="dialog-card" role="dialog" aria-modal="true" aria-labelledby="run-title">
+        <header>
+          <h2 id="run-title">执行标注</h2>
+          <button type="button" class="icon-close" aria-label="关闭" @click="emit('close')">×</button>
+        </header>
 
-        <div class="dialog-tabs">
-          <button :class="{ active: source === 'llm' }" @click="source = 'llm'">LLM</button>
-          <button :class="{ active: source === 'natural' }" @click="source = 'natural'">自然语言</button>
-          <button :class="{ active: source === 'combined' }" @click="source = 'combined'">本地 + LLM</button>
-          <button :class="{ active: source === 'local' }" @click="source = 'local'">本地</button>
-        </div>
-
-        <div class="dialog-fields">
-          <div v-if="source !== 'local'" class="field-grid">
-            <label>输出模式
-              <select v-model="outputFormat" :disabled="source === 'natural'">
-                <option value="danbooru">标签</option>
-                <option value="natural">自然语言</option>
-                <option value="both">标签 + 自然语言</option>
+        <div class="dialog-body">
+          <section class="field-card">
+            <div class="field-row">
+              <div class="field-label">标注模式</div>
+              <select :value="modeKey" @change="applyModeKey(($event.target as HTMLSelectElement).value)">
+                <option value="local">本地WD14标注器</option>
+                <optgroup label="云端 LLM">
+                  <option v-if="!apiConfigs.length" value="llm:">云端 LLM（默认设置）</option>
+                  <option v-for="config in apiConfigs" :key="config.id" :value="'llm:' + config.id">
+                    {{ config.name || '云端 LLM（默认设置）' }}
+                  </option>
+                </optgroup>
+                <optgroup label="组合">
+                  <option value="combined">本地 + LLM</option>
+                </optgroup>
               </select>
-            </label>
-            <label>提示词模板
-              <select v-model="templateId">
-                <option v-for="template in allTemplates" :key="template.id" :value="template.id">{{ template.name }}</option>
+            </div>
+            <div class="field-row">
+              <div class="field-label">标注范围</div>
+              <select v-model="scope">
+                <option value="selected" :disabled="selectedCount === 0">选中图片（{{ selectedCount }} 张）</option>
+                <option value="all">所有图片</option>
+                <option value="unannotated">无标图片</option>
               </select>
-            </label>
-          </div>
-
-          <label v-if="isCustomTemplate">自定义提示词
-            <textarea v-model="customPrompt" rows="4" placeholder="留空则使用模板内置提示词"></textarea>
-          </label>
-
-          <label v-if="source === 'combined'">结果融合
-            <select v-model="mergeStrategy">
-              <option value="union">并集（本地 + LLM）</option>
-              <option value="intersect">交集（两者都有的）</option>
-              <option value="difference">差集（本地有、LLM 没有）</option>
-              <option value="a_only">仅本地</option>
-              <option value="b_only">仅 LLM</option>
-            </select>
-          </label>
-
-          <label>写入模式
-            <select v-model="writeMode">
-              <option value="replace">全部替换</option>
-              <option value="append">追加</option>
-              <option value="skip_existing">跳过已有标签</option>
-              <option value="empty_only">只处理空标签</option>
-            </select>
-          </label>
-
-          <div class="field-grid">
-            <label>并发数
-              <select v-model.number="concurrency">
-                <option v-for="n in 6" :key="n" :value="n">{{ n }}</option>
+            </div>
+            <div class="field-row">
+              <div class="field-label">冲突管理</div>
+              <select v-model="conflict">
+                <option value="skip">跳过</option>
+                <option value="overwrite">覆盖</option>
+                <option value="mergePrefix">合并为前缀</option>
+                <option value="mergeSuffix">合并为后缀</option>
               </select>
-            </label>
-            <label>限速（次/分钟）
-              <select v-model.number="targetRpm">
-                <option :value="0">不限</option>
-                <option :value="5">5</option>
-                <option :value="10">10</option>
-                <option :value="20">20</option>
-                <option :value="30">30</option>
-                <option :value="60">60</option>
-              </select>
-            </label>
-            <label>API 配置
-              <button class="config-picker" type="button" @click="toggleAllConfigs">{{ selectedConfigLabel }} ▾</button>
-            </label>
-          </div>
+            </div>
+          </section>
 
-          <div v-if="apiConfigs.length" class="config-list">
-            <button
-              v-for="config in apiConfigs"
-              :key="config.id"
-              :class="{ active: selectedConfigIds.includes(config.id) }"
-              type="button"
-              @click="toggleConfig(config.id)"
-            >
-              <span>{{ config.name }}</span>
-              <small>{{ config.model || config.provider }}</small>
+          <p v-if="progressText" class="progress">{{ progressText }}</p>
+          <p v-if="error" class="operation-error">{{ error }}</p>
+
+          <div class="dialog-actions">
+            <button v-if="busy" type="button" @click="cancel">取消</button>
+            <button class="primary" type="button" :disabled="!canStart" @click="startAnnotate">
+              {{ busy ? '标注中…' : '开始标注' }}
             </button>
           </div>
         </div>
-
-        <div v-if="activeResult" class="result-list">
-          <article v-for="result in results" :key="result.imagePath" class="result-item">
-            <strong>{{ (result.imagePath || '').split(/[/\\]/).pop() }}</strong>
-            <pre>{{ result.error || (result.tags.join(', ') + (result.natural ? '\n\n' + result.natural : '')) }}</pre>
-          </article>
-        </div>
-
-        <p v-if="progressText" class="progress">{{ progressText }}</p>
-        <p v-if="error" class="operation-error">{{ error }}</p>
-
-        <footer>
-          <button @click="emit('close')">取消</button>
-          <button :disabled="busy" @click="generate">{{ busy ? '生成中…' : '生成预览' }}</button>
-          <button v-if="busy" @click="cancel">取消</button>
-          <button class="primary" :disabled="!results.length || busy" @click="apply">写入全部</button>
-        </footer>
       </section>
     </div>
   </Teleport>
 </template>
 
 <style scoped>
-.dialog-backdrop { position: fixed; inset: 0; z-index: 700; display: grid; place-items: center; padding: 20px; background: rgba(7,6,9,.68); backdrop-filter: blur(9px); }
-.dialog-card { width: min(680px, 100%); max-height: min(90vh, 820px); display: flex; flex-direction: column; padding: 22px; border: 1px solid rgba(255,255,255,.1); border-radius: 16px; background: #1c1921; box-shadow: 0 30px 80px rgba(0,0,0,.48); }
-.dialog-card h2 { margin: 0; font-size: 19px; }
-.dialog-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin: 20px 0 12px; padding: 3px; border-radius: 9px; background: rgba(255,255,255,.03); }
-.dialog-tabs button { height: 32px; border: 0; border-radius: 7px; background: transparent; color: var(--text-tertiary); cursor: pointer; }
-.dialog-tabs button.active { background: rgba(var(--accent-primary-rgb),.12); color: var(--accent-primary); }
-.dialog-fields { display: grid; gap: 13px; }
-.dialog-fields label { display: grid; gap: 6px; color: var(--text-tertiary); font-size: 9px; }
-.dialog-fields select, .dialog-fields textarea, .config-picker { box-sizing: border-box; width: 100%; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.035); color: var(--text-primary); outline: none; font: inherit; }
-.dialog-fields select, .config-picker { height: 36px; padding: 0 10px; text-align: left; }
-.dialog-fields textarea { padding: 10px; resize: vertical; line-height: 1.6; }
-.field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
-.config-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; max-height: 120px; overflow: auto; }
-.config-list button { display: flex; flex-direction: column; gap: 3px; padding: 8px 9px; border: 1px solid rgba(255,255,255,.06); border-radius: 8px; background: rgba(255,255,255,.02); color: var(--text-tertiary); cursor: pointer; text-align: left; }
-.config-list button.active { border-color: rgba(var(--accent-primary-rgb),.45); background: rgba(var(--accent-primary-rgb),.08); }
-.config-list span { color: var(--text-secondary); font-size: 9px; }
-.config-list small { color: var(--text-tertiary); font-size: 7px; }
-.result-list { display: grid; gap: 7px; max-height: 220px; overflow: auto; margin-top: 14px; }
-.result-item { padding: 8px 9px; border: 1px solid rgba(255,255,255,.06); border-radius: 8px; background: rgba(0,0,0,.18); }
-.result-item strong { display: block; margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-size: 9px; }
-.result-item pre { margin: 0; max-height: 72px; overflow: auto; color: var(--text-tertiary); font: 8px/1.7 ui-monospace, monospace; white-space: pre-wrap; }
-.operation-error { margin: 10px 0 0; color: #ff9a86; font-size: 9px; }
-.progress { margin-top: 10px; color: var(--text-tertiary); font-size: 9px; }
-.dialog-card footer { display: flex; justify-content: flex-end; gap: 7px; margin-top: 20px; }
-.dialog-card footer button { height: 34px; padding: 0 14px; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.035); color: var(--text-secondary); cursor: pointer; }
-.dialog-card footer .primary { border-color: transparent; background: var(--accent-primary); color: white; font-weight: 700; }
+.dialog-backdrop {
+  position: fixed; inset: 0; z-index: 700;
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  background: rgba(7, 6, 9, 0.42);
+}
+.dialog-card {
+  width: min(460px, 100%);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line-subtle, rgba(255,255,255,.1));
+  border-radius: 12px;
+  background: var(--surface-primary, #19171d);
+  box-shadow: 0 24px 72px rgba(0,0,0,.36);
+}
+.dialog-card header {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 56px; padding: 0 20px;
+  border-bottom: 1px solid var(--line-subtle, rgba(255,255,255,.08));
+}
+.dialog-card h2 { margin: 0; font-size: 15px; font-weight: 650; color: var(--text-primary); }
+.icon-close {
+  width: 32px; height: 32px; border: 1px solid var(--line-subtle, rgba(255,255,255,.08));
+  border-radius: 8px; background: transparent; color: var(--text-tertiary); cursor: pointer; font-size: 18px;
+}
+.dialog-body { display: grid; gap: 12px; padding: 20px; background: rgba(255,255,255,.015); }
+.field-card {
+  border: 1px solid var(--line-subtle, rgba(255,255,255,.08));
+  border-radius: 10px;
+  background: rgba(255,255,255,.02);
+  overflow: hidden;
+}
+.field-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 12px 16px;
+}
+.field-row + .field-row { border-top: 1px solid rgba(255,255,255,.06); }
+.field-label { color: var(--text-primary); font-size: 13px; font-weight: 650; }
+.field-row select {
+  box-sizing: border-box; width: 100%; height: 36px; padding: 0 10px;
+  border: 1px solid rgba(255,255,255,.08); border-radius: 8px;
+  background: rgba(255,255,255,.035); color: var(--text-primary);
+  outline: none; font: inherit; font-size: 13px;
+}
+.operation-error { margin: 0; color: #ff9a86; font-size: 12px; }
+.progress { margin: 0; color: var(--text-tertiary); font-size: 12px; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.dialog-actions button {
+  height: 32px; padding: 0 12px;
+  border: 1px solid rgba(255,255,255,.08); border-radius: 8px;
+  background: rgba(255,255,255,.035); color: var(--text-secondary); cursor: pointer; font-size: 13px;
+}
+.dialog-actions .primary {
+  border-color: transparent; background: var(--accent-primary, #111); color: #fff; font-weight: 650;
+}
+.dialog-actions button:disabled { opacity: .38; cursor: not-allowed; }
 </style>

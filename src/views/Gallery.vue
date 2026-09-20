@@ -7,6 +7,7 @@ import GalleryGrid from '@/components/tagger/GalleryGrid.vue'
 import GalleryInspector from '@/components/tagger/GalleryInspector.vue'
 import GallerySelectionBar from '@/components/tagger/GallerySelectionBar.vue'
 import BatchTagDialog from '@/components/tagger/BatchTagDialog.vue'
+import BatchTagToolsDialog from '@/components/tagger/BatchTagToolsDialog.vue'
 import RecycleBinDialog from '@/components/tagger/RecycleBinDialog.vue'
 import MetadataViewer from '@/components/tagger/MetadataViewer.vue'
 import CharacterTagAuditDialog from '@/components/tagger/CharacterTagAuditDialog.vue'
@@ -42,6 +43,7 @@ const editingDatasetItem = ref<any>(null)
 const datasetCaption = ref('')
 const showFileDialog = ref(false)
 const showBatchTagDialog = ref(false)
+const showBatchToolsDialog = ref(false)
 const showRecycleDialog = ref(false)
 const showCharacterAuditDialog = ref(false)
 const showOrganizeDialog = ref(false)
@@ -54,6 +56,7 @@ const datasetSendError = ref('')
 const visibleImages = computed(() => {
   const clauses = parseSearchQuery(galleryStore.searchQuery)
   const filtered = galleryStore.images.filter((image) => {
+    if (!image) return false
     const tags = galleryStore.imageTags.get(image.id) ?? []
     const searchText = `${image.filename} ${tags.map((tag) => tag.tag).join(' ')}`
     if (!matchesQuery(searchText, clauses)) return false
@@ -403,6 +406,10 @@ function openBatchTagDialog() {
   showBatchTagDialog.value = true
 }
 
+function openBatchToolsDialog() {
+  showBatchToolsDialog.value = true
+}
+
 function openCharacterAuditDialog() {
   showCharacterAuditDialog.value = true
 }
@@ -699,20 +706,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           />
 
           <div v-else ref="datasetGridRef" class="dataset-grid">
-            <button v-for="item in galleryStore.datasetImageItems" :key="item.path" class="dataset-card" @click="editDatasetItem(item)">
-              <span class="dataset-card__image"><img v-if="item.thumb" :src="item.thumb" :alt="item.filename" /><i v-else>IMG</i></span>
+            <article v-for="item in galleryStore.datasetImageItems" :key="item.path" class="dataset-card" role="button" tabindex="0" @click="editDatasetItem(item)" @keydown.enter="editDatasetItem(item)">
+              <div class="dataset-card__image">
+                <img v-if="item.thumb" :src="item.thumb" :alt="item.filename" />
+                <i v-else>IMG</i>
+              </div>
               <strong>{{ item.filename }}</strong>
               <small>{{ item.caption || '未标注，点击编辑' }}</small>
-            </button>
+            </article>
             <div v-if="galleryStore.datasetImageItems.length === 0" class="dataset-empty"><strong>这个数据集还是空的</strong><span>从图库选择图片后，可以通过底部操作栏加入这里。</span></div>
           </div>
 
           <GalleryInspector
-            v-if="galleryStore.selectedCount === 1"
-            :image="selectedImage!"
+            v-if="selectedImage && !galleryStore.activeDatasetId"
+            :image="selectedImage"
             :tags="selectedTags"
-            @open-metadata="openMetadata(selectedImage!, visibleImages.indexOf(selectedImage!))"
+            @open-metadata="selectedImage && openMetadata(selectedImage, visibleImages.indexOf(selectedImage))"
             @send-to-tagger="sendSelectedToTagger"
+            @batch-tools="openBatchToolsDialog"
             @audit="openCharacterAuditDialog"
             @delete="deleteSelectedMedia"
             @reveal="revealSelected"
@@ -727,6 +738,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             @copy-move="openFileDialog"
             @organize="openOrganizeDialog"
             @edit-tags="openBatchTagDialog"
+            @batch-tools="openBatchToolsDialog"
             @audit="openCharacterAuditDialog"
             @delete="deleteSelectedMedia"
             @clear="galleryStore.clearSelection"
@@ -770,7 +782,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 
       <div v-if="editingDatasetItem" class="dialog-backdrop" @click.self="editingDatasetItem = null">
         <section class="dialog-card dialog-card--caption">
-          <div><p>CAPTION</p><h2>{{ editingDatasetItem.filename }}</h2></div>
+          <div><p>CAPTION</p><h2>{{ editingDatasetItem?.filename }}</h2></div>
           <textarea v-model="datasetCaption" rows="8" placeholder="用英文逗号分隔标签"></textarea>
           <footer><button @click="editingDatasetItem = null">取消</button><button class="primary" @click="saveDatasetCaption">保存 caption</button></footer>
         </section>
@@ -794,6 +806,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         :visible="showBatchTagDialog"
         :image-ids="orderedSelectedImages.map((image) => image.id)"
         @close="showBatchTagDialog = false"
+        @applied="onBatchTagsApplied"
+      />
+      <BatchTagToolsDialog
+        :visible="showBatchToolsDialog"
+        :image-paths="orderedSelectedImages.map((image) => image.path)"
+        @close="showBatchToolsDialog = false"
         @applied="onBatchTagsApplied"
       />
       <RecycleBinDialog
@@ -826,7 +844,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 .gallery-drag-overlay { position: absolute; inset: 0; z-index: 80; display: grid; place-items: center; pointer-events: none; border: 0; border-radius: 14px; outline: 2px dashed color-mix(in srgb, var(--brand-primary) 62%, transparent); outline-offset: -10px; background: color-mix(in srgb, var(--surface-secondary) 78%, transparent); backdrop-filter: blur(10px); }.gallery-drag-overlay div { display: grid; gap: 7px; padding: 22px 30px; color: var(--text-tertiary); text-align: center; }.gallery-drag-overlay strong { color: var(--accent-primary); font-size: 16px; }.gallery-drag-overlay span { font-size: 9px; }
 .gallery-content { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }.gallery-stage { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; gap: 12px; overflow: hidden; }.gallery-stage :deep(.gallery-grid-scroll) { flex: 1; min-width: 0; }
 .dataset-toolbar { height: 44px; flex: 0 0 44px; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 0 10px; border: 0; border-radius: 10px; background: color-mix(in srgb, var(--surface-secondary) 72%, transparent); }.dataset-toolbar div { margin-right: auto; display: flex; align-items: baseline; gap: 9px; }.dataset-toolbar strong { font-size: 12px; }.dataset-toolbar span { color: var(--text-tertiary); font-size: 9px; }
-.dataset-grid { flex: 1; min-width: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); align-content: start; gap: 12px; padding: 12px 12px 90px; }.dataset-card { min-width: 0; padding: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.07); border-radius: 11px; background: rgba(255,255,255,.025); color: var(--text-secondary); text-align: left; cursor: pointer; }.dataset-card__image { display: grid; place-items: center; aspect-ratio: 1.35; background: #16151b; }.dataset-card__image img { width: 100%; height: 100%; object-fit: cover; }.dataset-card__image i { color: var(--text-tertiary); font-size: 10px; font-style: normal; }.dataset-card strong, .dataset-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 9px 0; font-size: 10px; }.dataset-card small { padding: 4px 9px 9px; color: var(--text-tertiary); font-size: 8px; }.dataset-empty { grid-column: 1/-1; min-height: 340px; display: grid; place-content: center; gap: 8px; color: var(--text-tertiary); text-align: center; font-size: 11px; }.dataset-empty strong { color: var(--text-secondary); font-size: 15px; }
+.dataset-grid { flex: 1; min-width: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-content: start; gap: 14px; padding: 12px 12px 90px; }.dataset-card { display: flex; flex-direction: column; width: 100%; min-width: 0; min-height: 280px; padding: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.07); border-radius: 12px; background: rgba(255,255,255,.025); color: var(--text-secondary); text-align: left; cursor: pointer; }.dataset-card__image { position: relative; flex: 0 0 220px; width: 100%; height: 220px; min-height: 220px; overflow: hidden; background: #16151b; }.dataset-card__image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }.dataset-card__image i { color: var(--text-tertiary); font-size: 10px; font-style: normal; }.dataset-card strong, .dataset-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 9px 0; font-size: 10px; }.dataset-card small { padding: 4px 9px 9px; color: var(--text-tertiary); font-size: 8px; }.dataset-empty { grid-column: 1/-1; min-height: 340px; display: grid; place-content: center; gap: 8px; color: var(--text-tertiary); text-align: center; font-size: 11px; }.dataset-empty strong { color: var(--text-secondary); font-size: 15px; }
 .dialog-backdrop { position: fixed; inset: 0; z-index: 500; display: grid; place-items: center; padding: 20px; background: rgba(7,6,9,.68); backdrop-filter: blur(9px); }.dialog-card { width: min(440px, 100%); padding: 22px; border: 1px solid rgba(255,255,255,.1); border-radius: 16px; background: #1c1921; box-shadow: 0 30px 80px rgba(0,0,0,.48); }.dialog-card h2 { margin: 0; font-size: 19px; }.dialog-tabs { display: flex; gap: 4px; margin: 20px 0 12px; padding: 3px; border-radius: 9px; background: rgba(255,255,255,.03); }.dialog-tabs button { flex: 1; height: 32px; border: 0; border-radius: 7px; background: transparent; color: var(--text-tertiary); cursor: pointer; }.dialog-tabs button.active { background: rgba(var(--accent-primary-rgb),.12); color: var(--accent-primary); }.dataset-options { display: grid; gap: 6px; max-height: 220px; overflow: auto; }.dataset-options button { display: flex; justify-content: space-between; padding: 11px; border: 1px solid rgba(255,255,255,.06); border-radius: 8px; background: transparent; color: var(--text-secondary); cursor: pointer; }.dataset-options button.active { border-color: rgba(var(--accent-primary-rgb),.45); background: rgba(var(--accent-primary-rgb),.08); }.dataset-options small { color: var(--text-tertiary); }.dialog-fields { display: grid; gap: 13px; margin-top: 18px; }.dialog-fields label { display: grid; gap: 6px; color: var(--text-tertiary); font-size: 9px; }.dialog-fields input, .folder-picker, .dialog-card textarea { box-sizing: border-box; width: 100%; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.035); color: var(--text-primary); outline: none; font: inherit; }.dialog-fields input, .folder-picker { height: 36px; padding: 0 10px; text-align: left; }.dialog-card textarea { margin-top: 18px; padding: 11px; resize: vertical; line-height: 1.6; }.dialog-card footer { display: flex; justify-content: flex-end; gap: 7px; margin-top: 20px; }.dialog-card footer button { height: 34px; padding: 0 15px; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.035); color: var(--text-secondary); cursor: pointer; }
 .operation-options { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 18px; }.operation-options button { display: grid; gap: 4px; padding: 12px; border: 1px solid rgba(255,255,255,.07); border-radius: 9px; background: rgba(255,255,255,.02); color: var(--text-tertiary); text-align: left; cursor: pointer; }.operation-options button.active { border-color: rgba(var(--accent-primary-rgb),.4); background: rgba(var(--accent-primary-rgb),.07); }.operation-options strong { color: var(--text-secondary); font-size: 10px; }.operation-options span { font-size: 8px; line-height: 1.5; }.destination-picker { width: 100%; height: 38px; margin-top: 10px; padding: 0 11px; overflow: hidden; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.03); color: var(--text-secondary); text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }.move-warning, .operation-error { margin: 10px 0 0; padding: 8px 9px; border-radius: 7px; background: rgba(255,193,132,.055); color: #ffc184; font-size: 8px; line-height: 1.55; }.operation-error { background: rgba(255,137,117,.055); color: #ff9a86; }
 @media (max-width: 980px) { .gallery-stage :deep(.gallery-inspector) { position: absolute; top: 10px; right: 10px; bottom: 10px; z-index: 20; width: min(280px, calc(100% - 20px)); box-shadow: 0 18px 44px rgba(0,0,0,.28); } }

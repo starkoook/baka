@@ -10,6 +10,10 @@ files:
   - electron/**/*.py
   - package.json
   - THIRD_PARTY_NOTICES.md
+asarUnpack:
+  - electron/ipc/tagger-worker.js
+  - electron/ipc/tagger-layout.js
+  - electron/ipc/tag-catalog.js
 extraResources:
   - from: THIRD_PARTY_NOTICES.md
     to: licenses/THIRD_PARTY_NOTICES.md

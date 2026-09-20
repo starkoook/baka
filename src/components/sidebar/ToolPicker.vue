@@ -7,7 +7,7 @@ const router = useRouter()
 const appStore = useAppStore()
 
 interface ToolEntry {
-  key: 'gallery' | 'booruGallery' | 'tagger' | 'training' | 'upscale' | 'workbench' | 'video' | 'imageTools'
+  key: 'gallery' | 'booruGallery' | 'tagger' | 'training' | 'upscale' | 'workbench' | 'video' | 'imageTools' | 'console'
   label: string
   desc: string
   route: string
@@ -25,6 +25,7 @@ const TOOLS: ToolEntry[] = [
   { key: 'workbench', label: '工作台', desc: '无限画布 · 自由整理', route: '/workbench', poster: '/tools/workbench.jpg', meta: '画布', value: '∞' },
   { key: 'video', label: '视频工具', desc: '视频抽帧与转换', route: '/video', poster: '/tools/upscale.jpg', meta: '抽帧', value: 'V' },
   { key: 'imageTools', label: '图像工具', desc: '背景、编辑与图库体检', route: '/image-tools', poster: '/tools/upscale.jpg', meta: '工具', value: 'I' },
+  { key: 'console', label: '控制台', desc: '运行日志与错误', route: '/console', poster: '/tools/upscale.jpg', meta: '日志', value: 'C' },
 ]
 
 const activeTool = ref<ToolEntry['key']>('gallery')

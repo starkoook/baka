@@ -147,6 +147,10 @@ contextBridge.exposeInMainWorld('systemAPI', {
 
 contextBridge.exposeInMainWorld('logAPI', {
   onEntry: (cb) => { ipcRenderer.on('log:entry', (_e, d) => cb(d)) },
+  getHistory: (limit) => ipcRenderer.invoke('log:getHistory', limit),
+  clear: () => ipcRenderer.invoke('log:clear'),
+  append: (entry) => ipcRenderer.invoke('log:append', entry),
+  path: () => ipcRenderer.invoke('log:path'),
 })
 
 contextBridge.exposeInMainWorld('trainingAPI', {
@@ -161,7 +165,6 @@ contextBridge.exposeInMainWorld('trainingAPI', {
 })
 
 contextBridge.exposeInMainWorld('taggerAPI', {
-  localInfer: (params) => ipcRenderer.invoke('tagger:local-infer', params),
 })
 
 contextBridge.exposeInMainWorld('cacheAPI', {
@@ -183,6 +186,7 @@ contextBridge.exposeInMainWorld('taggerV2API', {
   openModelDir: () => ipcRenderer.invoke('taggerV2:openModelDir'),
   listDownloadableModels: () => ipcRenderer.invoke('taggerV2:listDownloadableModels'),
   downloadModel: (modelId) => ipcRenderer.invoke('taggerV2:downloadModel', modelId),
+  deleteModel: (modelPath) => ipcRenderer.invoke('taggerV2:deleteModel', modelPath),
   onDownloadProgress: (callback) => { ipcRenderer.on('taggerV2:downloadProgress', (_event, data) => callback(data)) },
   // Inference
   inferSingle: (params) => ipcRenderer.invoke('taggerV2:inferSingle', params),
@@ -211,6 +215,11 @@ contextBridge.exposeInMainWorld('taggingAPI', {
   importTemplates: (entries) => ipcRenderer.invoke('tagging:importTemplates', entries),
   listConfigs: () => ipcRenderer.invoke('tagging:listConfigs'),
   onProgress: (callback) => ipcRenderer.on('tagging:progress', (_event, data) => callback(data)),
+})
+
+contextBridge.exposeInMainWorld('taggerSettingsAPI', {
+  get: () => ipcRenderer.invoke('taggerSettings:get'),
+  save: (partial) => ipcRenderer.invoke('taggerSettings:save', partial),
 })
 
 contextBridge.exposeInMainWorld('characterAuditAPI', {
@@ -277,6 +286,15 @@ contextBridge.exposeInMainWorld('galleryAPI', {
   saveCaptionFile: (imageId) => ipcRenderer.invoke('gallery:saveCaptionFile', imageId),
   batchSaveCaptions: (imageIds) => ipcRenderer.invoke('gallery:batchSaveCaptions', imageIds),
   onScanProgress: (callback) => { ipcRenderer.on('gallery:scanProgress', (_event, data) => callback(data)) },
+})
+
+contextBridge.exposeInMainWorld('annotationToolsAPI', {
+  transformText: (params) => ipcRenderer.invoke('annotationTools:transformText', params),
+  preview: (params) => ipcRenderer.invoke('annotationTools:preview', params),
+  applyBatch: (params) => ipcRenderer.invoke('annotationTools:applyBatch', params),
+  applyOverride: (params) => ipcRenderer.invoke('annotationTools:applyOverride', params),
+  undoBatch: (historyIds) => ipcRenderer.invoke('annotationTools:undoBatch', historyIds),
+  listHistory: (imagePath) => ipcRenderer.invoke('annotationTools:listHistory', imagePath),
 })
 
 contextBridge.exposeInMainWorld('updaterAPI', {

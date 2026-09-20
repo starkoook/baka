@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import SettingsCard from './SettingsCard.vue'
+import SettingsRow from './SettingsRow.vue'
 
 const loading = ref(true)
 const busy = ref('')
@@ -10,7 +12,7 @@ const runtimeId = computed(() => state.value?.recommendation?.preferred_runtime_
 const installedItems = computed(() => Object.entries(state.value?.installed || {}) as Array<[string, any]>)
 
 function label(id: string) {
-  return id === 'trainer' ? '训练器核心' : id === 'runtime-standard' ? '标准训练环境' : id
+  return id === 'trainer' ? '训练器组件' : id === 'runtime-standard' ? '标准训练运行' : id
 }
 
 async function refresh() {
@@ -19,7 +21,7 @@ async function refresh() {
   try {
     state.value = await window.trainingComponentsAPI?.inspect() || state.value
   } catch (reason: any) {
-    error.value = reason?.message || '读取组件状态失败'
+    error.value = reason?.message || '获取组件状态失败'
   } finally {
     loading.value = false
   }
@@ -45,11 +47,11 @@ function repair() {
 }
 
 function rollback(componentId: string) {
-  return run(`rollback:${componentId}`, () => window.trainingComponentsAPI!.rollback(componentId), `${label(componentId)}已回退`)
+  return run(`rollback:${componentId}`, () => window.trainingComponentsAPI!.rollback(componentId), `${label(componentId)}已回滚`)
 }
 
 function clearCache() {
-  return run('clear', () => window.trainingComponentsAPI!.clearCache(), '下载缓存已清理，已安装组件不会受影响')
+  return run('clear', () => window.trainingComponentsAPI!.clearCache(), '下载缓存已清理，已安装组件不受影响')
 }
 
 async function exportCache() {
@@ -64,7 +66,7 @@ async function exportCache() {
 async function importCache() {
   const source = await window.fsAPI.selectFolder()
   if (!source) return
-  await run('import', () => window.trainingComponentsAPI!.importCache({ source }), '组件缓存已导入，下次安装时无需重新下载')
+  await run('import', () => window.trainingComponentsAPI!.importCache({ source }), '组件缓存已导入，下次安装时会优先复用')
 }
 
 onMounted(refresh)
@@ -72,45 +74,74 @@ onMounted(refresh)
 
 <template>
   <div class="component-panel">
-    <header>
-      <div><p>TRAINING COMPONENTS</p><h2>训练组件</h2></div>
-      <button class="ghost" :disabled="loading" @click="refresh">刷新</button>
-    </header>
-    <p class="intro">主程序和训练环境分开更新。这里的操作不会删除你的模型、数据集和训练结果。</p>
+    <SettingsCard title="训练组件" description="管理本地训练器与运行时。不会删除模型、数据集或训练任务。">
+      <SettingsRow title="状态" description="刷新已安装组件与版本">
+        <button class="sk-btn" :disabled="loading" type="button" @click="refresh">刷新</button>
+      </SettingsRow>
+      <SettingsRow title="Baka" :description="state.versions?.baka || '—'" />
+      <SettingsRow title="训练器" :description="state.versions?.trainer || '未安装'" />
+      <SettingsRow title="Schema" :description="state.versions?.schema || '未安装'" />
+      <SettingsRow title="运行时" :description="state.versions?.runtime || '未安装'" />
+    </SettingsCard>
 
-    <div v-if="loading" class="empty">正在读取组件状态…</div>
-    <template v-else>
-      <div class="version-strip">
-        <span><small>Baka</small>{{ state.versions?.baka || '—' }}</span>
-        <span><small>训练器</small>{{ state.versions?.trainer || '未安装' }}</span>
-        <span><small>Schema</small>{{ state.versions?.schema || '未安装' }}</span>
-        <span><small>环境</small>{{ state.versions?.runtime || '未安装' }}</span>
-      </div>
+    <SettingsCard v-if="!loading" title="已安装" description="可以回滚到上一个可用版本">
+      <SettingsRow
+        v-for="[id, item] in installedItems"
+        :key="id"
+        :title="label(id)"
+        :description="item.path"
+        align="start"
+      >
+        <span class="sk-ver">{{ item.version }}</span>
+        <button
+          v-if="state.previous?.[id]"
+          class="sk-btn"
+          type="button"
+          :disabled="!!busy"
+          @click="rollback(id)"
+        >{{ busy === `rollback:${id}` ? '回滚中…' : `回滚到 ${state.previous[id].version}` }}</button>
+      </SettingsRow>
+      <div v-if="!installedItems.length" class="sk-empty">训练组件尚未安装。进入 LoRA 训练页时会走安装向导。</div>
+    </SettingsCard>
+    <div v-else class="sk-empty">正在读取组件状态…</div>
 
-      <div v-if="installedItems.length" class="component-list">
-        <article v-for="[id, item] in installedItems" :key="id">
-          <div class="status-dot"></div>
-          <div class="component-copy"><strong>{{ label(id) }}</strong><span>{{ item.version }}</span><small>{{ item.path }}</small></div>
-          <button v-if="state.previous?.[id]" class="ghost" :disabled="!!busy" @click="rollback(id)">
-            {{ busy === `rollback:${id}` ? '回退中…' : `回退到 ${state.previous[id].version}` }}
-          </button>
-        </article>
-      </div>
-      <div v-else class="empty">训练组件尚未安装。进入 LoRA 训练页时会出现安装向导。</div>
-
-      <div class="actions">
-        <button class="primary" :disabled="!!busy || !installedItems.length" @click="repair">{{ busy === 'repair' ? '修复中…' : '检查并修复' }}</button>
-        <button class="ghost" :disabled="!!busy" @click="clearCache">清理下载缓存</button>
-        <button class="ghost" :disabled="!!busy || !installedItems.length" @click="exportCache">导出组件缓存</button>
-        <button class="ghost" :disabled="!!busy" @click="importCache">导入组件缓存</button>
-      </div>
-      <p v-if="message" class="message ok">{{ message }}</p>
-      <p v-if="error" class="message bad">{{ error }}</p>
-      <p class="hint">训练运行期间会自动锁定修复、回退和清理操作，防止任务被中途破坏。</p>
-    </template>
+    <SettingsCard title="维护" description="修复与缓存导出导入不会中断正在跑的任务">
+      <SettingsRow title="检查并修复" description="校验当前运行时并尝试修复">
+        <button class="sk-btn sk-btn--primary" type="button" :disabled="!!busy || !installedItems.length" @click="repair">{{ busy === 'repair' ? '修复中…' : '检查并修复' }}</button>
+      </SettingsRow>
+      <SettingsRow title="下载缓存" description="清理缓存不会卸载已安装组件">
+        <button class="sk-btn" type="button" :disabled="!!busy" @click="clearCache">清理缓存</button>
+      </SettingsRow>
+      <SettingsRow title="缓存包" description="导出或导入组件缓存目录">
+        <button class="sk-btn" type="button" :disabled="!!busy || !installedItems.length" @click="exportCache">导出</button>
+        <button class="sk-btn" type="button" :disabled="!!busy" @click="importCache">导入</button>
+      </SettingsRow>
+      <p v-if="message" class="sk-msg sk-msg--ok">{{ message }}</p>
+      <p v-if="error" class="sk-msg sk-msg--bad">{{ error }}</p>
+    </SettingsCard>
   </div>
 </template>
 
 <style scoped>
-.component-panel{padding:22px;border:1px solid var(--border-color);border-radius:14px;background:var(--bg-elevated)}header{display:flex;align-items:center;justify-content:space-between}header p{margin:0 0 3px;color:var(--accent-primary);font-size:10px;font-weight:700;letter-spacing:.12em}h2{margin:0;color:var(--text-primary);font-size:17px}.intro{margin:9px 0 18px;color:var(--text-tertiary);font-size:12px;line-height:1.6}.version-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}.version-strip span{padding:11px;border:1px solid var(--border-color);border-radius:10px;color:var(--text-primary);font-size:12px}.version-strip small{display:block;margin-bottom:4px;color:var(--text-tertiary);font-size:10px}.component-list{display:grid;gap:8px}.component-list article{display:flex;align-items:center;gap:10px;padding:13px;border:1px solid var(--border-color);border-radius:11px;background:var(--hud-bg)}.status-dot{width:8px;height:8px;border-radius:50%;background:#32c274;box-shadow:0 0 0 4px rgba(50,194,116,.1)}.component-copy{min-width:0;display:flex;flex:1;flex-direction:column}.component-copy strong{color:var(--text-primary);font-size:13px}.component-copy span{color:var(--accent-primary);font-size:11px}.component-copy small{overflow:hidden;color:var(--text-tertiary);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}.actions button,header button,.component-list button{padding:8px 12px;border-radius:9px;cursor:pointer;font-size:12px}.primary{border:1px solid var(--accent-primary);background:var(--accent-primary);color:#fff}.ghost{border:1px solid var(--border-color);background:transparent;color:var(--text-secondary)}button:disabled{opacity:.4;cursor:not-allowed}.empty{padding:28px;border:1px dashed var(--border-color);border-radius:11px;color:var(--text-tertiary);font-size:12px;text-align:center}.message{margin:12px 0 0;padding:9px 11px;border-radius:8px;font-size:11px}.ok{background:rgba(50,194,116,.08);color:#54cf8b}.bad{background:rgba(239,68,68,.08);color:#ef7777}.hint{margin:12px 0 0;color:var(--text-tertiary);font-size:10px}@media(max-width:650px){.version-strip{grid-template-columns:repeat(2,1fr)}}
+.component-panel { display: flex; flex-direction: column; gap: 14px; }
+.sk-btn {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sk-btn:hover { border-color: var(--border-accent); color: var(--settings-accent); }
+.sk-btn--primary { border-color: transparent; background: var(--settings-accent); color: var(--brand-on-primary); font-weight: 650; }
+.sk-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.sk-ver { font-size: 11px; color: var(--settings-accent); font-family: var(--font-mono); }
+.sk-empty { padding: 14px var(--settings-row-pad-x); color: var(--settings-muted); font-size: 12px; }
+.sk-msg { margin: 0; padding: 10px var(--settings-row-pad-x) 12px; font-size: 11px; }
+.sk-msg--ok { color: var(--accent-success); }
+.sk-msg--bad { color: var(--accent-danger); }
 </style>

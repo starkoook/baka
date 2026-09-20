@@ -14,6 +14,7 @@ lora-rescripts-main/
 
 # 助手工作记忆(非工程产物)
 .workbuddy/
+.superpowers/
 
 # 操作系统/工具残留
 nul

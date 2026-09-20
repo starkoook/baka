@@ -12,7 +12,10 @@ const statusLabel: Record<TagQueueItem['status'], string> = {
 <template>
   <aside class="tag-queue" :class="{ 'tag-queue--collapsed': collapsed }">
     <header>
-      <div v-if="!collapsed"><p>QUEUE</p><h2>任务队列</h2></div>
+      <div v-if="!collapsed" class="queue-head-text">
+        <p>QUEUE</p>
+        <h2>任务队列</h2>
+      </div>
       <span>{{ queue.length }}</span>
       <button class="queue-collapse" :aria-label="collapsed ? '展开任务队列' : '收起任务队列'" @click="$emit('toggleCollapsed')">{{ collapsed ? '›' : '‹' }}</button>
     </header>

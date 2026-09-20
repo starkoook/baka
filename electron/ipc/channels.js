@@ -110,6 +110,10 @@ const Channels = {
 
   // ── 日志 ──
   LOG_ENTRY: 'log:entry', // event: main → renderer
+  LOG_GET_HISTORY: 'log:getHistory',
+  LOG_CLEAR: 'log:clear',
+  LOG_APPEND: 'log:append',
+  LOG_PATH: 'log:path',
 
   // ── 训练(旧 training) ──
   TRAINING_STATUS: 'training:status',
@@ -161,6 +165,8 @@ const Channels = {
   TAGGING_DELETE_TEMPLATE: 'tagging:deleteTemplate',
   TAGGING_IMPORT_TEMPLATES: 'tagging:importTemplates',
   TAGGING_LIST_CONFIGS: 'tagging:listConfigs',
+  TAGGER_SETTINGS_GET: 'taggerSettings:get',
+  TAGGER_SETTINGS_SAVE: 'taggerSettings:save',
   CHARACTER_AUDIT_INVENTORY: 'characterAudit:inventory',
   CHARACTER_AUDIT_RUN: 'characterAudit:run',
   CHARACTER_AUDIT_APPLY: 'characterAudit:apply',
@@ -210,6 +216,14 @@ const Channels = {
   GALLERY_SAVE_CAPTION_FILE: 'gallery:saveCaptionFile',
   GALLERY_BATCH_SAVE_CAPTIONS: 'gallery:batchSaveCaptions',
   GALLERY_SCAN_PROGRESS: 'gallery:scanProgress', // event: main → renderer
+
+  // ── 标注批量工具（格式转换/清洗/查找替换/加字段）──
+  ANNOTATION_TOOLS_TRANSFORM_TEXT: 'annotationTools:transformText',
+  ANNOTATION_TOOLS_PREVIEW: 'annotationTools:preview',
+  ANNOTATION_TOOLS_APPLY_BATCH: 'annotationTools:applyBatch',
+  ANNOTATION_TOOLS_UNDO_BATCH: 'annotationTools:undoBatch',
+  ANNOTATION_TOOLS_LIST_HISTORY: 'annotationTools:listHistory',
+  ANNOTATION_TOOLS_APPLY_OVERRIDE: 'annotationTools:applyOverride',
 
   // ── Updater ──
   UPDATER_CHECK: 'updater:check',

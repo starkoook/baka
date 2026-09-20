@@ -69,7 +69,10 @@ function parseWebUIParameters(paramsStr) {
   const lines = paramsStr.split('\n')
 
   if (lines.length > 0) {
-    result.prompt = lines[0].trim()
+    const firstLine = lines[0].trim()
+    const blob = parseModelLoraBlob(firstLine)
+    if (blob) mergeModelLoraBlob(result, blob)
+    else result.prompt = firstLine
   }
 
   const loras = []
@@ -77,7 +80,7 @@ function parseWebUIParameters(paramsStr) {
   for (const match of paramsStr.matchAll(loraPattern)) {
     loras.push({ name: match[1].trim(), weight: Number(match[2]) })
   }
-  if (loras.length) result.loras = loras
+  if (loras.length && !(result.loras && result.loras.length)) result.loras = loras
 
   for (const line of lines) {
     if (line.startsWith('Negative prompt:')) {
@@ -170,6 +173,19 @@ function cleanPromptText(text) {
   if (typeof text !== 'string') return text
   let t = text.trim()
 
+  // WeiLin artwork XML is the caption itself. Never empty it as a model+LoRA blob; only drop a trailing token array after </artwork>.
+  if (/^<artwork\b/i.test(t)) {
+    for (const prefix of [', [{"id":"token_', '[{"id":"token_']) {
+      const tokenIdx = t.lastIndexOf(prefix)
+      if (tokenIdx > 0) {
+        t = t.slice(0, tokenIdx).trim()
+        if (t.endsWith(',')) t = t.slice(0, -1).trim()
+        return t
+      }
+    }
+    return t
+  }
+
   // Detect NovelAI/ComfyUI token array: [{"id":"token_...}]
   // "tokenIdx > 0" is enough — the pattern is specific, no false positives.
   for (const prefix of [', [{"id":"token_', '[{"id":"token_']) {
@@ -181,6 +197,21 @@ function cleanPromptText(text) {
     }
   }
 
+  // Model filename + LoRA JSON: "foo.safetensors, [{...lora...}]"
+  let searchFrom = 0
+  while (searchFrom < t.length) {
+    const loraJsonIdx = t.indexOf(', [', searchFrom)
+    if (loraJsonIdx < 0) break
+    const remainder = t.slice(loraJsonIdx + 2).trim()
+    if (isLoraJsonPayload(remainder) || isLoraJsonPayload(t.slice(loraJsonIdx))) {
+      t = t.slice(0, loraJsonIdx).trim()
+      if (t.endsWith(',')) t = t.slice(0, -1).trim()
+      break
+    }
+    searchFrom = loraJsonIdx + 3
+  }
+
+  if (isModelFilenameOnly(t)) return ''
   return t
 }
 
@@ -192,15 +223,170 @@ function extractPromptFromStructuredText(text) {
   if (typeof text !== 'string') return null
   const match = text.match(/"prompt"\s*:\s*"((?:\\.|[^"\\])*)"/)
   if (!match) return null
+  let extracted
   try {
-    return JSON.parse(`"${match[1]}"`)
+    extracted = JSON.parse(`"${match[1]}"`)
   } catch (_) {
-    return match[1]
+    extracted = match[1]
+  }
+  if (parseModelLoraBlob(extracted)) return null
+  return extracted
+}
+
+const MODEL_FILENAME_RE = /\.(safetensors|ckpt|pt|gguf)\b/i
+const LORA_JSON_MARKER_RE = /text_encoder_weight|loraWorks|"lora"\s*:/
+const CJK_RE = /[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]/
+const SKIP_TEXT_KEYS = new Set([
+  'ckpt_name', 'unet_name', 'model_name',
+  'clip_name', 'clip_name1', 'clip_name2',
+  'vae_name', 'lora_name', 'lora_str', 'lora', 'loras',
+])
+
+function isLoraLikeItem(item) {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false
+  return (
+    'lora' in item ||
+    'lora_name' in item ||
+    'text_encoder_weight' in item ||
+    'loraWorks' in item ||
+    (typeof item.name === 'string' && (item.weight !== undefined || item.strength !== undefined))
+  )
+}
+
+function isLoraJsonPayload(text) {
+  if (typeof text !== 'string' || !text.trim()) return false
+  if (LORA_JSON_MARKER_RE.test(text)) return true
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('[') && !trimmed.startsWith('{')) return false
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (Array.isArray(parsed)) return parsed.some(isLoraLikeItem)
+    return isLoraLikeItem(parsed)
+  } catch (_) {
+    return false
   }
 }
 
+function isModelFilenameOnly(text) {
+  if (typeof text !== 'string') return false
+  const t = text.trim()
+  if (!t || t.includes('\n') || t.includes(', ')) return false
+  return /\.(safetensors|ckpt|pt|gguf)$/i.test(t)
+}
+
+function parseLoraArray(value) {
+  if (!Array.isArray(value) || !value.length) return null
+  if (!value.some(isLoraLikeItem)) return null
+  return value.map(normalizeLora).filter(Boolean)
+}
+
+/**
+ * Parse a model-filename + LoRA JSON blob (or a bare LoRA array).
+ * This is NOT a caption. Returns { model, loras, prompt: undefined } or null.
+ */
+function parseModelLoraBlob(text) {
+  if (typeof text !== 'string') return null
+  const t = text.trim()
+  if (!t) return null
+
+  if (t.startsWith('[')) {
+    try {
+      const loras = parseLoraArray(JSON.parse(t))
+      if (loras === null) return null
+      return { model: undefined, loras, prompt: undefined }
+    } catch (_) {
+      return null
+    }
+  }
+
+  const extMatch = t.match(/\.(safetensors|ckpt|pt|gguf)\b/i)
+  if (!extMatch) return null
+
+  const extEnd = extMatch.index + extMatch[0].length
+  const modelPart = t.slice(0, extEnd).trim()
+  if (!modelPart || modelPart.includes('\n')) return null
+  // A caption glued in front of a model file is not itself a blob.
+  if (modelPart.includes(', ')) return null
+
+  const rest = t.slice(extEnd).trim()
+  if (!rest) {
+    if (!isModelFilenameOnly(t)) return null
+    return { model: path.basename(modelPart), loras: [], prompt: undefined }
+  }
+
+  if (!rest.startsWith(',')) return null
+  const jsonPart = rest.slice(1).trim()
+  if (!jsonPart.startsWith('[')) return null
+  try {
+    const loras = parseLoraArray(JSON.parse(jsonPart))
+    if (loras === null) return null
+    return { model: path.basename(modelPart), loras, prompt: undefined }
+  } catch (_) {
+    return null
+  }
+}
+
+/** Cached sd_prompt that is a model filename + LoRA dump, not a caption. */
+function isModelLoraBlobPrompt(value) {
+  if (typeof value !== 'string') return false
+  const t = value.trim()
+  if (!t) return false
+  // WeiLin artwork XML is the caption itself, even if it mentions weights.
+  if (t.startsWith('<')) return false
+  if (parseModelLoraBlob(t)) return true
+  return MODEL_FILENAME_RE.test(t) && LORA_JSON_MARKER_RE.test(t)
+}
+
+function mergeModelLoraBlob(result, blob) {
+  if (!result || !blob) return
+  if (blob.model && !result.model) result.model = blob.model
+  if (!blob.loras || !blob.loras.length) return
+  if (!result.loras || !result.loras.length) {
+    result.loras = blob.loras
+    return
+  }
+  const seen = new Set(result.loras.map((lora) => String(lora.name).toLowerCase() + '|' + lora.weight + '|' + (lora.textEncoderWeight ?? '')))
+  for (const lora of blob.loras) {
+    const key = String(lora.name).toLowerCase() + '|' + lora.weight + '|' + (lora.textEncoderWeight ?? '')
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.loras.push(lora)
+  }
+}
+
+function sanitizeRawMetadata(result) {
+  const rawMeta = result && result.rawMetadata
+  if (!rawMeta || typeof rawMeta !== 'object') return
+
+  if (typeof rawMeta.prompt === 'string' && parseModelLoraBlob(rawMeta.prompt)) {
+    delete rawMeta.prompt
+  }
+
+  if (typeof rawMeta.parameters === 'string') {
+    const lines = rawMeta.parameters.split('\n')
+    if (lines.length && parseModelLoraBlob(lines[0].trim())) {
+      const remaining = lines.slice(1).join('\n').trim()
+      if (remaining) rawMeta.parameters = remaining
+      else delete rawMeta.parameters
+    }
+  }
+
+  if (Object.keys(rawMeta).length === 0) delete result.rawMetadata
+}
+
+function looksLikeCaption(text) {
+  if (typeof text !== 'string' || text.length <= 15) return false
+  if (text.includes(',')) return true
+  if (CJK_RE.test(text)) return true
+  const words = text.trim().split(/\s+/).filter(Boolean)
+  return words.length >= 3 && /[A-Za-z]/.test(text)
+}
+
 function isPromptLike(text) {
-  return typeof text === 'string' && text.length > 15 && (text.includes(',') || text.includes('（') || text.includes('('))
+  if (typeof text !== 'string' || text.length <= 15) return false
+  if (MODEL_FILENAME_RE.test(text)) return false
+  if (isLoraJsonPayload(text)) return false
+  return looksLikeCaption(text)
 }
 
 function isNegativeLike(text) {
@@ -215,6 +401,7 @@ function collectTexts(obj, depth) {
   if (depth > 10 || !obj || typeof obj !== 'object') return []
   const texts = []
   for (const [key, val] of Object.entries(obj)) {
+    if (SKIP_TEXT_KEYS.has(key)) continue
     if (isPromptLike(val)) {
       texts.push({ key, text: val })
     } else if (typeof val === 'object' && val !== null) {
@@ -236,6 +423,110 @@ function sourceHint(node) {
   }
 }
 
+function isWeiLinCaptionNodeType(type) {
+  if (typeof type !== 'string' || !/WeiLin/i.test(type)) return false
+  if (/OnlyLoraStack/i.test(type)) return false
+  if (/Lora/i.test(type) && !/WithoutLora/i.test(type)) return false
+  return true
+}
+
+function isComfyNodeLink(val) {
+  return Array.isArray(val) && val.length >= 1 && (typeof val[0] === 'string' || typeof val[0] === 'number')
+}
+
+function promptStringFromNode(node) {
+  if (!node || typeof node !== 'object') return null
+  const inputs = node.inputs || {}
+  for (const key of ['positive', 'text', 'prompt']) {
+    if (typeof inputs[key] === 'string' && inputs[key].trim()) return inputs[key]
+  }
+  if (Array.isArray(node.widgets_values)) {
+    for (const val of node.widgets_values) {
+      if (typeof val === 'string' && val.trim()) return val
+    }
+  }
+  return null
+}
+
+function resolveLinkedPrompt(data, link) {
+  if (!isComfyNodeLink(link) || !data || typeof data !== 'object') return null
+  return promptStringFromNode(data[String(link[0])])
+}
+
+function classifyXmlCaption(text) {
+  if (typeof text !== 'string') return null
+  const embedded = extractPromptFromStructuredText(text)
+  if (embedded) return embedded
+  // WeiLin artwork XML has no "prompt": key — the XML itself is the caption.
+  if (!/"prompt"\s*:/.test(text)) return text
+  return null
+}
+
+function isLiteGraphPromptNodeType(type) {
+  if (typeof type !== 'string' || !type.trim()) return false
+  if (isWeiLinCaptionNodeType(type)) return true
+  const promptLike = /CLIPTextEncode|CLIPTextEncodeSDXL|CLIPTextEncodeFlux|TextEncodeQwen|Prompt|WeiLin|Textbox|PrimitiveString|StringLiteral|ShowText|CR Prompt|DPRandom/i
+  if (!promptLike.test(type)) return false
+  const skipLike = /Negative|Lora|LoRA|Checkpoint|Loader|SaveImage|Preview|VAE|UNET/i
+  if (skipLike.test(type) && !/TextEncode/i.test(type)) return false
+  return true
+}
+
+function collectWidgetStrings(widgetsValues) {
+  if (!Array.isArray(widgetsValues)) return []
+  const out = []
+  for (const val of widgetsValues) {
+    if (typeof val === 'string' && val.trim()) out.push(val)
+    else if (val && typeof val === 'object' && typeof val.string === 'string' && val.string.trim()) {
+      out.push(val.string)
+    }
+  }
+  return out
+}
+
+/**
+ * Read captions from LiteGraph workflow.nodes[] (type + widgets_values).
+ * These are the real CLIP/text widgets; the PNG "prompt" chunk is often a model+LoRA blob.
+ */
+function extractPromptsFromLiteGraph(nodes) {
+  if (!Array.isArray(nodes)) return {}
+  const prompts = []
+  const negatives = []
+  const extraLoras = []
+
+  for (const node of nodes) {
+    if (!isLiteGraphPromptNodeType(node && node.type)) continue
+    for (const raw of collectWidgetStrings(node.widgets_values)) {
+      const blob = parseModelLoraBlob(raw)
+      if (blob) {
+        if (blob.loras && blob.loras.length) extraLoras.push(...blob.loras)
+        continue
+      }
+      if (isModelFilenameOnly(raw)) continue
+      if (isXmlLikeText(raw)) {
+        const xmlCaption = classifyXmlCaption(raw)
+        if (!xmlCaption) continue
+        const cleanedXml = cleanPromptText(xmlCaption)
+        if (cleanedXml && cleanedXml.length >= 2) {
+          if (isNegativeLike(cleanedXml)) negatives.push(cleanedXml)
+          else prompts.push(cleanedXml)
+        }
+        continue
+      }
+      const cleaned = cleanPromptText(raw)
+      if (!cleaned || cleaned.length < 2) continue
+      if (isNegativeLike(cleaned)) negatives.push(cleaned)
+      else prompts.push(cleaned)
+    }
+  }
+
+  const result = {}
+  if (prompts.length) result.prompt = [...new Set(prompts)].join(', ')
+  if (negatives.length) result.negative = [...new Set(negatives)].join(', ')
+  if (extraLoras.length) result.extraLoras = extraLoras
+  return result
+}
+
 function parseComfyUIWorkflow(raw) {
   try {
     const workflow = typeof raw === 'string' ? JSON.parse(raw) : raw
@@ -243,11 +534,18 @@ function parseComfyUIWorkflow(raw) {
       return { workflow: undefined, nodeTypes: [], sourceHints: [] }
     }
     const nodes = Array.isArray(workflow?.nodes) ? workflow.nodes : []
-    return {
+    const extracted = extractPromptsFromLiteGraph(nodes)
+    const result = {
       workflow,
       nodeTypes: [...new Set(nodes.map(node => node?.type).filter(Boolean))],
       sourceHints: nodes.map(sourceHint).filter(Boolean),
     }
+    if (extracted.prompt) result.prompt = extracted.prompt
+    if (extracted.negative) result.negative = extracted.negative
+    if (extracted.extraLoras && extracted.extraLoras.length) {
+      mergeModelLoraBlob(result, { loras: extracted.extraLoras })
+    }
+    return result
   } catch (_) {
     return { workflow: undefined, nodeTypes: [], sourceHints: [] }
   }
@@ -331,6 +629,36 @@ function parseComfyUIPrompt(promptJson) {
       if (node.inputs) {
         const texts = collectTexts(node.inputs, 0)
         allTexts.push(...texts.map(t => ({ ...t, nodeId })))
+        if (isLiteGraphPromptNodeType(ct) || isWeiLinCaptionNodeType(ct)) {
+          for (const key of ['positive', 'text', 'prompt']) {
+            const val = node.inputs[key]
+            if (isComfyNodeLink(val)) {
+              const resolved = resolveLinkedPrompt(data, val)
+              if (typeof resolved === 'string' && resolved.trim().length >= 2) {
+                if (!parseModelLoraBlob(resolved) && !isModelFilenameOnly(resolved)) {
+                  allTexts.push({ key, text: resolved, nodeId, preferred: true })
+                }
+              }
+              continue
+            }
+            if (typeof val !== 'string') continue
+            const trimmed = val.trim()
+            if (trimmed.length < 2) continue
+            if (parseModelLoraBlob(trimmed) || isModelFilenameOnly(trimmed)) continue
+            allTexts.push({ key, text: val, nodeId, preferred: true })
+          }
+        }
+      }
+      if (Array.isArray(node.widgets_values)) {
+        for (const val of node.widgets_values) {
+          if (typeof val !== 'string' || !val.trim()) continue
+          const widgetBlob = parseModelLoraBlob(val)
+          if (widgetBlob) {
+            mergeModelLoraBlob(result, widgetBlob)
+            continue
+          }
+          allTexts.push({ key: 'widgets_values', text: val, nodeId })
+        }
       }
     }
 
@@ -340,24 +668,41 @@ function parseComfyUIPrompt(promptJson) {
     // Classify texts into prompts and negatives
     const prompts = []
     const negatives = []
+    const preferredMinLen = new Set()
     for (const t of allTexts) {
       if (isNegativeLike(t.text)) {
         negatives.push(t.text)
       } else if (isXmlLikeText(t.text)) {
-        const embeddedPrompt = extractPromptFromStructuredText(t.text)
-        if (embeddedPrompt) prompts.push(embeddedPrompt)
-      } else if (t.text.length > 20) {
+        const xmlCaption = classifyXmlCaption(t.text)
+        if (xmlCaption) {
+          prompts.push(xmlCaption)
+          if (t.preferred) preferredMinLen.add(xmlCaption)
+        }
+      } else if (t.preferred) {
+        prompts.push(t.text)
+        preferredMinLen.add(t.text)
+      } else if (isPromptLike(t.text)) {
         prompts.push(t.text)
       }
     }
 
-    // Deduplicate and clean prompts
+    // Deduplicate and clean prompts. Filter blobs PER ITEM so a real caption
+    // joined with a leftover model+LoRA dump is not wiped as a whole.
     const seen = new Set()
     const cleanedPrompts = prompts
       .filter(p => { const s = p.slice(0, 60); if (seen.has(s)) return false; seen.add(s); return true })
-      .map(cleanPromptText)
-      .filter(p => p && p.length > 5) // remove token arrays that were stripped to empty
-    result.prompt = cleanedPrompts.join(', ')
+      .map((p) => ({ text: cleanPromptText(p), preferred: preferredMinLen.has(p) }))
+      .filter((p) => p.text && (p.preferred ? p.text.length >= 2 : p.text.length > 5))
+    const survivors = []
+    for (const item of cleanedPrompts) {
+      const blob = parseModelLoraBlob(item.text)
+      if (blob) {
+        mergeModelLoraBlob(result, blob)
+        continue
+      }
+      survivors.push(item.text)
+    }
+    result.prompt = survivors.length ? survivors.join(', ') : undefined
     if (negatives.length > 0) {
       const cleanedNegs = negatives
         .filter(p => { const s = p.slice(0, 60); if (seen.has(s)) return false; seen.add(s); return true })
@@ -447,21 +792,30 @@ function parseMetadata(filePath) {
     }
 
     if (promptChunk) {
-      if (promptChunk.includes('class_type')) {
-        const promptData = parseComfyUIPrompt(promptChunk)
+      const keptPrompt = result.prompt
+      const keptNegative = result.negative
+      const applyApiPrompt = (promptData) => {
         const { nodeTypes, sourceHints, ...promptMetadata } = promptData
         result = { ...result, ...promptMetadata, hasMetadata: true }
+        // Do not let an empty API parse wipe a caption already found in the workflow.
+        if (!result.prompt && keptPrompt) result.prompt = keptPrompt
+        if (!result.negative && keptNegative) result.negative = keptNegative
         if (!result.workflow) {
           result.nodeTypes = nodeTypes
           result.sourceHints = sourceHints
         }
+      }
+      if (promptChunk.includes('class_type')) {
+        applyApiPrompt(parseComfyUIPrompt(promptChunk))
       } else if (promptChunk.trim().startsWith('{')) {
-        const promptData = parseComfyUIPrompt(promptChunk)
-        const { nodeTypes, sourceHints, ...promptMetadata } = promptData
-        result = { ...result, ...promptMetadata, hasMetadata: true }
-        if (!result.workflow) {
-          result.nodeTypes = nodeTypes
-          result.sourceHints = sourceHints
+        applyApiPrompt(parseComfyUIPrompt(promptChunk))
+      } else {
+        const blob = parseModelLoraBlob(promptChunk)
+        if (blob) {
+          mergeModelLoraBlob(result, blob)
+          result.hasMetadata = true
+          if (keptPrompt) result.prompt = keptPrompt
+          if (keptNegative) result.negative = keptNegative
         }
       }
     }
@@ -508,11 +862,27 @@ function parseMetadata(filePath) {
 
   // ── Final cleanup: strip trailing JSON token arrays from all prompt fields ──
   if (result.hasMetadata) {
-    if (result.prompt) result.prompt = cleanPromptText(result.prompt)
+    if (result.prompt) {
+      const blob = parseModelLoraBlob(result.prompt)
+      if (blob) {
+        result.prompt = undefined
+        mergeModelLoraBlob(result, blob)
+      } else {
+        result.prompt = cleanPromptText(result.prompt)
+        if (result.prompt) {
+          const leftover = parseModelLoraBlob(result.prompt)
+          if (leftover) {
+            result.prompt = undefined
+            mergeModelLoraBlob(result, leftover)
+          }
+        }
+      }
+    }
     if (result.negative) result.negative = cleanPromptText(result.negative)
+    sanitizeRawMetadata(result)
   }
 
   return result
 }
 
-module.exports = { parseMetadata, parseComfyUIWorkflow, sourceHint, collectComfyLoras }
+module.exports = { parseMetadata, parseComfyUIPrompt, parseComfyUIWorkflow, extractPromptsFromLiteGraph, sourceHint, collectComfyLoras, cleanPromptText, isModelLoraBlobPrompt }

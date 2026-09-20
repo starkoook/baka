@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   getRememberedWorkspace,
+  getSettingsReturnTarget,
   loadLastWorkspace,
   normalizeWorkspaceRoute,
   saveLastWorkspace,
@@ -55,8 +56,20 @@ describe('workspace history', () => {
     expect(normalizeWorkspaceRoute(null)).toBeNull()
   })
 
+  it('normalizes additional tool routes that can be resumed', () => {
+    expect(normalizeWorkspaceRoute('/booru-gallery')).toBe('/booru-gallery')
+    expect(normalizeWorkspaceRoute('/workbench')).toBe('/workbench')
+    expect(normalizeWorkspaceRoute('/video')).toBe('/video')
+    expect(normalizeWorkspaceRoute('/image-tools')).toBe('/image-tools')
+  })
+
   it('normalizes the training run route to the training workspace', () => {
     expect(normalizeWorkspaceRoute('/training/run')).toBe('/training')
+  })
+
+  it('normalizes video tool sub-routes to the video workspace', () => {
+    expect(normalizeWorkspaceRoute('/video/convert')).toBe('/video')
+    expect(normalizeWorkspaceRoute('/video/extract')).toBe('/video')
   })
 
   it('does not overwrite the saved workspace when visiting home or settings', () => {
@@ -79,14 +92,28 @@ describe('workspace history', () => {
       '/generate',
       '/console',
     ].map(getRememberedWorkspace)).toEqual([
-      { route: '/gallery', label: '继续整理图库' },
-      { route: '/tagger', label: '返回标注工作区' },
-      { route: '/training', label: '继续配置训练' },
-      { route: '/training/runtime', label: '继续配置训练环境' },
-      { route: '/reverse', label: '继续提示词反推' },
-      { route: '/upscale', label: '继续超分放大' },
-      { route: '/generate', label: '继续 AI 生成' },
-      { route: '/console', label: '返回控制台' },
+      { route: '/gallery', label: '继续整理图库', shortLabel: '图库' },
+      { route: '/tagger', label: '返回标注工作区', shortLabel: '标注' },
+      { route: '/training', label: '继续配置训练', shortLabel: '训练' },
+      { route: '/training/runtime', label: '继续配置训练环境', shortLabel: '训练运行时' },
+      { route: '/reverse', label: '继续提示词反推', shortLabel: '反推' },
+      { route: '/upscale', label: '继续超分放大', shortLabel: '放大' },
+      { route: '/generate', label: '继续 AI 生成', shortLabel: '生成' },
+      { route: '/console', label: '返回控制台', shortLabel: '控制台' },
+    ])
+  })
+
+  it('returns labels for newly resumable workspaces', () => {
+    expect([
+      '/booru-gallery',
+      '/workbench',
+      '/video',
+      '/image-tools',
+    ].map(getRememberedWorkspace)).toEqual([
+      { route: '/booru-gallery', label: '继续浏览在线图库', shortLabel: '在线图库' },
+      { route: '/workbench', label: '继续工作台', shortLabel: '工作台' },
+      { route: '/video', label: '继续视频工具', shortLabel: '视频工具' },
+      { route: '/image-tools', label: '继续图像工具', shortLabel: '图像工具' },
     ])
   })
 
@@ -97,6 +124,7 @@ describe('workspace history', () => {
     expect(getRememberedWorkspace(route)).toEqual({
       route: '/training',
       label: '继续配置训练',
+      shortLabel: '训练',
     })
     expect(loadLastWorkspace(createMemoryStorage('/removed-workspace'))).toBeNull()
     expect(loadLastWorkspace(createMemoryStorage())).toBeNull()
@@ -108,6 +136,21 @@ describe('workspace history', () => {
     saveLastWorkspace('/training/run', storage)
 
     expect(storage.getItem(STORAGE_KEY)).toBe('/training')
+  })
+
+  it('returns the remembered workspace as the settings return target', () => {
+    expect(getSettingsReturnTarget(createMemoryStorage('/gallery'))).toEqual({
+      route: '/gallery',
+      label: '继续整理图库',
+      shortLabel: '图库',
+    })
+    expect(getSettingsReturnTarget(createMemoryStorage('/video/extract'))).toEqual({
+      route: '/video',
+      label: '继续视频工具',
+      shortLabel: '视频工具',
+    })
+    expect(getSettingsReturnTarget(createMemoryStorage())).toBeNull()
+    expect(getSettingsReturnTarget(createMemoryStorage('/settings'))).toBeNull()
   })
 
   it('ignores storage read and write failures', () => {

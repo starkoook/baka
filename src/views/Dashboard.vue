@@ -65,6 +65,7 @@ const QUICK_TOOLS = [
   { label: '标注', route: '/tagger' },
   { label: '训练', route: '/training' },
   { label: '放大', route: '/upscale' },
+  { label: '控制台', route: '/console' },
 ]
 
 function getRegisteredRoute(route: string) {
