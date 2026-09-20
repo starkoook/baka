@@ -6,9 +6,15 @@ const path = require('path')
 const root = path.resolve(__dirname, '..')
 const release = path.join(root, 'release')
 const installer = path.join(release, 'Baka-TOOLS-Setup.exe')
+const portable = path.join(release, 'Baka-TOOLS-Portable.zip')
 if (!fs.existsSync(installer)) throw new Error(`安装包不存在：${installer}`)
 
-const sha256 = crypto.createHash('sha256').update(fs.readFileSync(installer)).digest('hex')
+function hashFile(file) {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+}
+
+const sha256 = hashFile(installer)
+const portableSha256 = fs.existsSync(portable) ? hashFile(portable) : null
 const baka = require(path.join(root, 'package.json')).version
 const componentManifestPath = path.join(root, '.cache', 'component-source', 'manifest.json')
 const componentManifest = fs.existsSync(componentManifestPath)
@@ -18,7 +24,9 @@ const trainer = componentManifest.components?.trainer?.version || 'online'
 const runtime = componentManifest.components?.['runtime-standard']?.version || 'online-managed-v1'
 const builtAt = new Date().toISOString()
 const versions = { baka, trainer, schema: trainer, runtime }
-const versionManifest = { formatVersion: 1, builtAt, versions, artifacts: { installer: { file: 'Baka-TOOLS-Setup.exe', sha256 } } }
+const artifacts = { installer: { file: 'Baka-TOOLS-Setup.exe', sha256 } }
+if (portableSha256) artifacts.portable = { file: 'Baka-TOOLS-Portable.zip', sha256: portableSha256 }
+const versionManifest = { formatVersion: 1, builtAt, versions, artifacts }
 const updateManifest = {
   formatVersion: 1,
   builtAt,
@@ -32,3 +40,7 @@ fs.writeFileSync(path.join(release, 'version-manifest.json'), JSON.stringify(ver
 fs.writeFileSync(path.join(release, 'local-update', 'manifest.json'), JSON.stringify(updateManifest, null, 2))
 fs.writeFileSync(path.join(release, 'Baka-TOOLS-Setup.exe.sha256'), `${sha256}  Baka-TOOLS-Setup.exe\n`)
 console.log(`[release] SHA-256 ${sha256}`)
+if (portableSha256) {
+  fs.writeFileSync(path.join(release, 'Baka-TOOLS-Portable.zip.sha256'), `${portableSha256}  Baka-TOOLS-Portable.zip\n`)
+  console.log(`[release] portable SHA-256 ${portableSha256}`)
+}
