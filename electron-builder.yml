@@ -22,16 +22,11 @@ extraResources:
   - from: resources/component-source.json
     to: component-source.json
 win:
-  # nsis = 安装包；zip = 免安装版（解压到任意文件夹，运行 Baka TOOLS.exe，数据放在旁边的 BakaTOOLS-data）
+  # 只出免安装版：解压到任意文件夹，运行 Baka TOOLS.exe，数据放在旁边的 BakaTOOLS-data
   target:
-    - nsis
     - zip
   icon: public/icon.png
   signAndEditExecutable: false
   artifactName: Baka-TOOLS-Portable.${ext}
-nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
-  artifactName: Baka-TOOLS-Setup.${ext}
 extraMetadata:
   name: baka-tools

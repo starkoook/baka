@@ -7,7 +7,8 @@ export function setupInteractions() {
     const target = e.target
     if (!(target instanceof Element)) return
     const clickable = target.closest('button, a, .clickable, [role="button"], .card, .nav-item, .toggle-btn')
-    if (clickable) playClick()
+    // data-no-click-sound：设置页试听按钮自己播指定那句，不要再叠一句随机的
+    if (clickable && !clickable.closest('[data-no-click-sound]')) playClick()
   })
 
   // Subtle hover sound on cards and nav items

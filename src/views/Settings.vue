@@ -5,7 +5,7 @@ import { getSettingsReturnTarget } from '@/features/navigation/workspace-history
 import { useAppStore, type ToolPosterKey } from '@/stores/app'
 import { TOOL_CATALOG } from '@/features/tools/tool-catalog'
 import { useTaggerStore } from '@/stores/tagger'
-import { setSoundEnabled } from '@/composables/useSound'
+import { SOUND_PACKS, VOICE_CLIPS, getSoundPack, previewClip, setSoundEnabled, setSoundPack, type SoundPack } from '@/composables/useSound'
 import TrainingComponentsPanel from '@/components/settings/TrainingComponentsPanel.vue'
 import SettingsCard from '@/components/settings/SettingsCard.vue'
 import SettingsRow from '@/components/settings/SettingsRow.vue'
@@ -117,6 +117,19 @@ watch(soundEnabled, (value) => {
   setSoundEnabled(value)
 })
 onMounted(() => setSoundEnabled(soundEnabled.value))
+const soundPack = ref<SoundPack>(getSoundPack())
+watch(soundPack, (value) => setSoundPack(value))
+const JP_CLIP_LABELS: Record<string, string> = {
+  'jp-hai': 'はいっ！',
+  'jp-okke': 'おっけー！',
+  'jp-pochi': 'ぽちっ',
+  'jp-un': 'うんっ！',
+  'jp-ikuyo': 'いくよー！',
+  'jp-ehehe': 'えへへ',
+  'jp-yatta': 'やったー！',
+  'jp-nyan': 'にゃん！',
+}
+const previewClips = VOICE_CLIPS.map((clip) => ({ id: clip.id, label: clip.id === 'nya' ? 'nya～' : JP_CLIP_LABELS[clip.id] ?? clip.id }))
 
 const TOOL_PREVIEWS: { key: ToolPosterKey; label: string; default: string }[] = TOOL_CATALOG
   .filter((tool) => tool.key !== 'console')
@@ -572,9 +585,19 @@ onMounted(() => {
           />
         </SettingsRow>
       </SettingsCard>
-      <SettingsCard title="操作反馈" description="二次元萌系语音（nya〜 / 笑声，CC0）">
+      <SettingsCard title="操作反馈" description="点按钮时的萌系语音：经典 nya～ 加上 8 句日语短语，随机轮播">
         <SettingsRow title="点击音效" description="开启后操作按钮会播放萌系反馈音">
           <SettingsToggle v-model="soundEnabled" />
+        </SettingsRow>
+        <SettingsRow title="音色包" :description="SOUND_PACKS.find((pack) => pack.value === soundPack)?.description || ''">
+          <div class="sk-seg">
+            <button v-for="pack in SOUND_PACKS" :key="pack.value" type="button" :class="{ on: soundPack === pack.value }" :disabled="!soundEnabled" @click="soundPack = pack.value">{{ pack.label }}</button>
+          </div>
+        </SettingsRow>
+        <SettingsRow title="试听" description="点一下听听每一句" align="start">
+          <div class="sk-chips" data-no-click-sound>
+            <button v-for="clip in previewClips" :key="clip.id" class="sk-chip" type="button" :disabled="!soundEnabled" @click="previewClip(clip.id)">{{ clip.label }}</button>
+          </div>
         </SettingsRow>
       </SettingsCard>
     </div>

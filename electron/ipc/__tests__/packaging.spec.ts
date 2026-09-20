@@ -3,10 +3,12 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 describe('private distribution packaging', () => {
-  it('keeps the installer lightweight without a public update provider', () => {
+  it('ships a portable zip only, without a public update provider', () => {
     const config = readFileSync(resolve(process.cwd(), 'electron-builder.yml'), 'utf8')
 
-    expect(config).toContain('Baka-TOOLS-Setup.${ext}')
+    expect(config).toContain('Baka-TOOLS-Portable.${ext}')
+    expect(config).toMatch(/target:\s*\n\s*- zip/)
+    expect(config).not.toContain('nsis')
     expect(config).not.toContain('.cache/trainer-core')
     expect(config).not.toContain('to: trainer-core')
     expect(config).toContain('electron/**/*.py')
@@ -19,6 +21,9 @@ describe('private distribution packaging', () => {
 
     expect(packageScript).not.toContain('prepare-trainer-core.js')
     expect(packageScript).toContain('create-release-manifest.js')
+    const manifestScript = readFileSync(resolve(process.cwd(), 'scripts/create-release-manifest.js'), 'utf8')
+    expect(manifestScript).toContain("'Baka-TOOLS-Portable.zip'")
+    expect(manifestScript).toContain('免安装包不存在')
     expect(packageScript).not.toContain("'.cmd'")
     expect(packageScript).toContain("'vite', 'bin', 'vite.js'")
     expect(existsSync(resolve(process.cwd(), 'scripts/build-local-component-source.js'))).toBe(true)
