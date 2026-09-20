@@ -207,7 +207,12 @@ async function startBatchDownload() {
     <header class="booru-header">
       <div class="booru-title">
         <span class="booru-eyebrow">BOORU COLLECTION</span>
-        <h1>素材画廊</h1>
+        <h1>素材画廊 <span class="booru-title__flower" aria-hidden="true">✿</span></h1>
+        <p>在 {{ store.sites.length || '各' }} 个图站里搜标签、收藏、批量下载</p>
+      </div>
+      <div class="booru-header__stats" aria-hidden="true">
+        <span class="sticker is-lavender"><b>{{ store.posts.length }}</b> 张结果</span>
+        <span v-if="store.favorites?.length" class="sticker is-peach"><b>{{ store.favorites.length }}</b> 收藏</span>
       </div>
     </header>
 
@@ -374,8 +379,15 @@ async function startBatchDownload() {
     </section>
 
     <div class="booru-more">
-      <p v-if="store.loading">加载中…</p>
-      <p v-else-if="store.ended">没有更多了</p>
+      <p v-if="store.loading"><span class="booru-more__spinner" aria-hidden="true"></span>加载中…</p>
+      <p v-else-if="store.ended && store.posts.length">没有更多了 ✿</p>
+    </div>
+
+    <div v-if="batchMode" class="booru-batchbar" role="toolbar" aria-label="批量操作">
+      <span class="booru-batchbar__count"><b>{{ selectedIds.size }}</b> 张已选</span>
+      <button class="booru-batchbar__primary" type="button" :disabled="selectedIds.size === 0" @click="showBatchDialog = true">批量下载</button>
+      <button type="button" :disabled="selectedIds.size === 0" @click="selectedIds.clear()">清空</button>
+      <button type="button" class="booru-batchbar__exit" @click="toggleBatchMode">退出多选</button>
     </div>
 
     <div v-if="showBatchDialog" class="booru-modal">
@@ -444,596 +456,167 @@ async function startBatchDownload() {
 </template>
 
 <style scoped>
-.booru-page {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 0;
-  padding: 16px 18px 12px;
-  gap: 10px;
-  overflow: hidden;
-  background: transparent;
-  color: var(--text-primary);
-}
+/* ── 在线画廊 · 柔粉治愈灵动版 ── */
+.booru-page { position: relative; display: flex; flex-direction: column; height: 100%; min-height: 0; padding: 12px 6px 8px 8px; gap: 12px; overflow: hidden; background: transparent; color: var(--ink-primary); }
 
-.booru-header {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 18px;
-  padding-bottom: 4px;
-}
+/* 标题区 */
+.booru-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; padding: 6px 10px 0; }
+.booru-title { display: grid; gap: 4px; }
+.booru-eyebrow { display: inline-flex; width: fit-content; padding: 4px 10px; border-radius: 999px; background: var(--accent-lavender-soft); color: var(--accent-lavender-strong); font-family: var(--font-mono); font-size: 9.5px; font-weight: 800; letter-spacing: .14em; transform: rotate(-2deg); }
+.booru-title h1 { margin: 2px 0 0; color: var(--ink-primary); font-size: 26px; font-weight: 900; letter-spacing: -0.01em; line-height: 1.1; }
+.booru-title__flower { color: var(--brand-primary); font-size: 20px; }
+.booru-title p { margin: 0; color: var(--ink-tertiary); font-size: 12.5px; }
+.booru-header__stats { display: flex; gap: 10px; align-items: center; padding-bottom: 4px; }
+.booru-header__stats .sticker { height: 32px; font-size: 12px; }
+.booru-header__stats .sticker:first-child { transform: rotate(-3deg); }
+.booru-header__stats .sticker:last-child { transform: rotate(2deg); }
+
+/* 工具栏：白卡片 + 胶囊控件 */
+.booru-add-panel, .booru-toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 0; border-radius: 26px; background: var(--surface-primary); box-shadow: var(--surface-shadow); }
 .booru-toolbar__spacer { flex: 1 1 auto; }
-.booru-toolbar-action {
-  font: inherit;
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-control);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
-}
-.booru-toolbar-action:hover,
-.booru-toolbar-action.active {
-  border-color: var(--glass-border-hover);
-  background: var(--glass-bg-hover);
-  color: var(--text-primary);
-}
+.booru-input, .booru-select { min-width: 0; height: 36px; padding: 0 14px; border: 1px solid transparent; border-radius: 999px; background: var(--surface-secondary); color: var(--ink-primary); font: inherit; font-size: 12.5px; font-weight: 600; outline: none; transition: border-color var(--transition-fast), box-shadow var(--transition-fast), background-color var(--transition-fast); }
+.booru-select { appearance: none; padding-right: 30px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ad8f9f' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; cursor: pointer; }
+.booru-input::placeholder { color: var(--ink-tertiary); font-weight: 500; }
+.booru-input:focus, .booru-select:focus { border-color: var(--brand-primary); background-color: var(--surface-primary); box-shadow: 0 0 0 4px var(--brand-soft); }
+.booru-search { flex: 1 1 240px; }
+.booru-search-wrap { position: relative; display: flex; flex: 1 1 260px; min-width: 0; align-items: center; }
+.booru-search-wrap .booru-input { padding-right: 78px; width: 100%; }
+.booru-search-submit { position: absolute; right: 4px; top: 4px; height: 28px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--brand-gradient); color: var(--brand-on-primary); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; box-shadow: 0 6px 14px rgba(var(--brand-primary-rgb), .3); transition: transform var(--transition-fast); }
+.booru-search-submit:hover { transform: translateY(-1px); }
+.booru-search-submit:active { transform: scale(.96); }
+.booru-suggestions { position: absolute; z-index: 20; top: calc(100% + 8px); left: 0; right: 0; display: grid; gap: 2px; max-height: 300px; overflow: auto; padding: 6px; border: 0; border-radius: 20px; background: var(--surface-primary); box-shadow: var(--surface-shadow-lg); }
+.booru-suggestion { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 12px; border: 0; border-radius: 12px; background: transparent; color: var(--ink-primary); font: inherit; text-align: left; cursor: pointer; }
+.booru-suggestion:hover { background: var(--brand-tint); }
+.booru-suggestion b { font-size: 12.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.booru-suggestion i { flex: none; color: var(--ink-tertiary); font: 10.5px var(--font-mono); font-style: normal; }
+.booru-add, .booru-button { height: 36px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--surface-secondary); color: var(--ink-secondary); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast); }
+.booru-add:hover, .booru-button:hover { background: var(--brand-soft); color: var(--brand-hover); }
+.booru-button:active { transform: scale(.96); }
+.booru-button:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+.booru-button--active { background: var(--brand-primary); color: var(--brand-on-primary); box-shadow: 0 8px 18px rgba(var(--brand-primary-rgb), .28); }
+.booru-button--active:hover { background: var(--brand-hover); color: #fff; }
+.booru-button--primary { background: var(--brand-gradient); color: var(--brand-on-primary); box-shadow: 0 8px 18px rgba(var(--brand-primary-rgb), .3); }
+.booru-button--primary:hover { color: #fff; }
+.booru-toolbar-action { height: 36px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-tertiary); font: inherit; font-size: 12.5px; font-weight: 700; cursor: pointer; transition: background-color var(--transition-fast), color var(--transition-fast); }
+.booru-toolbar-action:hover, .booru-toolbar-action.active { background: var(--brand-tint); color: var(--brand-hover); }
 
-.booru-hero {
-  display: grid;
-  gap: 12px;
-  padding: 4px 2px 8px;
-}
-.booru-hero__search {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
+/* 旧的英雄区 / 站点药丸 / 筛选条（模板里可能还会用到） */
+.booru-hero { display: grid; gap: 12px; padding: 4px 2px 8px; }
+.booru-hero__search { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .booru-hero__search .booru-search-wrap { width: min(720px, 100%); }
-.booru-search-submit {
-  height: 34px;
-  padding: 0 16px;
-  border: 0;
-  border-radius: 10px;
-  background: var(--gradient-accent);
-  color: var(--brand-on-primary);
-  font: inherit;
-  font-weight: 650;
-  cursor: pointer;
-}
-.booru-sites {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 7px;
-}
-.booru-site-pill {
-  padding: 6px 11px;
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  background: var(--glass-bg);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
-}
-.booru-site-pill:hover,
-.booru-site-pill.active {
-  border-color: var(--brand-primary);
-  background: color-mix(in srgb, var(--brand-primary) 16%, transparent);
-  color: var(--text-primary);
-}
-.booru-site-pill--add { color: var(--brand-primary); }
-.booru-filterbar { display: flex; align-items: center; gap: 8px; }
-.booru-chip {
-  padding: 6px 11px;
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  background: var(--glass-bg);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-.booru-chip.active { border-color: var(--brand-primary); color: var(--text-primary); }
-.booru-filters { display: flex; gap: 7px; flex-wrap: wrap; }
-.booru-fab {
-  position: fixed;
-  right: 18px;
-  bottom: 22px;
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.booru-fab__btn {
-  width: 42px;
-  height: 42px;
-  border: 1px solid var(--glass-border-hover);
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--surface-primary) 78%, transparent);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-  backdrop-filter: blur(12px);
-  box-shadow: var(--shadow-md);
-  transition: background var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
-}
-.booru-fab__btn:hover,
-.booru-fab__btn.active { background: var(--brand-primary); color: var(--brand-on-primary); transform: translateY(-1px); }
+.booru-filterbar, .booru-filters { display: flex; gap: 7px; flex-wrap: wrap; }
+.booru-chip { padding: 6px 12px; border: 0; border-radius: 999px; background: var(--brand-tint); color: var(--ink-secondary); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.booru-chip.active { background: var(--brand-primary); color: var(--brand-on-primary); }
+.booru-sites { display: flex; gap: 6px; flex-wrap: wrap; }
+.booru-site-pill { height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--surface-secondary); color: var(--ink-secondary); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.booru-site-pill:hover, .booru-site-pill.active { background: var(--brand-primary); color: var(--brand-on-primary); }
+.booru-site-pill--add { background: transparent; border: 1.5px dashed var(--line-strong); color: var(--ink-tertiary); }
+.booru-fab { position: fixed; right: 18px; bottom: 44px; z-index: 40; display: flex; flex-direction: column; gap: 8px; }
+.booru-fab__btn { width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--surface-primary); color: var(--ink-secondary); box-shadow: var(--surface-shadow); cursor: pointer; font: inherit; }
+.booru-fab__btn:hover, .booru-fab__btn.active { background: var(--brand-primary); color: var(--brand-on-primary); }
 
-.booru-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 70;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgb(0 0 0 / 58%);
-  backdrop-filter: blur(8px);
-}
-.booru-modal__card {
-  width: min(720px, 100%);
-  max-height: 88vh;
-  overflow: auto;
-  border: 1px solid var(--glass-border-hover);
-  border-radius: 20px;
-  background: var(--surface-primary);
-  box-shadow: var(--shadow-lg);
-}
-.booru-modal__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 17px 20px 15px;
-  border-bottom: 1px solid var(--line-subtle);
-}
-.booru-modal__head h2 { margin: 0; font-size: 18px; }
-.booru-modal__close {
-  width: 30px;
-  height: 30px;
-  border: 1px solid var(--glass-border);
-  border-radius: 50%;
-  background: var(--surface-secondary);
-  color: var(--text-secondary);
-  font-size: 19px;
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast);
-}
-.booru-modal__close:hover { background: var(--brand-primary); color: var(--brand-on-primary); }
-.booru-settings__section {
-  display: grid;
-  gap: 12px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--line-subtle);
-}
-.booru-settings__section h3 { margin: 0; color: var(--text-secondary); font-size: 13px; }
-.booru-settings__hint { margin: -4px 0 0; color: var(--text-tertiary); font-size: 12px; }
-.booru-settings__credentials { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.booru-site-cred {
-  display: grid;
-  gap: 10px;
-  padding: 13px;
-  border: 1px solid var(--glass-border);
-  border-radius: 13px;
-  background: var(--glass-bg);
-}
-.booru-site-cred strong { font-size: 13px; }
-.booru-field { display: grid; gap: 6px; color: var(--text-secondary); font-size: 12px; }
-.booru-field .booru-input { width: 100%; }
-.booru-modal__footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 14px 20px 18px;
-}
+/* 错误 / 相关标签 */
+.booru-error { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 4px; padding: 10px 16px; border-radius: 999px; background: var(--danger-bg); color: var(--danger-foreground); font-size: 12.5px; font-weight: 600; }
+.booru-error__retry { height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--surface-primary); color: var(--danger-foreground); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.booru-error__retry:hover { background: #fff; }
+.booru-related { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 0 8px; }
+.booru-related__label { margin-right: 4px; color: var(--ink-tertiary); font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+.booru-related__tag { height: 28px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--surface-primary); color: var(--ink-secondary); font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; box-shadow: var(--shadow-sm); transition: transform var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast); }
+.booru-related__tag i { margin-left: 4px; color: var(--ink-quaternary); font: 10px var(--font-mono); font-style: normal; }
+.booru-related__tag:hover { background: var(--brand-soft); color: var(--brand-hover); transform: translateY(-1px); }
+.booru-related__tag:nth-child(3n) { background: var(--accent-lavender-soft); }
+.booru-related__tag:nth-child(5n) { background: var(--accent-mint-soft); }
+
+/* 结果网格：圆角卡 + 悬停抬起 + 粉色选中环 */
+.booru-grid { flex: 1; min-height: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); grid-auto-rows: minmax(220px, 270px); grid-auto-flow: dense; gap: 14px; align-content: start; padding: 6px 10px 110px 6px; scrollbar-gutter: stable; }
+.booru-card { position: relative; display: block; width: 100%; height: 100%; padding: 0; border: 0; border-radius: 22px; overflow: hidden; background: var(--surface-tertiary); cursor: zoom-in; box-shadow: 0 8px 18px rgba(74,45,61,.08); transition: box-shadow .2s ease, transform .25s var(--ease-bounce); }
+.booru-card:hover { transform: translateY(-3px) scale(1.02); box-shadow: var(--surface-shadow-lg); z-index: 2; }
+.booru-card img { display: block; width: 100%; height: 100%; object-fit: cover; transition: transform .35s ease; }
+.booru-card:hover img { transform: scale(1.04); }
+.booru-card--selected { box-shadow: 0 0 0 4px var(--brand-primary), var(--surface-shadow); }
+.booru-card__overlay { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(74,45,61,.55)); opacity: 0; transition: opacity .2s ease; pointer-events: none; }
+.booru-card:hover .booru-card__overlay, .booru-card--selected .booru-card__overlay { opacity: 1; }
+.booru-card__check { position: absolute; top: 10px; left: 10px; width: 26px; height: 26px; display: grid; place-items: center; border: 2px solid rgba(255,255,255,.9); border-radius: 50%; background: rgba(74,45,61,.28); color: #fff; font-size: 13px; font-weight: 900; backdrop-filter: blur(6px); transition: transform .2s var(--ease-bounce), background-color .15s ease; }
+.booru-card__check--active { background: var(--brand-primary); border-color: #fff; transform: scale(1.08); }
+.booru-card__meta { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 6px; opacity: 0; transform: translateY(4px); transition: opacity .2s ease, transform .2s ease; }
+.booru-card:hover .booru-card__meta { opacity: 1; transform: none; }
+.booru-card__meta b { padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.92); color: var(--ink-secondary); font: 10px var(--font-mono); font-weight: 700; }
+.booru-card__meta i { padding: 3px 9px; border-radius: 999px; background: var(--brand-primary); color: #fff; font-size: 9.5px; font-weight: 800; font-style: normal; text-transform: uppercase; letter-spacing: .04em; }
+.booru-more { flex: none; display: flex; justify-content: center; min-height: 18px; }
+.booru-more p { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--ink-tertiary); font-size: 11.5px; font-weight: 600; }
+.booru-more__spinner { width: 12px; height: 12px; border: 2px solid var(--brand-soft); border-top-color: var(--brand-primary); border-radius: 50%; animation: booru-spin .8s linear infinite; }
+@keyframes booru-spin { to { transform: rotate(360deg); } }
+
+/* 多选时的深梅子悬浮操作条 */
+.booru-batchbar { position: absolute; z-index: 12; left: 50%; bottom: 40px; transform: translateX(-50%) rotate(-1deg); display: flex; align-items: center; gap: 8px; height: 56px; padding: 8px 10px 8px 18px; border-radius: 999px; background: var(--ink-primary); color: var(--surface-primary); box-shadow: 0 20px 44px rgba(74,45,61,.35); }
+.booru-batchbar__count { display: flex; align-items: baseline; gap: 5px; margin-right: 6px; color: rgba(255,255,255,.7); font-size: 11px; }
+.booru-batchbar__count b { color: var(--brand-primary); font-size: 16px; font-weight: 900; }
+.booru-batchbar button { height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: rgba(255,255,255,.1); color: #fff; font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; white-space: nowrap; transition: background-color 140ms ease, transform 160ms var(--ease-bounce); }
+.booru-batchbar button:hover:not(:disabled) { background: rgba(255,255,255,.18); }
+.booru-batchbar button:disabled { opacity: .4; cursor: not-allowed; }
+.booru-batchbar__primary { background: var(--brand-gradient) !important; box-shadow: 0 8px 20px rgba(var(--brand-primary-rgb), .35); }
+.booru-batchbar__exit { background: transparent !important; color: rgba(255,255,255,.6) !important; }
+
+/* 弹窗（设置 / 添加图站 / 批量下载） */
+.booru-modal { position: fixed; inset: 0; z-index: 70; display: grid; place-items: center; padding: 24px; background: rgba(74,45,61,.32); backdrop-filter: blur(9px); }
+.booru-modal__card { width: min(720px, 100%); max-height: 88vh; overflow: auto; border: 0; border-radius: 28px; background: var(--surface-primary); box-shadow: 0 30px 80px rgba(255,126,182,.28); color: var(--ink-primary); }
+.booru-modal__head { display: flex; align-items: center; justify-content: space-between; padding: 20px 24px 12px; }
+.booru-modal__head h2 { margin: 0; font-size: 18px; font-weight: 900; }
+.booru-modal__close { width: 32px; height: 32px; border: 0; border-radius: 50%; background: var(--surface-secondary); color: var(--ink-secondary); font-size: 18px; line-height: 1; cursor: pointer; }
+.booru-modal__close:hover { background: var(--danger-bg); color: var(--danger-foreground); }
+.booru-modal__footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 24px 22px; }
+.booru-settings__section { display: grid; gap: 12px; padding: 8px 24px 12px; }
+.booru-settings__section h3 { margin: 4px 0 0; color: var(--ink-tertiary); font-size: 11.5px; font-weight: 800; letter-spacing: .06em; }
+.booru-settings__hint { color: var(--ink-tertiary); font-size: 12px; line-height: 1.6; }
+.booru-settings__credentials { display: grid; gap: 10px; }
+.booru-field { display: grid; gap: 6px; color: var(--ink-tertiary); font-size: 11.5px; font-weight: 700; }
+.booru-field .booru-input { width: 100%; height: 38px; border-radius: 14px; }
 .booru-folder-row { display: flex; gap: 8px; }
 .booru-folder-row .booru-input { flex: 1; }
-.booru-progress { margin: 0; color: var(--text-secondary); font-size: 12px; }
+.booru-site-cred { display: grid; grid-template-columns: 96px 1fr 1fr; gap: 10px; align-items: end; padding: 12px 14px; border-radius: 18px; background: var(--surface-secondary); }
+.booru-site-cred strong { padding-bottom: 10px; font-size: 13px; font-weight: 900; }
+.booru-site-cred .booru-input { background: var(--surface-primary); }
+.booru-credentials { display: grid; gap: 10px; }
+.booru-credentials h2 { margin: 0; font-size: 15px; font-weight: 900; }
+.booru-credentials p { margin: 0; color: var(--ink-tertiary); font-size: 12px; }
+.booru-credential { display: grid; gap: 6px; }
+.booru-credential > span { color: var(--ink-tertiary); font-size: 11.5px; font-weight: 700; }
+.booru-progress { margin: 0; padding: 8px 12px; border-radius: 999px; background: var(--brand-tint); color: var(--brand-hover); font: 12px var(--font-mono); font-weight: 700; }
 
-.booru-title h1 {
-  margin: 0;
-  color: var(--ink-primary);
-  font-size: 22px;
-  font-weight: 900;
-  letter-spacing: -0.01em;
-}
-.booru-eyebrow {
-  display: inline-flex;
-  width: fit-content;
-  margin-bottom: 2px;
-  padding: 3px 9px;
-  border: 0;
-  border-radius: 999px;
-  background: var(--brand-soft);
-  color: var(--brand-hover);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: .14em;
-}
-.booru-title p { margin: 4px 0 0; color: var(--text-secondary); font-size: 13px; }
+/* 详情面板 */
+.booru-detail { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 28px; background: rgba(74,45,61,.4); backdrop-filter: blur(10px); }
+.booru-detail__panel { position: relative; display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, .65fr); grid-template-rows: minmax(0, 1fr); width: min(1060px, 100%); max-height: 90vh; overflow: hidden; border: 0; border-radius: 30px; background: var(--surface-primary); color: var(--ink-primary); box-shadow: 0 30px 80px rgba(74,45,61,.35); }
+.booru-detail__close { position: absolute; z-index: 3; top: 14px; right: 14px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--surface-primary); color: var(--ink-secondary); box-shadow: var(--surface-shadow); font-size: 20px; line-height: 1; cursor: pointer; }
+.booru-detail__close:hover { background: var(--danger-bg); color: var(--danger-foreground); }
+.booru-detail__image { position: relative; min-height: 0; display: grid; place-items: center; padding: 22px; background: var(--surface-secondary); background-image: radial-gradient(var(--line-strong) 1px, transparent 1.2px); background-size: 22px 22px; }
+.booru-detail__image img { max-width: 100%; max-height: calc(90vh - 44px); object-fit: contain; border-radius: 18px; box-shadow: var(--ink-shadow); }
+.booru-detail__body { display: flex; flex-direction: column; gap: 14px; padding: 24px 22px 20px; overflow: auto; scrollbar-width: thin; }
+.booru-detail__body h2 { margin: 0; padding-right: 40px; font-size: 20px; font-weight: 900; color: var(--ink-primary); }
+.booru-meta { display: flex; flex-wrap: wrap; gap: 6px 8px; color: var(--ink-secondary); font-size: 12px; }
+.booru-meta > span, .booru-meta a { display: inline-flex; align-items: center; gap: 4px; padding: 5px 11px; border-radius: 999px; background: var(--surface-secondary); font-weight: 600; }
+.booru-meta a { color: var(--brand-hover); text-decoration: none; }
+.booru-meta a:hover { background: var(--brand-soft); }
+.booru-meta__author { background: var(--accent-lavender-soft) !important; }
+.booru-author, .booru-author-copy { border: 0; background: transparent; color: var(--accent-lavender-strong); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; padding: 0 2px; }
+.booru-author:hover { text-decoration: underline; }
+.booru-author-copy { color: var(--ink-tertiary); font-weight: 600; }
+.booru-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.booru-tag { padding: 5px 11px; border-radius: 999px; background: var(--brand-tint); color: var(--ink-secondary); font-size: 11.5px; font-weight: 700; cursor: default; }
+.booru-tag:nth-child(3n) { background: var(--accent-lavender-soft); }
+.booru-tag:nth-child(5n) { background: var(--accent-mint-soft); }
+.booru-tag:hover { background: var(--brand-soft); color: var(--brand-hover); }
+.booru-prompt { margin: 0; padding: 10px 12px; border-radius: 14px; background: var(--surface-secondary); color: var(--ink-secondary); font-size: 11.5px; line-height: 1.6; }
+.booru-detail__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 8px; }
 
-.booru-add,
-.booru-button {
-  font: inherit;
-  border: 1px solid var(--glass-border);
-  cursor: pointer;
-  border-radius: var(--radius-control);
-  background: color-mix(in srgb, var(--surface-secondary) 78%, transparent);
-  color: var(--text-primary);
-  padding: 9px 15px;
-  backdrop-filter: blur(14px);
-  transition: border-color var(--transition-fast), background-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+@media (max-width: 1100px) { .booru-header__stats { display: none; } }
+@media (max-width: 900px) {
+  .booru-detail__panel { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1.2fr) minmax(0, .8fr); }
+  .booru-site-cred { grid-template-columns: 1fr; }
 }
-.booru-add:hover,
-.booru-button:hover {
-  border-color: var(--glass-border-hover);
-  background: var(--glass-bg-hover);
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-sm);
+@media (prefers-reduced-motion: reduce) {
+  .booru-card, .booru-card img, .booru-related__tag, .booru-button, .booru-search-submit { transition: none; }
+  .booru-card:hover { transform: none; }
+  .booru-card:hover img { transform: none; }
+  .booru-more__spinner { animation-duration: 1.8s; }
 }
-.booru-button--primary {
-  border-color: transparent;
-  background: var(--gradient-accent);
-  color: var(--brand-on-primary);
-  font-weight: 650;
-}
-.booru-button--primary:hover { background: var(--brand-hover); }
-.booru-button--active {
-  border-color: var(--brand-primary);
-  background: color-mix(in srgb, var(--brand-primary) 18%, transparent);
-  color: var(--text-primary);
-}
-
-.booru-add-panel,
-.booru-toolbar {
-  display: flex;
-  gap: 9px;
-  flex-wrap: wrap;
-  padding: 8px 10px;
-  border: 0;
-  border-radius: var(--radius-panel);
-  background: var(--surface-primary);
-  box-shadow: var(--surface-shadow);
-}
-
-.booru-credentials {
-  display: grid;
-  gap: 10px;
-  padding: 14px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-panel);
-  background: color-mix(in srgb, var(--surface-primary) 74%, transparent);
-  backdrop-filter: blur(18px);
-  box-shadow: var(--shadow-sm);
-}
-.booru-credentials h2 { margin: 0; font-size: 15px; }
-.booru-credentials p { margin: 0; color: var(--text-secondary); font-size: 12px; }
-.booru-credential { display: grid; grid-template-columns: 110px 1fr 1fr; gap: 8px; align-items: center; }
-.booru-credential > span { color: var(--text-secondary); font-size: 13px; }
-
-.booru-input,
-.booru-select {
-  min-width: 0;
-  height: 34px;
-  padding: 0 12px;
-  border: 1px solid var(--line-subtle);
-  border-radius: var(--radius-control);
-  background: var(--surface-secondary);
-  color: var(--text-primary);
-  font: inherit;
-  outline: none;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-}
-.booru-input:focus,
-.booru-select:focus {
-  border-color: var(--brand-primary);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand-primary) 18%, transparent);
-}
-.booru-search { flex: 1 1 240px; }
-.booru-search-wrap { position: relative; display: flex; flex: 1 1 240px; min-width: 0; }
-.booru-suggestions {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 6px);
-  left: 0;
-  right: 0;
-  display: grid;
-  gap: 2px;
-  max-height: 300px;
-  overflow: auto;
-  padding: 6px;
-  border: 1px solid var(--glass-border-hover);
-  border-radius: 12px;
-  background: var(--surface-primary);
-  box-shadow: var(--shadow-lg);
-}
-.booru-suggestion {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 9px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--text-primary);
-  font: inherit;
-  cursor: pointer;
-  text-align: left;
-}
-.booru-suggestion:hover { background: var(--glass-bg-hover); }
-.booru-suggestion b { font-weight: 620; }
-.booru-suggestion i { color: var(--text-tertiary); font-style: normal; font-size: 11px; }
-
-.booru-related {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 7px;
-  padding: 10px;
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-panel);
-  background: color-mix(in srgb, var(--surface-primary) 70%, transparent);
-  backdrop-filter: blur(18px);
-}
-.booru-related__label { color: var(--text-secondary); font-size: 12px; }
-.booru-related__tag {
-  padding: 4px 9px;
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  background: var(--glass-bg);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
-}
-.booru-related__tag:hover { background: var(--glass-bg-hover); color: var(--text-primary); border-color: var(--glass-border-hover); }
-.booru-related__tag i { margin-left: 4px; color: var(--text-tertiary); font-style: normal; }
-
-.booru-error {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  justify-content: space-between;
-  margin: 0;
-  padding: 9px 12px;
-  border: 1px solid rgba(248, 113, 113, .28);
-  border-radius: var(--radius-control);
-  background: var(--danger-bg);
-  color: var(--danger-foreground);
-  font-size: 13px;
-}
-.booru-error__retry {
-  flex: none;
-  padding: 5px 10px;
-  border: 1px solid rgba(248, 113, 113, .3);
-  border-radius: 7px;
-  background: transparent;
-  color: var(--danger-foreground);
-  font: inherit;
-  cursor: pointer;
-}
-.booru-error__retry:hover { background: rgba(248, 113, 113, .12); }
-
-.booru-grid {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-  grid-auto-rows: minmax(220px, 270px);
-  grid-auto-flow: dense;
-  gap: 12px;
-  align-content: start;
-  padding: 2px;
-}
-
-.booru-card {
-  position: relative;
-  display: block;
-  width: 100%;
-  height: 100%;
-  padding: 0;
-  border: 1px solid var(--glass-border);
-  border-radius: 14px;
-  overflow: hidden;
-  background: var(--surface-secondary);
-  cursor: zoom-in;
-  box-shadow: var(--shadow-sm);
-  transition: border-color var(--transition-base), box-shadow var(--transition-base), transform var(--transition-base);
-}
-.booru-card:hover {
-  border-color: var(--brand-primary);
-  transform: translateY(-2px);
-  box-shadow: var(--shadow-lg), 0 0 0 2px color-mix(in srgb, var(--brand-primary) 20%, transparent);
-}
-.booru-card img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-  transition: transform var(--transition-slow);
-}
-.booru-card:hover img { transform: scale(1.06); }
-.booru-card__overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, transparent 48%, rgb(0 0 0 / 72%) 100%);
-  opacity: .85;
-  pointer-events: none;
-}
-.booru-card__meta {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  bottom: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  color: #fff;
-  font-size: 11px;
-  text-shadow: 0 1px 2px rgb(0 0 0 / 65%);
-}
-.booru-card__meta b { font-weight: 650; }
-.booru-card__meta i {
-  padding: 2px 7px;
-  border: 1px solid rgb(255 255 255 / 22%);
-  border-radius: 999px;
-  background: rgb(255 255 255 / 10%);
-  font-style: normal;
-  text-transform: capitalize;
-  backdrop-filter: blur(8px);
-}
-.booru-card__check {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border: 1px solid rgb(255 255 255 / 42%);
-  border-radius: 7px;
-  background: rgb(0 0 0 / 48%);
-  color: #fff;
-  font-size: 14px;
-  backdrop-filter: blur(8px);
-}
-.booru-card__check--active {
-  border-color: var(--brand-primary);
-  background: var(--brand-primary);
-}
-.booru-card--selected { border-color: var(--brand-primary); }
-
-.booru-more {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 22px;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.booru-detail {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  display: grid;
-  place-items: center;
-  padding: 28px;
-  background: rgb(0 0 0 / 62%);
-  backdrop-filter: blur(8px);
-}
-.booru-detail__panel {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(280px, .65fr);
-  grid-template-rows: minmax(0, 1fr);
-  width: min(1000px, 100%);
-  max-height: 90vh;
-  overflow: hidden;
-  border: 1px solid var(--glass-border-hover);
-  border-radius: 20px;
-  background: var(--surface-primary);
-  color: var(--text-primary);
-  box-shadow: var(--shadow-lg);
-}
-.booru-detail__close {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  z-index: 2;
-  width: 34px;
-  height: 34px;
-  border: 1px solid rgb(255 255 255 / 18%);
-  border-radius: 50%;
-  background: rgb(0 0 0 / 55%);
-  color: #fff;
-  font-size: 22px;
-  cursor: pointer;
-  backdrop-filter: blur(8px);
-  transition: background var(--transition-fast), transform var(--transition-fast);
-}
-.booru-detail__close:hover { background: var(--brand-primary); transform: rotate(90deg); }
-.booru-detail__image {
-  min-height: 0;
-  display: grid;
-  place-items: center;
-  background:
-    radial-gradient(800px 320px at 50% 0%, color-mix(in srgb, var(--brand-primary) 10%, transparent), transparent 60%),
-    #000;
-}
-.booru-detail__image img { max-width: 100%; max-height: 88vh; object-fit: contain; }
-.booru-detail__body {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 24px;
-  overflow: auto;
-  min-width: 0;
-  min-height: 0;
-}
-.booru-detail__body h2 { margin: 0; font-size: 20px; }
-.booru-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 12px;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-.booru-meta a { color: var(--brand-primary); }
-.booru-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 7px;
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow: auto;
-  align-content: flex-start;
-}
-.booru-tag {
-  max-width: 100%;
-  padding: 4px 9px;
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  background: var(--glass-bg);
-  color: var(--text-secondary);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-  white-space: normal;
-  transition: background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
-}
-.booru-tag:hover { background: var(--glass-bg-hover); color: var(--text-primary); border-color: var(--glass-border-hover); }
-.booru-prompt {
-  width: 100%;
-  min-height: 96px;
-  resize: vertical;
-  padding: 11px;
-  border: 1px solid var(--line-subtle);
-  border-radius: 12px;
-  background: var(--surface-secondary);
-  color: var(--text-primary);
-  font: inherit;
-}
-.booru-detail__actions {
-  position: sticky;
-  bottom: 0;
-  display: flex;
-  gap: 9px;
-  padding: 10px 0 0;
-  background: var(--surface-primary);
-}
-.booru-meta__author { display: inline-flex; align-items: center; gap: 6px; }.booru-author { padding: 0; border: 0; background: transparent; color: var(--brand-primary); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }.booru-author:hover { color: var(--brand-hover); }.booru-author-copy { padding: 1px 6px; border: 1px solid var(--glass-border); border-radius: 6px; background: var(--glass-bg); color: var(--text-tertiary); font: inherit; font-size: 10px; cursor: pointer; }.booru-author-copy:hover { color: var(--text-primary); border-color: var(--glass-border-hover); }
 </style>
