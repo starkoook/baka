@@ -58,6 +58,21 @@ describe('annotation workspace UI', () => {
     expect(queue).not.toContain('<strong>队列是空的</strong>')
   })
 
+  it('borrows the workbench behaviours: drag-drop intake, shortcuts, panning, presets, compare, live caption', () => {
+    expect(page).toContain('@drop.prevent="onDrop"')
+    expect(page).toContain('inspectDroppedPaths(paths)')
+    expect(page).toContain("window.addEventListener('keydown', onShortcut)")
+    expect(page).toContain("case 'ArrowLeft'")
+    expect(page).toContain('@pointerdown="onPanStart"')
+    expect(page).toContain('@dblclick="zoomFit"')
+    expect(page).toContain('taggerStore.savePreset(name)')
+    expect(page).toContain('class="preset-menu"')
+    expect(editor).toContain('historyByPath')
+    expect(editor).toContain('按住看保存前')
+    expect(editor).toContain('serializeWeightedCaption(localTags.value)')
+    expect(editor).toContain('function clearAll()')
+  })
+
   it('keeps the primary empty state in the preview only', () => {
     expect(page).toContain('先准备一批图片吧')
     expect(editor).not.toContain('<strong>选择一张图片开始</strong>')

@@ -2,6 +2,14 @@ import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
 import type { GalleryHandoff, GalleryReturnContext } from '@/features/gallery/gallery-workflow'
 import { compiledPrompt, loadLlmPromptState } from '@/components/tagger/llm-prompt-state'
+import {
+  deleteTaggerPreset,
+  loadTaggerPresets,
+  matchesPreset,
+  saveTaggerPreset,
+  type TaggerPreset,
+  type TaggerPresetInput,
+} from '@/features/tagger/presets'
 import { toIpcPayload } from '@/lib/ipc-payload'
 import { useGalleryStore } from './gallery'
 
@@ -591,7 +599,58 @@ export const useTaggerStore = defineStore('tagger', () => {
     currentIndex.value = previous
   }
 
+  // ── 标注预设：一组参数存个名字，一键套用 ──
+  const presets = ref<TaggerPreset[]>([])
+  const presetInput = computed<TaggerPresetInput>(() => ({
+    tagSource: tagSource.value,
+    modelPath: activeModelPath.value,
+    threshold: threshold.value,
+    characterThreshold: characterThreshold.value,
+    addCharacter: addCharacter.value,
+    addCopyright: addCopyright.value,
+    replaceUnderscores: replaceUnderscores.value,
+  }))
+  const activePresetId = computed(() => presets.value.find((preset) => matchesPreset(preset, presetInput.value))?.id ?? null)
+
+  function presetStorage() {
+    return typeof localStorage === 'undefined' ? null : localStorage
+  }
+
+  function loadPresets() {
+    const storage = presetStorage()
+    if (storage) presets.value = loadTaggerPresets(storage)
+  }
+
+  function savePreset(name: string) {
+    const storage = presetStorage()
+    if (!storage) return
+    presets.value = saveTaggerPreset(storage, name, presetInput.value)
+  }
+
+  function deletePreset(id: string) {
+    const storage = presetStorage()
+    if (!storage) return
+    presets.value = deleteTaggerPreset(storage, id)
+  }
+
+  function applyPreset(id: string): TaggerPreset | null {
+    const preset = presets.value.find((item) => item.id === id)
+    if (!preset) return null
+    tagSource.value = preset.tagSource
+    // 预设里的模型可能已经删掉了，那就保留当前模型
+    if (preset.modelPath && models.value.some((model) => model.path === preset.modelPath)) activeModelPath.value = preset.modelPath
+    threshold.value = preset.threshold
+    characterThreshold.value = preset.characterThreshold
+    addCharacter.value = preset.addCharacter
+    addCopyright.value = preset.addCopyright
+    replaceUnderscores.value = preset.replaceUnderscores
+    persistSession()
+    void persistTaggingSettings()
+    return preset
+  }
+
   return {
+    presets, activePresetId, loadPresets, savePreset, deletePreset, applyPreset,
     phase, queue, currentIndex, returnContext,
     models, activeModelPath, tagSource, threshold, characterThreshold, addCharacter, addCopyright,
     replaceUnderscores, autoSaveAfterTagging, scope, conflict, providers,

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import TagQueue from '@/components/tagger/TagQueue.vue'
 import TagEditor from '@/components/tagger/TagEditor.vue'
@@ -245,9 +245,100 @@ function returnToGallery() {
 
 watch(() => taggerStore.currentItem?.path, loadPreview, { immediate: true })
 
+// ── 拖拽加入队列：图片直接加，文件夹展开里面的图片 ──
+const isDragOver = ref(false)
+let dragDepth = 0
+function onDragEnter() { dragDepth++; isDragOver.value = true }
+function onDragLeave() { dragDepth = Math.max(0, dragDepth - 1); isDragOver.value = dragDepth > 0 }
+async function onDrop(event: DragEvent) {
+  dragDepth = 0
+  isDragOver.value = false
+  if (!window.galleryAPI?.inspectDroppedPaths || !window.fsAPI) return
+  const paths = Array.from(event.dataTransfer?.files ?? []).map((file) => window.galleryAPI.getFilePath(file)).filter(Boolean)
+  if (!paths.length) return
+  const inspected = await window.galleryAPI.inspectDroppedPaths(paths)
+  if (!inspected.success || !inspected.data) {
+    appStore.setError(inspected.error || '无法读取拖入内容')
+    return
+  }
+  const collected = [...inspected.data.imagePaths]
+  for (const folder of inspected.data.folderPaths) {
+    const files = await window.fsAPI.listImages(folder)
+    collected.push(...files.map((file) => file.path))
+  }
+  const before = taggerStore.queue.length
+  taggerStore.appendPaths(collected)
+  const added = taggerStore.queue.length - before
+  appStore.setStatus(added > 0 ? `已加入 ${added} 张到标注队列` : '拖入的图片都已经在队列里了')
+}
+
+// ── 画布拖动平移（放大后按住拖） ──
+const panning = ref(false)
+let panStart = { x: 0, y: 0, left: 0, top: 0 }
+function onPanStart(event: PointerEvent) {
+  const el = previewRef.value
+  if (!el || event.button !== 0) return
+  if (el.scrollWidth <= el.clientWidth && el.scrollHeight <= el.clientHeight) return
+  panning.value = true
+  panStart = { x: event.clientX, y: event.clientY, left: el.scrollLeft, top: el.scrollTop }
+  el.setPointerCapture?.(event.pointerId)
+}
+function onPanMove(event: PointerEvent) {
+  if (!panning.value || !previewRef.value) return
+  previewRef.value.scrollLeft = panStart.left - (event.clientX - panStart.x)
+  previewRef.value.scrollTop = panStart.top - (event.clientY - panStart.y)
+}
+function onPanEnd() { panning.value = false }
+
+// ── 快捷键：← → 切换，空格保存并下一张，Delete 移出队列，+ / - / 0 缩放 ──
+const anyDialogOpen = computed(() => settingsVisible.value || showTaggingDialog.value || showPromptDialog.value || showBatchToolsDialog.value || showVideoDialog.value)
+function isTypingTarget(target: EventTarget | null) {
+  const el = target as HTMLElement | null
+  if (!el) return false
+  return el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable
+}
+function onShortcut(event: KeyboardEvent) {
+  if (anyDialogOpen.value || isTypingTarget(event.target) || event.ctrlKey || event.metaKey || event.altKey) return
+  switch (event.key) {
+    case 'ArrowLeft': event.preventDefault(); previousImage(); break
+    case 'ArrowRight': event.preventDefault(); nextImage(); break
+    case ' ': {
+      // 焦点在按钮上时空格是"点按钮"，不抢
+      const tag = (event.target as HTMLElement | null)?.tagName
+      if (tag === 'BUTTON' || tag === 'A') break
+      if (taggerStore.currentItem && !saving.value) { event.preventDefault(); void saveAndNext() }
+      break
+    }
+    case 'Delete': if (taggerStore.currentItem) { event.preventDefault(); removeSelected() } break
+    case '+': case '=': event.preventDefault(); zoomIn(); break
+    case '-': event.preventDefault(); zoomOut(); break
+    case '0': event.preventDefault(); zoomFit(); break
+  }
+}
+
+// ── 标注预设 ──
+const showPresetMenu = ref(false)
+const presetName = ref('')
+function savePreset() {
+  const name = presetName.value.trim()
+  if (!name) return
+  taggerStore.savePreset(name)
+  presetName.value = ''
+  appStore.setStatus(`已保存预设「${name}」`)
+}
+function applyPreset(id: string) {
+  const applied = taggerStore.applyPreset(id)
+  if (applied) appStore.setStatus(`已套用预设「${applied.name}」`)
+  showPresetMenu.value = false
+}
+function onPresetMenuKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') { event.stopPropagation(); showPresetMenu.value = false }
+}
+
 onMounted(async () => {
   taggerStore.restoreSession()
   taggerStore.setupProgressListener()
+  taggerStore.loadPresets()
   await taggerStore.loadModels()
   await loadPreview()
   const el = previewRef.value
@@ -255,11 +346,22 @@ onMounted(async () => {
     const observer = new ResizeObserver(() => recomputeFit())
     observer.observe(el)
   }
+  window.addEventListener('keydown', onShortcut)
 })
+onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
 </script>
 
 <template>
-  <main class="tagger-page">
+  <main
+    class="tagger-page"
+    @dragenter.prevent="onDragEnter"
+    @dragover.prevent
+    @dragleave.prevent="onDragLeave"
+    @drop.prevent="onDrop"
+  >
+    <div v-if="isDragOver" class="tagger-drop" aria-hidden="true">
+      <div><strong>松开，加入标注队列</strong><span>图片直接加入 · 文件夹会展开里面的全部图片</span></div>
+    </div>
     <section class="tagger-layout">
       <TagQueue
         :queue="taggerStore.queue"
@@ -287,7 +389,18 @@ onMounted(async () => {
           </div>
         </div>
 
-        <div class="tagger-preview" ref="previewRef" @wheel="onPreviewWheel" @contextmenu.prevent="openPreviewMenu">
+        <div
+          class="tagger-preview"
+          :class="{ 'is-pannable': zoom > 1, 'is-panning': panning }"
+          ref="previewRef"
+          @wheel="onPreviewWheel"
+          @contextmenu.prevent="openPreviewMenu"
+          @pointerdown="onPanStart"
+          @pointermove="onPanMove"
+          @pointerup="onPanEnd"
+          @pointercancel="onPanEnd"
+          @dblclick="zoomFit"
+        >
           <div class="preview-canvas" :style="{ width: canvasW ? `${canvasW}px` : '100%', height: canvasH ? `${canvasH}px` : '100%' }">
             <img
               v-if="previewSrc"
@@ -433,6 +546,43 @@ onMounted(async () => {
           <span class="dock-tile__label">批量</span>
         </button>
 
+        <div class="dock-preset">
+          <button
+            type="button"
+            class="dock-tile"
+            :class="{ 'is-open': showPresetMenu }"
+            aria-label="预设"
+            :aria-expanded="showPresetMenu"
+            @click="showPresetMenu = !showPresetMenu"
+          >
+            <span class="dock-tile__icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M5 4.5h14v4H5z" />
+                <path d="M7 12.5h10M7 16.5h6" />
+                <path d="M5 8.5v11h14v-11" />
+              </svg>
+            </span>
+            <span class="dock-tile__label">预设{{ taggerStore.presets.length ? ` ${taggerStore.presets.length}` : '' }}</span>
+          </button>
+          <div v-if="showPresetMenu" class="preset-menu" role="dialog" aria-label="标注预设" @keydown="onPresetMenuKeydown">
+            <header><strong>标注预设</strong><small>引擎 · 模型 · 阈值 · 选项</small></header>
+            <ul v-if="taggerStore.presets.length" class="preset-menu__list">
+              <li v-for="preset in taggerStore.presets" :key="preset.id" :class="{ 'is-active': taggerStore.activePresetId === preset.id }">
+                <button type="button" class="preset-menu__apply" @click="applyPreset(preset.id)">
+                  <b>{{ preset.name }}</b>
+                  <span>{{ { local: 'WD14', llm: 'LLM', combined: '混合' }[preset.tagSource] }} · 阈值 {{ preset.threshold.toFixed(2) }} / {{ preset.characterThreshold.toFixed(2) }}</span>
+                </button>
+                <button type="button" class="preset-menu__delete" :aria-label="`删除预设 ${preset.name}`" @click="taggerStore.deletePreset(preset.id)">×</button>
+              </li>
+            </ul>
+            <p v-else class="preset-menu__empty">还没有预设。把当前参数存一个，下次一键套用。</p>
+            <form class="preset-menu__save" @submit.prevent="savePreset">
+              <input v-model="presetName" maxlength="50" placeholder="给当前参数起个名字" aria-label="预设名称" />
+              <button type="submit" :disabled="!presetName.trim()">存为预设</button>
+            </form>
+          </div>
+        </div>
+
         <button
           v-if="taggerStore.returnContext"
           type="button"
@@ -474,7 +624,12 @@ onMounted(async () => {
             <span>{{ taggerStore.lastError }}</span>
             <button type="button" class="run-error__console" @click="router.push('/console')">打开控制台</button>
           </div>
-          <div v-else class="run-summary"><span>模型：{{ taggerStore.models.find((model) => model.path === taggerStore.activeModelPath)?.name || '未选择' }}</span><span>阈值 {{ taggerStore.threshold.toFixed(2) }}</span><span>{{ taggerStore.providers.join(' / ') || '等待设备信息' }}</span></div>
+          <div v-else class="run-summary">
+            <span>模型：{{ taggerStore.models.find((model) => model.path === taggerStore.activeModelPath)?.name || '未选择' }}</span>
+            <span>阈值 {{ taggerStore.threshold.toFixed(2) }}</span>
+            <span>{{ taggerStore.providers.join(' / ') || '等待设备信息' }}</span>
+            <span class="run-summary__keys"><kbd>←</kbd><kbd>→</kbd> 切换 · <kbd>空格</kbd> 保存并下一张 · <kbd>Del</kbd> 移出队列 · <kbd>Ctrl</kbd>+滚轮 / <kbd>+</kbd><kbd>-</kbd> 缩放 · 拖动平移 · 双击适应</span>
+          </div>
         </div>
       </div>
 
@@ -556,7 +711,36 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.tagger-page { height: 100%; min-height: 0; display: flex; flex-direction: column; padding: 4px 4px 8px 6px; color: var(--ink-primary); overflow: hidden; }
+.tagger-page { position: relative; height: 100%; min-height: 0; display: flex; flex-direction: column; padding: 4px 4px 8px 6px; color: var(--ink-primary); overflow: hidden; }
+.tagger-drop { position: absolute; inset: 0; z-index: 80; display: grid; place-items: center; pointer-events: none; border-radius: var(--radius-hero); outline: 3px dashed var(--brand-primary); outline-offset: -12px; background: rgba(255, 242, 248, .82); backdrop-filter: blur(10px); }
+.tagger-drop div { display: grid; gap: 7px; padding: 22px 30px; color: var(--ink-tertiary); text-align: center; }
+.tagger-drop strong { color: var(--brand-hover); font-size: 18px; font-weight: 900; }
+.tagger-drop span { font-size: 12px; }
+.tagger-preview.is-pannable { cursor: grab; }
+.tagger-preview.is-panning { cursor: grabbing; user-select: none; }
+.run-summary__keys { margin-left: auto; color: var(--ink-quaternary); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.run-summary__keys::before { content: none !important; }
+.run-summary kbd { display: inline-block; min-width: 16px; padding: 0 4px; margin: 0 1px; border-radius: 5px; background: var(--surface-primary); box-shadow: 0 1px 0 var(--line-strong); color: var(--ink-tertiary); font: 9.5px var(--font-mono); text-align: center; }
+.dock-preset { position: relative; }
+.preset-menu { position: absolute; z-index: 20; left: 50%; bottom: calc(100% + 14px); transform: translateX(-50%); width: 300px; padding: 14px 14px 12px; border-radius: 22px; background: var(--surface-primary); box-shadow: var(--surface-shadow-lg); text-align: left; }
+.preset-menu header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.preset-menu header strong { font-size: 13.5px; font-weight: 900; color: var(--ink-primary); }
+.preset-menu header small { color: var(--ink-tertiary); font-size: 10.5px; }
+.preset-menu__list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; max-height: 220px; overflow: auto; scrollbar-width: thin; }
+.preset-menu__list li { display: flex; align-items: center; gap: 4px; border-radius: 14px; }
+.preset-menu__list li.is-active { background: var(--brand-tint); }
+.preset-menu__apply { flex: 1; min-width: 0; display: grid; gap: 2px; padding: 8px 10px; border: 0; border-radius: 14px; background: transparent; color: var(--ink-primary); font: inherit; text-align: left; cursor: pointer; }
+.preset-menu__apply:hover { background: var(--brand-soft); }
+.preset-menu__apply b { font-size: 12.5px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preset-menu__apply span { color: var(--ink-tertiary); font: 10.5px var(--font-mono); }
+.preset-menu__delete { width: 26px; height: 26px; flex: none; border: 0; border-radius: 50%; background: transparent; color: var(--ink-quaternary); font-size: 15px; cursor: pointer; }
+.preset-menu__delete:hover { background: var(--danger-bg); color: var(--danger-foreground); }
+.preset-menu__empty { margin: 0 0 10px; padding: 8px 10px; border-radius: 14px; background: var(--surface-secondary); color: var(--ink-tertiary); font-size: 11.5px; line-height: 1.6; }
+.preset-menu__save { display: flex; gap: 6px; }
+.preset-menu__save input { flex: 1; min-width: 0; height: 34px; padding: 0 12px; border: 1px solid var(--line-subtle); border-radius: 999px; background: var(--surface-primary); color: var(--ink-primary); font: inherit; font-size: 12px; outline: none; }
+.preset-menu__save input:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 4px var(--brand-soft); }
+.preset-menu__save button { height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: var(--brand-primary); color: var(--brand-on-primary); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
+.preset-menu__save button:disabled { opacity: .4; cursor: not-allowed; }
 .tagger-layout { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; gap: 14px; overflow: hidden; }
 .tagger-workspace { position: relative; flex: 1; min-width: 320px; min-height: 0; display: flex; flex-direction: column; }
 

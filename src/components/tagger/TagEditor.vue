@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { diffTags, serializeWeightedCaption } from '@/features/tagger/caption'
 import type { TagQueueItem, TagResult } from '@/stores/tagger'
 
 const props = defineProps<{ item: TagQueueItem | null; affectedCount?: number; saving?: boolean }>()
@@ -15,8 +16,53 @@ const showChinese = ref(false)
 const translations = ref<Map<string, string>>(new Map())
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 
+/** 每张图独立保留撤销/重做记录（会话内），切走再切回来还能继续撤销 */
+const historyByPath = new Map<string, { undo: TagResult[][]; redo: TagResult[][] }>()
+let historyPath = ''
+function stashHistory() {
+  if (historyPath) historyByPath.set(historyPath, { undo: undoStack.value, redo: redoStack.value })
+}
+function restoreHistory(path: string) {
+  const saved = historyByPath.get(path)
+  undoStack.value = saved?.undo ?? []
+  redoStack.value = saved?.redo ?? []
+  historyPath = path
+}
+
+/** "保存前"的快照：切到这张图或它刚保存成功时记一次，供按住对比 */
+const baseline = ref<TagResult[]>([])
+const comparing = ref(false)
+const diff = computed(() => diffTags(baseline.value, localTags.value))
+const isDirty = computed(() => diff.value.added.length > 0 || diff.value.removed.length > 0 || localTags.value.some((tag) => {
+  const before = baseline.value.find((entry) => entry.tag === tag.tag)
+  return before && (before.weight ?? 1) !== (tag.weight ?? 1)
+}))
+function snapshotBaseline() {
+  baseline.value = (props.item?.tags ?? []).map((tag) => ({ ...tag }))
+}
+
+/** 实时 caption 预览：最终写进 .txt 的那一行 */
+const captionPreview = computed(() => serializeWeightedCaption(localTags.value))
+const showCaption = ref(false)
+const copied = ref(false)
+async function copyCaption() {
+  if (!captionPreview.value) return
+  try {
+    await navigator.clipboard?.writeText(captionPreview.value)
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 1400)
+  } catch { /* 剪贴板不可用时静默 */ }
+}
+
 watch(() => props.item, (item) => { localTags.value = item?.tags.map((tag) => ({ ...tag })) ?? [] }, { immediate: true, deep: true })
-watch(() => props.item?.path, () => { undoStack.value = []; redoStack.value = [] })
+watch(() => props.item?.path, (path) => {
+  stashHistory()
+  restoreHistory(path ?? '')
+  snapshotBaseline()
+  comparing.value = false
+}, { immediate: true })
+// 保存成功后 status 变成 reviewed，此时"保存前"就是现在
+watch(() => props.item?.status, (status) => { if (status === 'reviewed') snapshotBaseline() })
 watch(() => props.item?.tags, async (tags) => {
   translations.value = new Map()
   const names = [...new Set((tags ?? []).map((tag) => tag.tag))]
@@ -73,6 +119,14 @@ function cycleWeight(name: string) {
 function commit() { emit('updateTags', localTags.value.map((tag) => ({ ...tag }))) }
 function addTag() { const tag = input.value.trim(); if (!tag || localTags.value.some((item) => item.tag === tag)) return; pushHistory(); localTags.value.push({ tag, confidence: 1, source: 'manual', category: '手动添加' }); input.value = ''; commit() }
 function removeTag(name: string) { pushHistory(); localTags.value = localTags.value.filter((tag) => tag.tag !== name); commit() }
+/** 清空全部标签，可撤销 */
+function clearAll() { if (!localTags.value.length) return; pushHistory(); localTags.value = []; commit() }
+function startCompare() { if (isDirty.value) comparing.value = true }
+function stopCompare() { comparing.value = false }
+function compareState(name: string) {
+  if (diff.value.removed.includes(name)) return 'will-remove'
+  return ''
+}
 function addSearchResult(tag: string) {
   if (localTags.value.some((item) => item.tag === tag)) return
   pushHistory()
@@ -107,11 +161,45 @@ watch(input, (value) => {
 
 <template>
   <aside class="tag-editor">
-    <header><div><p>REVIEW</p><h2>标签校对</h2></div><div class="tag-editor__history"><button type="button" title="撤销 (Ctrl+Z)" :disabled="undoStack.length === 0" @click="undo">↶</button><button type="button" title="重做 (Ctrl+Shift+Z)" :disabled="redoStack.length === 0" @click="redo">↷</button><button type="button" :class="{ active: showChinese }" title="显示中文翻译" @click="showChinese = !showChinese">中</button></div><span v-if="item" :class="`status-${item.status}`">{{ item.status === 'reviewed' ? '已保存' : item.status === 'partial' ? '部分保存' : item.status === 'failed' ? '需要处理' : '待校对' }}</span></header>
+    <header><div><p>REVIEW</p><h2>标签校对</h2></div><div class="tag-editor__history"><button type="button" title="撤销 (Ctrl+Z)" :disabled="undoStack.length === 0" @click="undo">↶</button><button type="button" title="重做 (Ctrl+Shift+Z)" :disabled="redoStack.length === 0" @click="redo">↷</button><button type="button" :class="{ active: showChinese }" title="显示中文翻译" @click="showChinese = !showChinese">中</button><button type="button" class="tag-editor__clear" title="清空全部标签（可撤销）" :disabled="!localTags.length" @click="clearAll">清空</button></div><span v-if="item" :class="`status-${item.status}`">{{ item.status === 'reviewed' ? '已保存' : item.status === 'partial' ? '部分保存' : item.status === 'failed' ? '需要处理' : '待校对' }}</span></header>
     <template v-if="item">
       <div class="tag-editor__scroll">
         <div v-if="item.error" class="save-error"><strong>{{ item.status === 'partial' ? '部分保存' : '处理失败' }}</strong><span>{{ item.error }}</span></div>
         <label class="tag-search"><input v-model="input" placeholder="搜索或添加标签" @keydown.enter.prevent="addTag" /><button :disabled="!input.trim()" @click="addTag">添加</button></label>
+
+        <div class="caption-box" :class="{ 'is-open': showCaption }">
+          <button type="button" class="caption-box__toggle" :aria-expanded="showCaption" @click="showCaption = !showCaption">
+            <span>caption 预览</span><small>{{ localTags.length }} 个标签 · {{ captionPreview.length }} 字符</small><i aria-hidden="true">{{ showCaption ? '▴' : '▾' }}</i>
+          </button>
+          <div v-if="showCaption" class="caption-box__body">
+            <p>{{ captionPreview || '（还没有标签）' }}</p>
+            <button type="button" :disabled="!captionPreview" @click="copyCaption">{{ copied ? '已复制' : '复制' }}</button>
+          </div>
+        </div>
+
+        <div v-if="isDirty" class="compare-bar">
+          <span><b>{{ diff.added.length }}</b> 新增 · <b>{{ diff.removed.length }}</b> 删除</span>
+          <button
+            type="button"
+            class="compare-bar__hold"
+            :class="{ active: comparing }"
+            title="按住查看保存前的标签，松开返回"
+            @pointerdown.prevent="startCompare"
+            @pointerup="stopCompare"
+            @pointerleave="stopCompare"
+            @pointercancel="stopCompare"
+            @keydown.space.prevent="startCompare"
+            @keyup.space="stopCompare"
+            @blur="stopCompare"
+          >{{ comparing ? '保存前 · 松开返回' : '按住看保存前' }}</button>
+        </div>
+        <div v-if="comparing" class="compare-view" aria-live="polite">
+          <div><strong>保存前</strong><span>{{ baseline.length }} 个标签 · 红色的是这次会删掉的</span></div>
+          <div class="tag-chips">
+            <span v-for="tag in baseline" :key="tag.tag" class="tag-chip tag-chip--static" :class="compareState(tag.tag)">{{ tag.tag }}<small v-if="(tag.weight ?? 1) !== 1">{{ formatWeight(tag.weight) }}</small></span>
+          </div>
+          <p v-if="diff.added.length" class="compare-view__added">这次新增：{{ diff.added.join('、') }}</p>
+        </div>
         <div v-if="searchResults.length" class="tag-search-results">
           <button v-for="result in searchResults" :key="result.tag" @click="addSearchResult(result.tag)">
             <span>{{ result.tag }}</span>
@@ -119,7 +207,7 @@ watch(input, (value) => {
             <em>{{ result.category }}</em>
           </button>
         </div>
-        <section v-for="[group, tags] in groupedTags" :key="group" class="tag-group" :data-group="group">
+        <section v-for="[group, tags] in groupedTags" v-show="!comparing" :key="group" class="tag-group" :data-group="group">
           <div><strong>{{ group }}</strong><span>{{ tags.length }}</span></div>
           <div class="tag-chips"><button v-for="tag in tags" :key="tag.tag" class="tag-chip" @click="removeTag(tag.tag)"><span :title="showChinese ? tag.tag : (translations.get(tag.tag) || '')">{{ showChinese ? (translations.get(tag.tag) || tag.tag) : tag.tag }}</span><small v-if="tag.confidence !== undefined && tag.confidence < 1">{{ Math.round(tag.confidence * 100) }}%</small><small class="tag-chip__weight" :class="{ active: (tag.weight ?? 1) !== 1 }" title="点击调整权重" @click.stop="cycleWeight(tag.tag)">{{ (tag.weight ?? 1) === 1 ? '+w' : `${tag.weight! > 1 ? '↑' : '↓'}${formatWeight(tag.weight)}` }}</small><i>×</i></button></div>
         </section>
@@ -147,6 +235,26 @@ watch(input, (value) => {
 .tag-editor__history button:hover:not(:disabled) { background: var(--brand-soft); color: var(--brand-hover); }
 .tag-editor__history button:disabled { opacity: .3; cursor: not-allowed; }
 .tag-editor__history button.active { background: var(--brand-primary); color: var(--brand-on-primary); }
+.tag-editor__history .tag-editor__clear { width: auto; padding: 0 10px; border-radius: 999px; font-size: 11px; }
+.caption-box { margin-top: 10px; border-radius: 16px; background: var(--surface-secondary); }
+.caption-box__toggle { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-secondary); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; text-align: left; }
+.caption-box__toggle small { flex: 1; color: var(--ink-tertiary); font: 10.5px var(--font-mono); font-weight: 600; }
+.caption-box__toggle i { font-style: normal; color: var(--ink-quaternary); }
+.caption-box__body { display: grid; gap: 8px; padding: 0 12px 10px; }
+.caption-box__body p { margin: 0; max-height: 120px; overflow: auto; color: var(--ink-primary); font: 11.5px/1.6 var(--font-mono); word-break: break-word; user-select: text; }
+.caption-box__body button { justify-self: end; height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--surface-primary); color: var(--brand-hover); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; box-shadow: var(--shadow-sm); }
+.caption-box__body button:disabled { opacity: .4; cursor: not-allowed; }
+.compare-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; padding: 6px 6px 6px 12px; border-radius: 999px; background: var(--accent-peach-soft); color: var(--accent-peach-strong); font-size: 11.5px; font-weight: 700; }
+.compare-bar b { font-family: var(--font-mono); }
+.compare-bar__hold { height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--surface-primary); color: var(--accent-peach-strong); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; user-select: none; touch-action: none; }
+.compare-bar__hold.active { background: var(--accent-peach-strong); color: #fff; }
+.compare-view { margin-top: 12px; padding: 12px; border-radius: 16px; border: 1.5px dashed var(--accent-peach); background: var(--surface-primary); }
+.compare-view > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.compare-view strong { font-size: 12px; font-weight: 900; color: var(--ink-primary); }
+.compare-view > div:first-child span { color: var(--ink-tertiary); font-size: 10.5px; }
+.tag-chip--static { cursor: default !important; }
+.tag-chip--static.will-remove { background: var(--danger-bg) !important; color: var(--danger-foreground); text-decoration: line-through; }
+.compare-view__added { margin: 10px 0 0; color: var(--accent-mint-strong); font-size: 11.5px; line-height: 1.6; }
 .tag-editor__scroll { flex: 1; min-height: 0; overflow: auto; padding: 6px 16px 12px; scrollbar-width: thin; }
 .save-error { display: grid; gap: 4px; margin-bottom: 12px; padding: 10px 12px; border-radius: 16px; background: var(--danger-bg); }
 .save-error strong { color: var(--danger-foreground); font-size: 12px; font-weight: 800; }
