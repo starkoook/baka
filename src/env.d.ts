@@ -293,6 +293,7 @@ declare global {
     scan: (folderPath?: string) => Promise<{ success: boolean; data?: { newCount: number; skipCount: number; errorCount: number }; error?: string }>
     getImages: (params: { rootId?: number; sort?: string; order?: string; limit?: number; offset?: number }) => Promise<{ success: boolean; data?: GalleryImage[]; error?: string }>
     getThumbnail: (imageId: number) => Promise<{ success: boolean; data?: { base64: string; thumbHash: string }; error?: string }>
+    getThumbnailUrl: (imageId: number) => Promise<{ success: boolean; data?: { url: string; imageUrl: string; thumbHash: string }; error?: string }>
     getStats: () => Promise<{ success: boolean; data?: { totalImages: number; totalRoots: number; totalSize: number }; error?: string }>
     getImageTags: (imageId: number) => Promise<{ success: boolean; data?: TagInfo[]; error?: string }>
     batchGetTags: (imageIds: number[]) => Promise<{ success: boolean; data?: { [id: string]: TagInfo[] }; error?: string }>

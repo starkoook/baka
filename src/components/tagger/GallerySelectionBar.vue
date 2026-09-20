@@ -20,13 +20,15 @@ defineEmits<{ sendToTagger: []; addToDataset: []; copyMove: []; organize: []; ed
 </template>
 
 <style scoped>
-.selection-bar { position: absolute; z-index: 12; left: 50%; bottom: 18px; transform: translateX(-50%); min-width: 560px; height: 54px; display: flex; align-items: center; gap: 7px; padding: 7px 9px 7px 14px; border: 1px solid rgba(255,255,255,.12); border-radius: 14px; background: rgba(25,22,29,.94); box-shadow: 0 18px 55px rgba(0,0,0,.4); backdrop-filter: blur(18px); }
-.selection-count { display: flex; align-items: baseline; gap: 5px; min-width: 74px; }
-.selection-count strong { color: var(--accent-primary); font-size: 16px; }.selection-count span { color: var(--text-tertiary); font-size: 9px; }
-.selection-divider { width: 1px; height: 22px; background: rgba(255,255,255,.08); }
-button { height: 34px; padding: 0 13px; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.04); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 10px; white-space: nowrap; }
-button.primary { border-color: transparent; background: var(--accent-primary); color: white; font-weight: 700; }
-button.danger { border-color: rgba(255,137,117,.35); color: #ff9a86; }
-button.clear { border-color: transparent; background: transparent; color: var(--text-tertiary); }
+.selection-bar { position: absolute; z-index: 12; left: 50%; bottom: 16px; transform: translateX(-50%) rotate(-1deg); min-width: 560px; height: 56px; display: flex; align-items: center; gap: 7px; padding: 8px 9px 8px 18px; border: 0; border-radius: var(--radius-pill); background: var(--ink-primary); color: var(--surface-primary); box-shadow: 0 20px 44px rgba(74, 45, 61, .35); }
+.selection-count { display: flex; align-items: baseline; gap: 5px; min-width: 78px; }
+.selection-count strong { color: var(--brand-primary); font-size: 16px; font-weight: 900; }.selection-count span { color: rgba(255,255,255,.7); font-size: 10.5px; }
+.selection-divider { width: 1px; height: 22px; background: rgba(255,255,255,.14); margin-right: 4px; }
+button { height: 34px; padding: 0 13px; border: 0; border-radius: var(--radius-pill); background: rgba(255,255,255,.1); color: #fff; cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 700; white-space: nowrap; transition: background-color 140ms ease, transform 160ms var(--ease-bounce); }
+button:hover { background: rgba(255,255,255,.18); }
+button:active { transform: scale(.96); }
+button.primary { background: var(--brand-gradient); color: #fff; box-shadow: 0 8px 20px rgba(var(--brand-primary-rgb), .35); }
+button.danger { color: #ffb1c1; }
+button.clear { background: transparent; color: rgba(255,255,255,.6); }
 @media (max-width: 760px) { .selection-bar { left: 10px; right: 10px; min-width: 0; transform: none; overflow-x: auto; } }
 </style>

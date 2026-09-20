@@ -335,22 +335,33 @@ function hashPath(filePath) {
   return crypto.createHash('md5').update(filePath).digest('hex')
 }
 
-async function generateThumbnail(imagePath) {
-  const sharp = require('sharp')
+/**
+ * 确保缩略图文件存在并返回它的路径。不读文件、不做 base64，
+ * 渲染端通过 media:// 协议直接加载，主进程零拷贝。
+ */
+async function ensureThumbnailPath(imagePath) {
   const hash = hashPath(imagePath)
   const thumbPath = path.join(getThumbDir(), hash + '.jpg')
+  if (fs.existsSync(thumbPath)) return { thumbPath, hash }
 
-  if (fs.existsSync(thumbPath)) {
-    return { base64: fs.readFileSync(thumbPath).toString('base64'), hash }
-  }
-
+  const sharp = require('sharp')
   const buffer = await sharp(imagePath)
     .resize(384, 384, { fit: 'inside' })
     .jpeg({ quality: 80 })
     .toBuffer()
-
   fs.writeFileSync(thumbPath, buffer)
-  return { base64: buffer.toString('base64'), hash }
+  return { thumbPath, hash }
+}
+
+/** 旧接口：仍返回 base64，供还没迁移到 media:// 的调用方使用。 */
+async function generateThumbnail(imagePath) {
+  const { thumbPath, hash } = await ensureThumbnailPath(imagePath)
+  return { base64: fs.readFileSync(thumbPath).toString('base64'), hash }
+}
+
+/** 把本地文件路径转成渲染端可直接用于 <img src> 的 media:// 地址。 */
+function toMediaUrl(filePath) {
+  return 'media:///' + encodeURI(String(filePath).replace(/\\/g, '/'))
 }
 
 // ── Scan engine ──
@@ -768,6 +779,19 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
+  // media:// 版本：只保证缩略图文件存在，返回地址，不经 IPC 搬运图片数据
+  ipcMain.handle('gallery:getThumbnailUrl', async (_event, imageId) => {
+    try {
+      await ensureDb()
+      const image = queryOne('SELECT id, path, thumb_hash FROM images WHERE id = ?', [imageId])
+      if (!image) return { success: false, error: 'Image not found' }
+      const { thumbPath, hash } = await ensureThumbnailPath(image.path)
+      return { success: true, data: { url: toMediaUrl(thumbPath), imageUrl: toMediaUrl(image.path), thumbHash: image.thumb_hash || hash } }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
   ipcMain.handle('gallery:getStats', async () => {
     try {
       await ensureDb()
@@ -1019,4 +1043,4 @@ function registerGalleryHandlers(mainWindow) {
   })
 }
 
-module.exports = { registerGalleryHandlers, initDb, ensureDb, queryAll, queryOne, runSql, saveDb, generateThumbnail, hashPath, readFileMetaFromPath, classifyDroppedPaths, importImageFiles, persistImageSdMetadata, applyParsedMetaToRow, repairStaleBlobPromptRows, IMAGE_EXTENSIONS }
+module.exports = { registerGalleryHandlers, initDb, ensureDb, queryAll, queryOne, runSql, saveDb, generateThumbnail, ensureThumbnailPath, toMediaUrl, hashPath, readFileMetaFromPath, classifyDroppedPaths, importImageFiles, persistImageSdMetadata, applyParsedMetaToRow, repairStaleBlobPromptRows, IMAGE_EXTENSIONS }

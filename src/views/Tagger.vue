@@ -11,6 +11,7 @@ import BatchTagToolsDialog from '@/components/tagger/BatchTagToolsDialog.vue'
 import VideoToolsDialog from '@/components/tagger/VideoToolsDialog.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import ContextMenu, { type ContextMenuItem } from '@/components/common/ContextMenu.vue'
+import { toMediaUrl } from '@/lib/media-url'
 import type { TagResult } from '@/stores/tagger'
 import { useTaggerStore } from '@/stores/tagger'
 import { useGalleryStore } from '@/stores/gallery'
@@ -176,8 +177,9 @@ async function loadPreview() {
   previewSrc.value = ''
   if (!item) return
   previewLoading.value = true
-  const response = await window.fsAPI.readImageBase64(item.path)
-  if (response.success && response.base64) previewSrc.value = `data:${response.mime || 'image/png'};base64,${response.base64}`
+  // 预览图直接走 media://，不再把整张原图 base64 化后经 IPC 传过来
+  const exists = window.fsAPI?.exists ? await window.fsAPI.exists(item.path).catch(() => true) : true
+  previewSrc.value = exists === false ? '' : toMediaUrl(item.path)
   previewLoading.value = false
 }
 
@@ -584,20 +586,20 @@ onMounted(async () => {
 .tagger-page { height: 100%; min-height: 0; display: flex; flex-direction: column; padding: 6px 10px 10px; color: var(--text-primary); overflow: hidden; }
 .tagger-layout { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; gap: 12px; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .tagger-workspace { flex: 1; min-width: 320px; min-height: 0; display: flex; flex-direction: column; }
-.tagger-preview__toolbar { height: 48px; flex: none; display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding: 0 12px; border: 0; border-radius: 10px; background: linear-gradient(135deg, rgba(255,255,255,.055), rgba(255,255,255,.02)); }
+.tagger-preview__toolbar { height: 48px; flex: none; display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; padding: 0 8px 0 16px; border: 0; border-radius: var(--radius-pill); background: var(--surface-primary); box-shadow: var(--surface-shadow); }
 .tagger-preview__toolbar > div { display: flex; align-items: center; gap: 8px; }
-.tagger-preview__toolbar strong { max-width: 35vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); font-size: 13px; }
+.tagger-preview__toolbar strong { max-width: 35vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-primary); font-size: 13.5px; font-weight: 800; }
 .tagger-preview__toolbar span { color: var(--text-tertiary); font: 11px ui-monospace, monospace; }
-.tagger-preview__toolbar button { height: 32px; padding: 0 12px; border: 1px solid rgba(255,255,255,.07); border-radius: 8px; background: rgba(255,255,255,.025); color: var(--text-tertiary); cursor: pointer; font-size: 11px; }
+.tagger-preview__toolbar button { height: 32px; padding: 0 14px; border: 0; border-radius: var(--radius-pill); background: var(--surface-secondary); color: var(--ink-secondary); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
 .tagger-preview__toolbar button:disabled { opacity: .25; }
-.tagger-preview { position: relative; flex: 1; min-height: 0; display: flex; overflow: auto; border-radius: 14px; background: radial-gradient(circle at center,#201d24,#121116 72%); }
-.tagger-preview::before { content: ''; position: absolute; inset: 0; opacity: .11; background-image: linear-gradient(45deg,#2b2730 25%,transparent 25%),linear-gradient(-45deg,#2b2730 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#2b2730 75%),linear-gradient(-45deg,transparent 75%,#2b2730 75%); background-size: 20px 20px; background-position: 0 0,0 10px,10px -10px,-10px 0; }
+.tagger-preview { position: relative; flex: 1; min-height: 0; display: flex; overflow: auto; border-radius: 28px; background: var(--surface-primary); box-shadow: var(--surface-shadow); }
+.tagger-preview::before { content: ''; position: absolute; inset: 0; opacity: .6; background-image: radial-gradient(var(--line-strong) 1px, transparent 1.2px); background-size: 22px 22px; }
 .preview-canvas { position: relative; z-index: 1; margin: auto; flex: none; display: flex; align-items: center; justify-content: center; }
-.preview-canvas img { display: block; width: 100%; height: 100%; object-fit: contain; box-shadow: 0 20px 60px rgba(0,0,0,.35); }
+.preview-canvas img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 16px; box-shadow: var(--ink-shadow); }
 .preview-loading { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--text-tertiary); font-size: 12px; }
 .preview-loading span { width: 11px; height: 11px; border: 2px solid rgba(255,255,255,.08); border-top-color: var(--accent-primary); border-radius: 50%; animation: spin .75s linear infinite; }
 .preview-empty { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--text-tertiary); text-align: center; }
-.preview-empty strong { color: var(--text-secondary); font-size: 16px; }
+.preview-empty strong { color: var(--ink-primary); font-size: 17px; font-weight: 900; }
 .preview-empty > span { max-width: 280px; font-size: 12px; line-height: 1.6; }
 .preview-zoom {
   position: absolute;
@@ -608,11 +610,10 @@ onMounted(async () => {
   align-items: center;
   gap: 4px;
   padding: 5px 7px;
-  border: 1px solid rgba(255,255,255,.08);
-  border-radius: 10px;
-  background: rgba(17,15,21,.74);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 8px 24px rgba(0,0,0,.3);
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink-primary);
+  box-shadow: var(--ink-shadow);
 }
 .preview-zoom button {
   min-width: 26px;

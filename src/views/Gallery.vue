@@ -14,6 +14,7 @@ import CharacterTagAuditDialog from '@/components/tagger/CharacterTagAuditDialog
 import OrganizeByTagDialog from '@/components/tagger/OrganizeByTagDialog.vue'
 import { createGalleryHandoff } from '@/features/gallery/gallery-workflow'
 import { parseSearchQuery, matchesQuery } from '@/features/gallery/tag-filter'
+import { toMediaUrl } from '@/lib/media-url'
 import { useAppStore } from '@/stores/app'
 import { useGalleryStore } from '@/stores/gallery'
 import { useTaggerStore } from '@/stores/tagger'
@@ -104,10 +105,7 @@ async function openDroppedImage(filePath: string) {
   viewerMetadata.value = { hasMetadata: false }
   viewerTags.value = []
   viewerImageSrc.value = ''
-  const [metadataResponse, imageResponse] = await Promise.all([
-    window.galleryAPI.readFileMeta(filePath),
-    window.fsAPI.readImageBase64(filePath),
-  ])
+  const metadataResponse = await window.galleryAPI.readFileMeta(filePath)
   if (!metadataResponse.success || !metadataResponse.data) {
     viewerLoading.value = false
     appStore.setError(metadataResponse.error || '无法读取这张图片的元数据')
@@ -129,9 +127,7 @@ async function openDroppedImage(filePath: string) {
     thumb_hash: null,
   }
   viewerMetadata.value = metadataResponse.data
-  if (imageResponse.success && imageResponse.base64) {
-    viewerImageSrc.value = `data:${imageResponse.mime || 'image/png'};base64,${imageResponse.base64}`
-  }
+  viewerImageSrc.value = toMediaUrl(filePath)
   metadataIndex.value = 0
   viewerLoading.value = false
   appStore.setStatus('元数据读取完成')
@@ -236,9 +232,11 @@ async function selectDataset(folderPath: string) {
 }
 
 async function loadThumbnail(imageId: number, element: HTMLImageElement) {
-  const response = await window.galleryAPI.getThumbnail(imageId)
-  if (!response.success || !response.data?.base64) return
-  const src = `data:image/jpeg;base64,${response.data.base64}`
+  // 缩略图走 media://：主进程只保证文件存在，图片数据不再经 base64 + IPC 搬运
+  if (!window.galleryAPI?.getThumbnailUrl) return
+  const response = await window.galleryAPI.getThumbnailUrl(imageId)
+  if (!response.success || !response.data?.url) return
+  const src = response.data.url
   element.src = src
   gridRef.value?.setThumbSrc(imageId, src)
 }
@@ -262,16 +260,14 @@ async function loadViewerImage() {
   viewerMetadata.value = { hasMetadata: false }
   viewerTags.value = []
   viewerImageSrc.value = ''
-  const [metadataResponse, tagsResponse, imageResponse] = await Promise.all([
+  // 大图直接用 media:// 地址，不再把整张图 base64 化后经 IPC 传过来
+  viewerImageSrc.value = toMediaUrl(image.path)
+  const [metadataResponse, tagsResponse] = await Promise.all([
     window.galleryAPI.getMetadata(image.id),
     window.galleryAPI.getImageTags(image.id),
-    window.fsAPI.readImageBase64(image.path),
   ])
   if (metadataResponse.success && metadataResponse.data) viewerMetadata.value = metadataResponse.data
   if (tagsResponse.success && tagsResponse.data) viewerTags.value = tagsResponse.data
-  if (imageResponse.success && imageResponse.base64) {
-    viewerImageSrc.value = `data:${imageResponse.mime || 'image/png'};base64,${imageResponse.base64}`
-  }
   viewerLoading.value = false
 }
 
@@ -838,15 +834,64 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </template>
 
 <style scoped>
-.gallery-page { height: 100%; min-height: 0; display: flex; flex-direction: column; padding: 6px 10px 10px; color: var(--text-primary); overflow: hidden; }
-.dialog-card p { margin: 0 0 2px; color: var(--accent-primary); font-size: 8px; font-weight: 750; letter-spacing: .16em; }.dataset-toolbar button { height: 30px; padding: 0 11px; border: 1px solid rgba(255,255,255,.075); border-radius: 8px; background: rgba(255,255,255,.03); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 9px; }.dataset-toolbar button.primary, .dialog-card .primary { border-color: transparent; background: var(--accent-primary); color: white; font-weight: 700; }
-.gallery-workspace { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; gap: 14px; overflow: hidden; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.gallery-drag-overlay { position: absolute; inset: 0; z-index: 80; display: grid; place-items: center; pointer-events: none; border: 0; border-radius: 14px; outline: 2px dashed color-mix(in srgb, var(--brand-primary) 62%, transparent); outline-offset: -10px; background: color-mix(in srgb, var(--surface-secondary) 78%, transparent); backdrop-filter: blur(10px); }.gallery-drag-overlay div { display: grid; gap: 7px; padding: 22px 30px; color: var(--text-tertiary); text-align: center; }.gallery-drag-overlay strong { color: var(--accent-primary); font-size: 16px; }.gallery-drag-overlay span { font-size: 9px; }
-.gallery-content { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }.gallery-stage { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; gap: 12px; overflow: hidden; }.gallery-stage :deep(.gallery-grid-scroll) { flex: 1; min-width: 0; }
-.dataset-toolbar { height: 44px; flex: 0 0 44px; display: flex; align-items: center; gap: 8px; margin-bottom: 10px; padding: 0 10px; border: 0; border-radius: 10px; background: color-mix(in srgb, var(--surface-secondary) 72%, transparent); }.dataset-toolbar div { margin-right: auto; display: flex; align-items: baseline; gap: 9px; }.dataset-toolbar strong { font-size: 12px; }.dataset-toolbar span { color: var(--text-tertiary); font-size: 9px; }
-.dataset-grid { flex: 1; min-width: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-content: start; gap: 14px; padding: 12px 12px 90px; }.dataset-card { display: flex; flex-direction: column; width: 100%; min-width: 0; min-height: 280px; padding: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.07); border-radius: 12px; background: rgba(255,255,255,.025); color: var(--text-secondary); text-align: left; cursor: pointer; }.dataset-card__image { position: relative; flex: 0 0 220px; width: 100%; height: 220px; min-height: 220px; overflow: hidden; background: #16151b; }.dataset-card__image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }.dataset-card__image i { color: var(--text-tertiary); font-size: 10px; font-style: normal; }.dataset-card strong, .dataset-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 8px 9px 0; font-size: 10px; }.dataset-card small { padding: 4px 9px 9px; color: var(--text-tertiary); font-size: 8px; }.dataset-empty { grid-column: 1/-1; min-height: 340px; display: grid; place-content: center; gap: 8px; color: var(--text-tertiary); text-align: center; font-size: 11px; }.dataset-empty strong { color: var(--text-secondary); font-size: 15px; }
-.dialog-backdrop { position: fixed; inset: 0; z-index: 500; display: grid; place-items: center; padding: 20px; background: rgba(7,6,9,.68); backdrop-filter: blur(9px); }.dialog-card { width: min(440px, 100%); padding: 22px; border: 1px solid rgba(255,255,255,.1); border-radius: 16px; background: #1c1921; box-shadow: 0 30px 80px rgba(0,0,0,.48); }.dialog-card h2 { margin: 0; font-size: 19px; }.dialog-tabs { display: flex; gap: 4px; margin: 20px 0 12px; padding: 3px; border-radius: 9px; background: rgba(255,255,255,.03); }.dialog-tabs button { flex: 1; height: 32px; border: 0; border-radius: 7px; background: transparent; color: var(--text-tertiary); cursor: pointer; }.dialog-tabs button.active { background: rgba(var(--accent-primary-rgb),.12); color: var(--accent-primary); }.dataset-options { display: grid; gap: 6px; max-height: 220px; overflow: auto; }.dataset-options button { display: flex; justify-content: space-between; padding: 11px; border: 1px solid rgba(255,255,255,.06); border-radius: 8px; background: transparent; color: var(--text-secondary); cursor: pointer; }.dataset-options button.active { border-color: rgba(var(--accent-primary-rgb),.45); background: rgba(var(--accent-primary-rgb),.08); }.dataset-options small { color: var(--text-tertiary); }.dialog-fields { display: grid; gap: 13px; margin-top: 18px; }.dialog-fields label { display: grid; gap: 6px; color: var(--text-tertiary); font-size: 9px; }.dialog-fields input, .folder-picker, .dialog-card textarea { box-sizing: border-box; width: 100%; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.035); color: var(--text-primary); outline: none; font: inherit; }.dialog-fields input, .folder-picker { height: 36px; padding: 0 10px; text-align: left; }.dialog-card textarea { margin-top: 18px; padding: 11px; resize: vertical; line-height: 1.6; }.dialog-card footer { display: flex; justify-content: flex-end; gap: 7px; margin-top: 20px; }.dialog-card footer button { height: 34px; padding: 0 15px; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.035); color: var(--text-secondary); cursor: pointer; }
-.operation-options { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 18px; }.operation-options button { display: grid; gap: 4px; padding: 12px; border: 1px solid rgba(255,255,255,.07); border-radius: 9px; background: rgba(255,255,255,.02); color: var(--text-tertiary); text-align: left; cursor: pointer; }.operation-options button.active { border-color: rgba(var(--accent-primary-rgb),.4); background: rgba(var(--accent-primary-rgb),.07); }.operation-options strong { color: var(--text-secondary); font-size: 10px; }.operation-options span { font-size: 8px; line-height: 1.5; }.destination-picker { width: 100%; height: 38px; margin-top: 10px; padding: 0 11px; overflow: hidden; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.03); color: var(--text-secondary); text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }.move-warning, .operation-error { margin: 10px 0 0; padding: 8px 9px; border-radius: 7px; background: rgba(255,193,132,.055); color: #ffc184; font-size: 8px; line-height: 1.55; }.operation-error { background: rgba(255,137,117,.055); color: #ff9a86; }
-@media (max-width: 980px) { .gallery-stage :deep(.gallery-inspector) { position: absolute; top: 10px; right: 10px; bottom: 10px; z-index: 20; width: min(280px, calc(100% - 20px)); box-shadow: 0 18px 44px rgba(0,0,0,.28); } }
-@media (max-width: 760px) { .gallery-page { padding: 8px; overflow-x: hidden; }.gallery-workspace { gap: 8px; } }
+.gallery-page { height: 100%; min-height: 0; display: flex; flex-direction: column; padding: 4px 4px 8px 6px; color: var(--ink-primary); overflow: hidden; }
+.gallery-workspace { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; gap: 14px; overflow: hidden; }
+.gallery-drag-overlay { position: absolute; inset: 0; z-index: 80; display: grid; place-items: center; pointer-events: none; border-radius: var(--radius-hero); outline: 3px dashed var(--brand-primary); outline-offset: -12px; background: rgba(255, 242, 248, .82); backdrop-filter: blur(10px); }
+.gallery-drag-overlay div { display: grid; gap: 7px; padding: 22px 30px; color: var(--ink-tertiary); text-align: center; }
+.gallery-drag-overlay strong { color: var(--brand-hover); font-size: 18px; font-weight: 900; }
+.gallery-drag-overlay span { font-size: 12px; }
+.gallery-content { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.gallery-stage { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; gap: 14px; overflow: hidden; }
+.gallery-stage :deep(.gallery-grid-scroll) { flex: 1; min-width: 0; }
+.dataset-toolbar { height: 50px; flex: 0 0 50px; display: flex; align-items: center; gap: 8px; margin: 0 4px 12px; padding: 0 8px 0 18px; border-radius: var(--radius-pill); background: var(--surface-primary); box-shadow: var(--surface-shadow); }
+.dataset-toolbar div { margin-right: auto; display: flex; align-items: baseline; gap: 9px; }
+.dataset-toolbar strong { font-size: 14px; font-weight: 900; }
+.dataset-toolbar span { color: var(--ink-tertiary); font-size: 11px; font-family: var(--font-mono); }
+.dataset-toolbar__error { color: var(--danger-foreground); font-size: 11px; }
+.dataset-toolbar button { height: 34px; padding: 0 14px; border: 0; border-radius: var(--radius-pill); background: var(--surface-secondary); color: var(--ink-secondary); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
+.dataset-toolbar button:hover { background: var(--brand-soft); color: var(--brand-hover); }
+.dataset-toolbar button.primary, .dialog-card .primary { background: var(--brand-gradient); color: var(--brand-on-primary); box-shadow: 0 10px 22px rgba(var(--brand-primary-rgb), .3); }
+.dataset-toolbar button:disabled { opacity: .45; cursor: not-allowed; }
+.dataset-grid { flex: 1; min-width: 0; overflow: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); align-content: start; gap: 14px; padding: 6px 10px 90px 6px; }
+.dataset-card { display: flex; flex-direction: column; width: 100%; min-width: 0; min-height: 280px; padding: 0; overflow: hidden; border: 0; border-radius: 22px; background: var(--surface-primary); box-shadow: 0 8px 18px rgba(74,45,61,.08); color: var(--ink-secondary); text-align: left; cursor: pointer; transition: transform .25s var(--ease-bounce), box-shadow .2s ease; }
+.dataset-card:hover { transform: translateY(-3px); box-shadow: var(--surface-shadow-lg); }
+.dataset-card__image { position: relative; flex: 0 0 220px; width: 100%; height: 220px; min-height: 220px; overflow: hidden; background: var(--surface-tertiary); display: grid; place-items: center; }
+.dataset-card__image img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.dataset-card__image i { color: var(--ink-tertiary); font-size: 10px; font-style: normal; }
+.dataset-card strong, .dataset-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 9px 12px 0; font-size: 12px; }
+.dataset-card strong { color: var(--ink-primary); font-weight: 800; }
+.dataset-card small { padding: 4px 12px 11px; color: var(--ink-tertiary); font-size: 10.5px; }
+.dataset-empty { grid-column: 1/-1; min-height: 340px; display: grid; place-content: center; gap: 8px; color: var(--ink-tertiary); text-align: center; font-size: 12px; }
+.dataset-empty strong { color: var(--ink-primary); font-size: 16px; font-weight: 900; }
+.dialog-backdrop { position: fixed; inset: 0; z-index: 500; display: grid; place-items: center; padding: 20px; background: rgba(74, 45, 61, .32); backdrop-filter: blur(9px); }
+.dialog-card { width: min(440px, 100%); padding: 24px; border: 0; border-radius: 26px; background: var(--surface-primary); box-shadow: 0 30px 80px rgba(255, 126, 182, .28); color: var(--ink-primary); }
+.dialog-card p { margin: 0 0 4px; color: var(--brand-primary); font-family: var(--font-mono); font-size: 10px; font-weight: 800; letter-spacing: .16em; }
+.dialog-card h2 { margin: 0; font-size: 19px; font-weight: 900; }
+.dialog-tabs { display: flex; gap: 4px; margin: 20px 0 12px; padding: 4px; border-radius: var(--radius-pill); background: var(--surface-secondary); }
+.dialog-tabs button { flex: 1; height: 34px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--ink-tertiary); cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 700; }
+.dialog-tabs button.active { background: var(--surface-primary); color: var(--brand-hover); box-shadow: 0 2px 8px rgba(var(--brand-primary-rgb), .18); }
+.dataset-options { display: grid; gap: 6px; max-height: 220px; overflow: auto; }
+.dataset-options button { display: flex; justify-content: space-between; padding: 12px 14px; border: 2px solid transparent; border-radius: 16px; background: var(--surface-secondary); color: var(--ink-secondary); cursor: pointer; font: inherit; font-weight: 700; }
+.dataset-options button.active { border-color: var(--brand-primary); background: var(--brand-tint); color: var(--ink-primary); }
+.dataset-options small { color: var(--ink-tertiary); font-family: var(--font-mono); }
+.dialog-fields { display: grid; gap: 13px; margin-top: 18px; }
+.dialog-fields label { display: grid; gap: 6px; color: var(--ink-tertiary); font-size: 11.5px; font-weight: 700; }
+.dialog-fields input, .folder-picker, .dialog-card textarea { box-sizing: border-box; width: 100%; border: 1px solid var(--line-subtle); border-radius: 14px; background: var(--surface-primary); color: var(--ink-primary); outline: none; font: inherit; font-size: 13px; }
+.dialog-fields input:focus, .dialog-card textarea:focus { border-color: var(--brand-primary); box-shadow: 0 0 0 4px var(--brand-soft); }
+.dialog-fields input, .folder-picker { height: 38px; padding: 0 12px; text-align: left; cursor: text; }
+.folder-picker { cursor: pointer; color: var(--ink-secondary); }
+.dialog-card textarea { margin-top: 18px; padding: 12px; resize: vertical; line-height: 1.6; }
+.dialog-card footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.dialog-card footer button { height: 36px; padding: 0 16px; border: 0; border-radius: var(--radius-pill); background: var(--surface-secondary); color: var(--ink-secondary); cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 700; }
+.dialog-card footer button:disabled { opacity: .45; cursor: not-allowed; }
+.operation-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 18px; }
+.operation-options button { display: grid; gap: 4px; padding: 12px 14px; border: 2px solid transparent; border-radius: 16px; background: var(--surface-secondary); color: var(--ink-tertiary); text-align: left; cursor: pointer; font: inherit; }
+.operation-options button.active { border-color: var(--brand-primary); background: var(--brand-tint); }
+.operation-options strong { color: var(--ink-primary); font-size: 12.5px; font-weight: 800; }
+.operation-options span { font-size: 10.5px; line-height: 1.5; }
+.destination-picker { width: 100%; height: 40px; margin-top: 10px; padding: 0 14px; overflow: hidden; border: 1px solid var(--line-subtle); border-radius: 14px; background: var(--surface-primary); color: var(--ink-secondary); text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; font: inherit; font-size: 12.5px; }
+.move-warning, .operation-error { margin: 10px 0 0; padding: 9px 12px; border-radius: 12px; background: var(--accent-peach-soft); color: var(--accent-peach-strong); font-size: 11px; line-height: 1.55; }
+.operation-error { background: var(--danger-bg); color: var(--danger-foreground); }
+@media (max-width: 980px) { .gallery-stage :deep(.gallery-inspector) { position: absolute; top: 10px; right: 10px; bottom: 10px; z-index: 20; width: min(280px, calc(100% - 20px)); box-shadow: var(--surface-shadow-lg); } }
+@media (max-width: 760px) { .gallery-page { padding: 6px; overflow-x: hidden; } .gallery-workspace { gap: 8px; } }
 </style>

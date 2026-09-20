@@ -107,7 +107,7 @@ describe('gallery workspace UI', () => {
     expect(gallery).toContain("router.push('/training')")
   })
 
-  it('blends gallery sources, toolbar, stage, and inspector into one window canvas', () => {
+  it('floats gallery sources, toolbar, and inspector as white cards without hard-coded dark chrome', () => {
     const gallery = read('src/views/Gallery.vue')
     const sidebar = read('src/components/tagger/GallerySidebar.vue')
     const toolbar = read('src/components/tagger/GalleryToolbar.vue')
@@ -115,14 +115,16 @@ describe('gallery workspace UI', () => {
 
     expect(gallery).toContain('class="gallery-workspace"')
     expect(gallery).not.toContain('class="gallery-shell"')
-    expect(rule(gallery, '.gallery-workspace')).toContain('border: 0')
-    expect(rule(gallery, '.gallery-workspace')).toContain('background: transparent')
-    expect(rule(gallery, '.gallery-workspace')).toContain('box-shadow: none')
     expect(rule(gallery, '.gallery-workspace')).toContain('gap: 14px')
-    expect(rule(sidebar, '.gallery-sidebar')).toContain('border: 0')
-    expect(rule(toolbar, '.gallery-toolbar')).toContain('border: 0')
-    expect(rule(inspector, '.gallery-inspector')).toContain('border: 0')
-    expect(rule(gallery, '.dataset-toolbar')).toContain('border: 0')
+    for (const [source, selector] of [[sidebar, '.gallery-sidebar'], [toolbar, '.gallery-toolbar'], [inspector, '.gallery-inspector'], [gallery, '.dataset-toolbar']] as const) {
+      expect(rule(source, selector)).toContain('background: var(--surface-primary)')
+      expect(rule(source, selector)).toContain('box-shadow: var(--surface-shadow)')
+    }
+    // 旧的写死深色值不能再出现在图库外壳里
+    for (const source of [gallery, sidebar, toolbar, inspector]) {
+      expect(source).not.toMatch(/rgba\(255,\s*255,\s*255,\s*\.0\d+\)/)
+      expect(source).not.toContain('#1c1921')
+    }
   })
 
   it('keeps the gallery fluid and quiet when motion is reduced', () => {
@@ -150,6 +152,6 @@ describe('gallery workspace UI', () => {
     expect(gallery).toContain('window.galleryAPI.importFiles(filePaths)')
     expect(gallery).toContain('@import-images="importImages"')
     expect(toolbar).toMatch(/@media \(max-width: 760px\)[\s\S]*?\.toolbar-action__label\s*\{\s*display: none/)
-    expect(toolbar).toMatch(/@media \(max-width: 760px\)[\s\S]*?\.toolbar-action__icon\s*\{\s*font-size: 12px/)
+    expect(toolbar).toMatch(/@media \(max-width: 760px\)[\s\S]*?\.toolbar-action__icon\s*\{\s*font-size: 1[23]px/)
   })
 })

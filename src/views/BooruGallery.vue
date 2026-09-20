@@ -453,10 +453,7 @@ async function startBatchDownload() {
   padding: 16px 18px 12px;
   gap: 10px;
   overflow: hidden;
-  background:
-    radial-gradient(1200px 500px at 78% -20%, color-mix(in srgb, var(--brand-primary) 13%, transparent), transparent 60%),
-    radial-gradient(900px 420px at 8% 0%, color-mix(in srgb, var(--action-accent) 8%, transparent), transparent 55%),
-    var(--app-bg);
+  background: transparent;
   color: var(--text-primary);
 }
 
@@ -643,24 +640,23 @@ async function startBatchDownload() {
 
 .booru-title h1 {
   margin: 0;
-  background: var(--gradient-hero);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  font-size: 21px;
-  letter-spacing: .02em;
+  color: var(--ink-primary);
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
 }
 .booru-eyebrow {
   display: inline-flex;
   width: fit-content;
   margin-bottom: 2px;
-  padding: 3px 7px;
-  border: 1px solid var(--glass-border-hover);
+  padding: 3px 9px;
+  border: 0;
   border-radius: 999px;
-  background: var(--glass-bg);
-  color: var(--brand-primary);
-  font-size: 8px;
-  font-weight: 750;
+  background: var(--brand-soft);
+  color: var(--brand-hover);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
   letter-spacing: .14em;
 }
 .booru-title p { margin: 4px 0 0; color: var(--text-secondary); font-size: 13px; }
@@ -702,12 +698,11 @@ async function startBatchDownload() {
   display: flex;
   gap: 9px;
   flex-wrap: wrap;
-  padding: 7px 9px;
-  border: 1px solid var(--glass-border);
+  padding: 8px 10px;
+  border: 0;
   border-radius: var(--radius-panel);
-  background: color-mix(in srgb, var(--surface-primary) 74%, transparent);
-  backdrop-filter: blur(18px);
-  box-shadow: var(--shadow-sm);
+  background: var(--surface-primary);
+  box-shadow: var(--surface-shadow);
 }
 
 .booru-credentials {

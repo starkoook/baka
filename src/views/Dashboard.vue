@@ -80,8 +80,8 @@ async function loadRecentImages() {
       isNew: index === 0 && Boolean(newestDay) && newestDay === new Date().toISOString().slice(0, 10),
     })).reverse()
     await Promise.all(recentItems.value.map(async (item) => {
-      const thumb = await window.galleryAPI.getThumbnail(item.id)
-      if (thumb.success && thumb.data) item.src = `data:image/jpeg;base64,${thumb.data.base64}`
+      const thumb = await window.galleryAPI.getThumbnailUrl(item.id)
+      if (thumb.success && thumb.data) item.src = thumb.data.url
     }))
   } catch { /* 图库未初始化时保持空态 */ }
 }

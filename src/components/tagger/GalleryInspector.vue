@@ -32,20 +32,23 @@ function formatSize(bytes: number) {
 </template>
 
 <style scoped>
-.gallery-inspector { width: 250px; flex: 0 0 250px; min-height: 0; overflow: auto; padding: 14px; border: 0; border-radius: 12px; background: linear-gradient(180deg, color-mix(in srgb, var(--surface-secondary) 78%, transparent), transparent); }
-.inspector-heading, .tag-heading { display: flex; align-items: center; justify-content: space-between; color: var(--text-secondary); font-size: 11px; font-weight: 650; }
-.inspector-heading small, .tag-heading small { color: var(--text-tertiary); font-size: 8px; font-weight: 400; }
-.file-title { margin-top: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); font-size: 13px; font-weight: 650; }
-dl { margin: 12px 0 20px; }
-dl div { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 10px; }
-dt { color: var(--text-tertiary); } dd { margin: 0; color: var(--text-secondary); text-align: right; }
-.tag-list { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 10px; }
-.tag-list span { padding: 4px 7px; border-radius: 999px; background: rgba(var(--accent-primary-rgb),.08); color: var(--text-secondary); font-size: 9px; }
-.no-tags { color: var(--text-tertiary); font-size: 10px; }
-.inspector-actions { display: grid; gap: 7px; margin-top: 20px; }
-.inspector-actions button { height: 34px; border: 1px solid rgba(255,255,255,.08); border-radius: 8px; background: rgba(255,255,255,.035); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 10px; }
-.inspector-actions .primary { border-color: transparent; background: var(--accent-primary); color: white; font-weight: 650; }
-.inspector-actions .danger { border-color: rgba(255,137,117,.35); color: #ff9a86; }
-.inspector-actions .text { border: 0; background: transparent; color: var(--text-tertiary); }
-@media (max-width: 1050px) { .gallery-inspector { width: 220px; flex-basis: 220px; } }
+.gallery-inspector { width: 262px; flex: 0 0 262px; min-height: 0; overflow: auto; padding: 18px 16px 16px; border-radius: var(--radius-hero); background: var(--surface-primary); box-shadow: var(--surface-shadow); }
+.inspector-heading, .tag-heading { display: flex; align-items: center; justify-content: space-between; color: var(--ink-tertiary); font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+.inspector-heading small, .tag-heading small { color: var(--ink-quaternary); font-size: 10px; font-weight: 600; font-family: var(--font-mono); }
+.file-title { margin-top: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-primary); font-size: 14px; font-weight: 900; }
+dl { margin: 12px 0 18px; }
+dl div { display: flex; justify-content: space-between; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--line-subtle); font-size: 11.5px; }
+dt { color: var(--ink-tertiary); font-weight: 700; } dd { margin: 0; color: var(--ink-primary); text-align: right; font-family: var(--font-mono); font-size: 11px; }
+.tag-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.tag-list span { padding: 5px 11px; border-radius: var(--radius-pill); background: var(--brand-tint); color: var(--ink-secondary); font-size: 11px; font-weight: 700; }
+.no-tags { margin-top: 10px; color: var(--ink-tertiary); font-size: 11.5px; }
+.inspector-actions { display: grid; gap: 8px; margin-top: 18px; }
+.inspector-actions button { height: 36px; border: 0; border-radius: var(--radius-pill); background: var(--surface-secondary); color: var(--ink-secondary); cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; transition: background-color 140ms ease, color 140ms ease, transform 160ms var(--ease-bounce); }
+.inspector-actions button:hover { background: var(--brand-soft); color: var(--brand-hover); }
+.inspector-actions button:active { transform: scale(.97); }
+.inspector-actions .primary { background: var(--brand-gradient); color: var(--brand-on-primary); box-shadow: 0 10px 22px rgba(var(--brand-primary-rgb), .32); }
+.inspector-actions .primary:hover { color: #fff; }
+.inspector-actions .danger { color: var(--danger-foreground); }
+.inspector-actions .text { background: transparent; color: var(--ink-tertiary); }
+@media (max-width: 1050px) { .gallery-inspector { width: 230px; flex-basis: 230px; } }
 </style>

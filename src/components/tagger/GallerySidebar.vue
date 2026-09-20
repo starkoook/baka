@@ -58,28 +58,28 @@ defineEmits<{
 </template>
 
 <style scoped>
-.gallery-sidebar { width: 198px; flex: 0 0 198px; min-height: 0; display: flex; flex-direction: column; border: 0; border-radius: 12px; background: linear-gradient(180deg, color-mix(in srgb, var(--surface-secondary) 78%, transparent), transparent); }
-.sidebar-footer { flex: none; padding: 8px 10px 12px; border-top: 1px solid rgba(255,255,255,.06); }
-.recycle-button { width: 100%; height: 38px; display: flex; align-items: center; gap: 9px; padding: 0 10px; border: 1px solid rgba(255,255,255,.08); border-radius: 9px; background: rgba(255,255,255,.025); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 11px; }
-.recycle-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.4; }
-.recycle-button:hover { background: rgba(var(--accent-primary-rgb),.09); color: var(--accent-primary); }
-.sidebar-scroll { flex: 1; min-height: 0; overflow: auto; padding: 10px; }
-section + section { margin-top: 17px; }
-.section-heading { height: 28px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; color: var(--text-tertiary); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.section-heading button { width: 24px; height: 24px; border: 0; border-radius: 6px; background: transparent; color: var(--text-tertiary); cursor: pointer; font-size: 17px; }
-.section-heading button:hover { background: rgba(255,255,255,.06); color: var(--text-primary); }
-.source-row { width: 100%; height: 34px; display: flex; align-items: center; gap: 9px; padding: 0 9px; border: 0; border-radius: 8px; background: transparent; color: var(--text-tertiary); cursor: pointer; text-align: left; font: inherit; font-size: 11px; }
-.source-row:hover { background: rgba(255,255,255,.04); color: var(--text-secondary); }
-.source-row.active { background: rgba(var(--accent-primary-rgb),.11); color: var(--accent-primary); }
-.source-row small { margin-left: auto; color: inherit; opacity: .65; font-size: 9px; }
+.gallery-sidebar { width: 216px; flex: 0 0 216px; min-height: 0; display: flex; flex-direction: column; border-radius: var(--radius-hero); background: var(--surface-primary); box-shadow: var(--surface-shadow); }
+.sidebar-footer { flex: none; padding: 8px 12px 12px; }
+.recycle-button { width: 100%; height: 40px; display: flex; align-items: center; gap: 9px; padding: 0 14px; border: 0; border-radius: var(--radius-pill); background: var(--surface-secondary); color: var(--ink-secondary); cursor: pointer; font: inherit; font-size: 12.5px; font-weight: 700; transition: background-color 140ms ease, color 140ms ease; }
+.recycle-button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.recycle-button:hover { background: var(--brand-soft); color: var(--brand-hover); }
+.sidebar-scroll { flex: 1; min-height: 0; overflow: auto; padding: 14px 12px 8px; }
+section + section { margin-top: 18px; }
+.section-heading { height: 28px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; color: var(--ink-tertiary); font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+.section-heading button { width: 26px; height: 26px; border: 0; border-radius: 50%; background: transparent; color: var(--brand-hover); cursor: pointer; font-size: 17px; }
+.section-heading button:hover { background: var(--brand-soft); }
+.source-row { width: 100%; height: 38px; display: flex; align-items: center; gap: 9px; padding: 0 12px; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--ink-secondary); cursor: pointer; text-align: left; font: inherit; font-size: 13px; font-weight: 600; transition: background-color 140ms ease, color 140ms ease, transform 180ms var(--ease-bounce); }
+.source-row:hover { background: var(--brand-tint); color: var(--ink-primary); }
+.source-row.active { background: var(--brand-primary); color: var(--brand-on-primary); box-shadow: 0 10px 22px rgba(var(--brand-primary-rgb), .3); }
+.source-row small { margin-left: auto; color: inherit; opacity: .7; font-family: var(--font-mono); font-size: 10.5px; }
 .source-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .source-icon { width: 17px; height: 17px; flex: none; }
-.source-icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.35; }
-.source-row--muted { opacity: .75; }
-.dot { width: 7px; height: 7px; margin: 0 5px; border-radius: 50%; }
-.dot--new { background: #70d6ff; box-shadow: 0 0 8px rgba(112,214,255,.4); }
-.dot--empty { border: 1px solid #ffc66d; }
-.dataset-empty { width: calc(100% - 8px); margin: 2px 4px; padding: 9px; border: 1px dashed rgba(255,255,255,.1); border-radius: 8px; background: transparent; color: var(--text-tertiary); font-size: 10px; cursor: pointer; }
-.dataset-empty:hover { border-color: rgba(var(--accent-primary-rgb),.4); color: var(--accent-primary); }
-@media (max-width: 1200px) { .gallery-sidebar { width: 178px; flex-basis: 178px; } }
+.source-icon svg { width: 100%; height: 100%; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.source-row--muted { opacity: .8; }
+.dot { width: 8px; height: 8px; margin: 0 5px; border-radius: 50%; }
+.dot--new { background: var(--accent-sky); box-shadow: 0 0 0 3px var(--accent-sky-soft); }
+.dot--empty { border: 2px solid var(--accent-peach); }
+.dataset-empty { width: calc(100% - 8px); margin: 2px 4px; padding: 10px; border: 2px dashed var(--line-strong); border-radius: 16px; background: transparent; color: var(--ink-tertiary); font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
+.dataset-empty:hover { border-color: var(--brand-primary); color: var(--brand-hover); }
+@media (max-width: 1200px) { .gallery-sidebar { width: 190px; flex-basis: 190px; } }
 </style>
