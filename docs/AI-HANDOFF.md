@@ -8,8 +8,8 @@
 - 项目：Baka TOOLS，Electron + Vue 3 + Vite + TypeScript 的 Windows 桌面工具箱（图库 / 在线画廊 / 标注 / 训练 / 放大 / 控制台 / 视频工具）。代码在 `baka-tools-github/`，分支 `main`。
 - 阶段：柔粉「灵动版」UI 改版 + 对标 BooruDatasetTagManager+ 的标注功能强化，均已完成，并已打包覆盖到免安装目录 `D:\baka\BakaTOOLS`（`Baka TOOLS.exe`）。
 - 任务系统：没有 Backlog.md，未初始化；任务在本文件 Next Step 与对话中跟踪。
-- Git 保存点：代码在 `eca9e9c`（可回滚）；其后只有 docs 提交加了本文件与 README 入口。工作区另有约 100 个未跟踪调试脚本与目录（`_*.js`、`_*.py`、`_asar_*`、`_app_tdr.asar`、`tools/`、`metadata.js`，约 1 GB）——那是历史热修补残留，不属于任何当前任务；不要提交，也不要未经 Owner 允许删除。
-- 远端：`origin` = github.com/starkoook/baka，本地领先 27 个提交、不落后；本轮未 push（未获授权）。
+- Git 保存点：功能在 `eca9e9c`（可回滚）；其后是交接文档。工作区另有约 100 个未跟踪调试脚本与目录（`_*.js`、`_*.py`、`_asar_*`、`_app_tdr.asar`、`tools/`、`metadata.js`，约 1 GB）——历史热修补残留，不属于任何当前任务；不要提交，也不要未经 Owner 允许删除。
+- 远端：`origin` = github.com/starkoook/baka（**公开仓库**）。Owner 已授权，28 个本地提交已推到 `main`（`60e3491..85a3b70`）。界面源码、设计稿、标注功能均已公开。
 - 状态：可继续，无 blocker。
 - 关键位置：标注状态 `src/stores/tagger.ts`；标注页 `src/views/Tagger.vue` + `src/components/tagger/`；审计核心 `electron/ipc/character-tag-audit.js`（IPC 在 `character-tag-audit-ipc.js`）；LLM 规则 `electron/skills/*.md`；类目 / 修复 `electron/ipc/tag-categories.js`、`tag-fixes.js`；标签数据 `resources/tag-data/*.csv`（打包后在 `resources/tag-data`，用 `tag-data-path.js` 定位）；IPC 契约 `electron/ipc/channels.js`（`npm run check:ipc` 校验）；打包 `node scripts/package.js` → `release/Baka-TOOLS-Portable.zip`。
 
@@ -19,9 +19,10 @@ None（本轮授权范围——BDTM+ 对标的标注改进：审计规则接入�
 
 ## Last Meaningful Changes
 
-- `eca9e9c` 类目着色与排序（7.7 万条 Danbooru 一二级类目 + 后缀规则兜底）、快速替换、错误标签修复对话框；修复 `resources/tag-data` 从未进包的问题（安装版里中文搜标签 / 角色父子表此前一直静默失效）。
-- `806acf7` 角色标签审计重写：lora-tagging-skills 两份规则作系统提示，文本初筛 → 视觉复核 → 严格校验 + 一次自动修复；全部标签面板（整批计数 / 改名 / 移除 / 逐张校对 / 保存全部）；触发词保存时置顶；金字塔排序。
-- `be2e891` 及更早：柔粉灵动版外壳与首页、图库瀑布流、`media://` 缩略图、剔除画布工具、拍立得点进图库定位、Voicevox 点击音、只出免安装 zip。细节看 `git log`。
+- 已推远端：`60e3491..85a3b70`（柔粉灵动版 + BDTM+ 标注强化 + 8 月底积压入库 + 交接文档）。调试残留未推。
+- `eca9e9c` 类目着色与排序、快速替换、错误标签修复；修复 `resources/tag-data` 未进包。
+- `806acf7` 角色标签审计重写、全部标签面板、触发词、金字塔排序。
+- 更早：灵动版外壳 / 图库瀑布流 / `media://` / 剔除画布 / Voicevox / 只出免安装 zip。细节看 `git log`。
 
 ## In Progress
 
@@ -29,8 +30,8 @@ None
 
 ## Open Decisions / Risks
 
-- 待 Owner 决定：是否把 27 个本地提交 push 到 `origin`。
 - 待 Owner 决定：根目录调试残留是否移出仓库归档（建议移到仓库外，不直接删）；同时清主进程可能残留的画布 IPC（workbench-images / local-engines）。
+- 仓库已公开：界面 Vue/CSS、`docs/superpowers/mockups/` 设计稿均可被 clone。若以后要收，只能改 GitHub 为 Private（已 clone 的人仍留有副本）。Electron 安装包本身也能解出渲染层，藏源码挡不住对照抄外观。
 - 4 个预存失败测试，不是本轮引入：
   - `electron/ipc/__tests__/main-behavior.spec.ts`：`fs:moveImages`（`electron/main.js` ≈ L251）移动 / 复制图片时未带同名 caption，**真实回归**。
   - `electron/ipc/__tests__/runtime-manager.spec.ts`：读所选训练仓库的 runtime 定义失败，**真实回归**。
@@ -48,7 +49,7 @@ None
 ## Next Step
 
 1. 修两个真实回归（`fs:moveImages` caption 跟随；runtime-manager 读训练仓库），让 `npm test` 只剩环境缺失的 2 例。
-2. 拿到 Owner 决定后：归档根目录调试残留、清残留画布 IPC，再 push。
+2. 拿到 Owner 决定后：归档根目录调试残留、清残留画布 IPC。
 3. 用真实 API 跑一次角色标签审计，检查决定与核心 prompt 质量；需要调 prompt 时改 `character-tag-audit.js` 的 `buildSystemPrompt / buildTextPrompt / buildVisualPrompt`，规则文件本身不改。
 
 ## Immediate First Action
