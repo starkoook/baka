@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baka TOOLS · 六种风格 · 选一个方向</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#111114;color:#ecebef;font-family:"Segoe UI Variable Display","Segoe UI","PingFang SC","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+body{padding:56px 40px 140px;max-width:1600px;margin:0 auto}
+.head{margin-bottom:40px}
+.head small{font-family:Consolas,ui-monospace,monospace;font-size:11px;letter-spacing:.14em;color:#7c7b86;text-transform:uppercase}
+.head h1{font-size:34px;font-weight:600;letter-spacing:-.02em;margin-top:12px}
+.head p{color:#a5a4ae;margin-top:10px;font-size:14px;line-height:1.7;max-width:760px}
+.board{display:grid;grid-template-columns:1fr 1fr;gap:34px 30px}
+.card{cursor:pointer;border-radius:18px;padding:14px;background:#17171b;border:1px solid rgba(255,255,255,.07);transition:transform .18s ease,border-color .18s ease}
+.card:hover{transform:translateY(-3px);border-color:rgba(255,255,255,.18)}
+.card.picked{border-color:#fff;box-shadow:0 0 0 3px rgba(255,255,255,.12)}
+.card .stage{position:relative;width:100%;border-radius:12px;overflow:hidden}
+.card .fit{position:absolute;left:0;top:0;width:1280px;height:760px;transform-origin:top left}
+.card .cap{display:flex;gap:16px;align-items:flex-start;padding:16px 6px 4px}
+.card .cap b{font-size:26px;font-weight:700;width:34px;flex:none;letter-spacing:-.02em;color:#fff}
+.card .cap h3{font-size:16px;font-weight:600}
+.card .cap p{margin-top:5px;font-size:12.5px;color:#a5a4ae;line-height:1.6}
+.card .cap p i{font-style:normal;color:#7c7b86}
+.pickbar{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:#fff;color:#111;padding:12px 18px;border-radius:999px;font-size:13.5px;font-weight:600;box-shadow:0 20px 60px rgba(0,0,0,.5);display:none;gap:10px;align-items:center}
+.pickbar.on{display:flex}
+.pickbar span{color:#666;font-weight:500}
+
+/* ═══════════ 通用 mock 结构 ═══════════ */
+.mock{position:relative;width:1280px;height:760px;overflow:hidden;display:grid;grid-template-columns:64px 1fr;font-family:var(--font,inherit);color:var(--ink);background:var(--bg)}
+.mock .bg{position:absolute;inset:0;z-index:0;pointer-events:none}
+.mock .rail{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 0;background:var(--rail-bg);border-right:1px solid var(--rail-line,transparent)}
+.mock .logo{width:32px;height:32px;border-radius:var(--logo-r,10px);background:var(--accent);margin-bottom:10px;display:grid;place-items:center}
+.mock .logo i{width:12px;height:12px;border:2px solid var(--on-accent,#fff);border-radius:3px;transform:rotate(45deg)}
+.mock .ic{width:40px;height:40px;border-radius:var(--ic-r,10px);display:grid;place-items:center;color:var(--ink-3)}
+.mock .ic svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.mock .ic.on{background:var(--ic-on-bg);color:var(--ic-on-ink,var(--ink))}
+.mock .body{position:relative;z-index:1;display:grid;grid-template-rows:52px 1fr;min-width:0}
+.mock .top{display:flex;align-items:center;justify-content:space-between;padding:0 22px;color:var(--ink-2);font-size:13px;border-bottom:1px solid var(--top-line,transparent);background:var(--top-bg,transparent)}
+.mock .top b{color:var(--ink);font-weight:600}
+.mock .search{width:360px;height:32px;border-radius:var(--ctl-r,9px);background:var(--ctl-bg);border:1px solid var(--ctl-line);display:flex;align-items:center;padding:0 12px;gap:8px;font-size:12px;color:var(--ink-3)}
+.mock .search em{margin-left:auto;font-style:normal;font-family:Consolas,monospace;font-size:10px;padding:1px 5px;border:1px solid var(--ctl-line);border-radius:4px}
+.mock .winctl{display:flex;gap:14px;font-size:12px;color:var(--ink-3)}
+.mock .page{padding:22px 28px 0;display:flex;flex-direction:column;gap:18px;min-height:0}
+.mock .hero{position:relative;height:300px;border-radius:var(--hero-r,16px);overflow:hidden;display:flex;align-items:center;padding:0 40px;background:var(--hero-bg);border:1px solid var(--hero-line,transparent);box-shadow:var(--hero-shadow,none)}
+.mock .hero img{position:absolute;right:0;top:0;height:100%;width:72%;object-fit:cover;object-position:center 28%}
+.mock .hero .shade{position:absolute;inset:0;background:var(--hero-shade)}
+.mock .copy{position:relative;z-index:1;max-width:520px}
+.mock .eyebrow{font-family:var(--eyebrow-font,Consolas,monospace);font-size:11px;letter-spacing:.16em;color:var(--eyebrow,var(--ink-3));text-transform:uppercase}
+.mock h1{margin-top:14px;font-family:var(--display,inherit);font-size:44px;font-weight:var(--display-weight,600);letter-spacing:var(--display-ls,-.02em);line-height:1.12;color:var(--hero-ink,var(--ink))}
+.mock h1 span{display:block;font-size:22px;font-weight:400;margin-top:8px;color:var(--hero-ink-2,var(--ink-2));letter-spacing:0}
+.mock .sub{margin-top:14px;font-size:13px;color:var(--hero-ink-2,var(--ink-2))}
+.mock .btns{display:flex;gap:10px;margin-top:22px}
+.mock .btn{height:38px;padding:0 18px;border-radius:var(--btn-r,9px);display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;background:var(--btn-bg);color:var(--btn-ink);border:1px solid var(--btn-line,transparent);box-shadow:var(--btn-shadow,none)}
+.mock .btn.ghost{background:var(--btn2-bg);color:var(--btn2-ink);border-color:var(--btn2-line);box-shadow:none}
+.mock .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--stat-gap,14px)}
+.mock .stat{padding:18px 22px;border-radius:var(--panel-r,14px);background:var(--panel);border:1px solid var(--panel-line,transparent);box-shadow:var(--panel-shadow,none);position:relative;overflow:hidden}
+.mock .stat small{display:block;font-family:var(--eyebrow-font,Consolas,monospace);font-size:10.5px;letter-spacing:.14em;color:var(--ink-3);text-transform:uppercase}
+.mock .stat b{display:block;margin-top:10px;font-size:30px;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--stat-ink,var(--ink));font-family:var(--num-font,inherit)}
+.mock .stat b em{font-style:normal;font-size:13px;color:var(--ink-3);margin-left:6px;font-weight:500}
+.mock .stat i{display:block;font-style:normal;margin-top:8px;font-size:12px;color:var(--ink-3)}
+.mock .row{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;flex:1;min-height:0}
+.mock .row figure{border-radius:var(--thumb-r,12px);overflow:hidden;border:1px solid var(--panel-line,transparent);position:relative;background:var(--panel);box-shadow:var(--panel-shadow,none)}
+.mock .row img{width:100%;height:100%;object-fit:cover;display:block}
+.mock .row figcaption{position:absolute;left:0;right:0;bottom:0;padding:22px 10px 8px;font-size:11px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.6))}
+.mock .row figure.live{outline:2px solid var(--accent);outline-offset:-1px}
+
+/* ═══════════ A · 幻境启动器（米哈游启动器式） ═══════════ */
+.t-a{--bg:#0d0b12;--ink:#f7f3ea;--ink-2:rgba(247,243,234,.78);--ink-3:rgba(247,243,234,.5);--accent:#e6c37a;--on-accent:#2a1f08;
+  --rail-bg:rgba(10,8,14,.55);--rail-line:rgba(230,195,122,.18);--ic-on-bg:rgba(230,195,122,.18);--ic-on-ink:#e6c37a;--logo-r:50%;--ic-r:50%;
+  --top-bg:transparent;--ctl-bg:rgba(255,255,255,.06);--ctl-line:rgba(255,255,255,.14);--ctl-r:999px;
+  --hero-bg:transparent;--hero-r:0;--hero-shade:linear-gradient(90deg,rgba(13,11,18,.2),transparent 60%);
+  --display:"Noto Serif CJK SC","Source Han Serif SC","Songti SC","STSong","SimSun",serif;--display-weight:600;--display-ls:.02em;--eyebrow:#e6c37a;--eyebrow-font:"Noto Serif CJK SC","Songti SC","SimSun",serif;
+  --btn-bg:linear-gradient(180deg,#f3dba0,#d9b262);--btn-ink:#2a1f08;--btn-r:999px;--btn-shadow:0 10px 30px rgba(230,195,122,.25);--btn2-bg:rgba(255,255,255,.06);--btn2-ink:#f7f3ea;--btn2-line:rgba(255,255,255,.22);
+  --panel:rgba(18,14,24,.55);--panel-line:rgba(230,195,122,.22);--panel-r:6px;--panel-shadow:inset 0 1px 0 rgba(255,255,255,.06);--thumb-r:6px;--stat-ink:#f3dba0;--num-font:"Noto Serif CJK SC","Songti SC","SimSun",serif}
+.t-a .bg{background:url(../../../public/branding/dashboard-hero-1920.webp) center 30%/cover no-repeat}
+.t-a .bg::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(13,11,18,.96) 0%,rgba(13,11,18,.86) 42%,rgba(13,11,18,.35) 75%,rgba(13,11,18,.55) 100%),linear-gradient(180deg,rgba(13,11,18,.2),rgba(13,11,18,.9))}
+.t-a .hero img{display:none}
+.t-a .hero{padding-left:12px}
+.t-a .stat,.t-a .row figure{backdrop-filter:blur(14px)}
+.t-a .stat::before,.t-a .stat::after{content:"";position:absolute;width:10px;height:10px;border:1px solid var(--accent);opacity:.7}
+.t-a .stat::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
+.t-a .stat::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
+.t-a .eyebrow{letter-spacing:.4em}
+.t-a .eyebrow::before{content:"";display:inline-block;width:28px;height:1px;background:var(--accent);vertical-align:middle;margin-right:12px}
+.t-a .copy::after{content:"";display:block;width:64px;height:1px;background:linear-gradient(90deg,var(--accent),transparent);margin-top:22px}
+
+/* ═══════════ B · 极光玻璃 ═══════════ */
+.t-b{--bg:#efeaff;--ink:#1f1a33;--ink-2:#4a4460;--ink-3:#7d7794;--accent:#7c5cff;--on-accent:#fff;
+  --rail-bg:rgba(255,255,255,.45);--rail-line:rgba(255,255,255,.6);--ic-on-bg:#fff;--ic-on-ink:#7c5cff;--logo-r:12px;--ic-r:12px;
+  --ctl-bg:rgba(255,255,255,.55);--ctl-line:rgba(255,255,255,.8);--ctl-r:12px;
+  --hero-bg:rgba(255,255,255,.42);--hero-line:rgba(255,255,255,.75);--hero-r:24px;--hero-shadow:0 30px 80px rgba(80,50,180,.18);--hero-shade:linear-gradient(90deg,rgba(255,255,255,.97) 36%,rgba(255,255,255,.55) 52%,rgba(255,255,255,0) 72%);
+  --btn-bg:linear-gradient(135deg,#8b6cff,#6a4dff);--btn-ink:#fff;--btn-r:12px;--btn-shadow:0 12px 30px rgba(108,77,255,.35);--btn2-bg:rgba(255,255,255,.6);--btn2-ink:#3a3355;--btn2-line:rgba(255,255,255,.9);
+  --panel:rgba(255,255,255,.5);--panel-line:rgba(255,255,255,.8);--panel-r:20px;--panel-shadow:0 16px 40px rgba(80,50,180,.10);--thumb-r:16px}
+.t-b .bg{background:
+  radial-gradient(600px 420px at 12% 12%,#ffb3d9 0%,transparent 60%),
+  radial-gradient(700px 500px at 88% 8%,#a9c7ff 0%,transparent 60%),
+  radial-gradient(700px 600px at 80% 90%,#ffd7a8 0%,transparent 55%),
+  radial-gradient(600px 500px at 20% 95%,#b9a4ff 0%,transparent 60%),#efeaff}
+.t-b .rail,.t-b .hero,.t-b .stat,.t-b .search,.t-b .row figure{backdrop-filter:blur(24px)}
+.t-b .hero img,.t-c .hero img,.t-d .hero img{-webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 40%);mask-image:linear-gradient(90deg,transparent 0%,#000 40%)}
+
+/* ═══════════ C · 奶油纸感 ═══════════ */
+.t-c{--bg:#f6f1e8;--ink:#2a2521;--ink-2:#5f574e;--ink-3:#9a9086;--accent:#c96a45;--on-accent:#fff;
+  --rail-bg:#efe8dc;--rail-line:#e3dacb;--ic-on-bg:#2a2521;--ic-on-ink:#fff;--logo-r:10px;--ic-r:10px;
+  --top-line:#e6ddcf;--ctl-bg:#fffdf9;--ctl-line:#e3dacb;--ctl-r:10px;
+  --hero-bg:#fffdf9;--hero-line:#e6ddcf;--hero-r:18px;--hero-shadow:0 1px 0 #fff inset;--hero-shade:linear-gradient(90deg,#fffdf9 38%,rgba(255,253,249,.7) 52%,transparent 72%);
+  --display:"Noto Serif CJK SC","Source Han Serif SC","Songti SC","STSong","SimSun",serif;--display-weight:600;--display-ls:0;
+  --btn-bg:#2a2521;--btn-ink:#fff;--btn-r:10px;--btn2-bg:transparent;--btn2-ink:#2a2521;--btn2-line:#cfc4b4;
+  --panel:#fffdf9;--panel-line:#e6ddcf;--panel-r:14px;--thumb-r:12px;--stat-ink:#c96a45;--num-font:"Noto Serif CJK SC","Songti SC",Georgia,serif}
+.t-c .bg{background:#f6f1e8;background-image:radial-gradient(#e6ddcf 0.8px,transparent 0.8px);background-size:22px 22px;opacity:.5}
+.t-c .stat small{color:#c96a45}
+
+/* ═══════════ D · 霓虹赛博 ═══════════ */
+.t-d{--bg:#060a14;--ink:#e6f6ff;--ink-2:#9bb8cc;--ink-3:#5d7a92;--accent:#22d3ee;--on-accent:#06202a;
+  --rail-bg:#070d19;--rail-line:rgba(34,211,238,.18);--ic-on-bg:rgba(34,211,238,.14);--ic-on-ink:#22d3ee;--logo-r:6px;--ic-r:6px;
+  --top-line:rgba(34,211,238,.15);--ctl-bg:rgba(34,211,238,.05);--ctl-line:rgba(34,211,238,.25);--ctl-r:4px;
+  --hero-bg:#0a1020;--hero-line:rgba(34,211,238,.3);--hero-r:4px;--hero-shadow:0 0 0 1px rgba(34,211,238,.08),0 0 60px rgba(34,211,238,.08);--hero-shade:linear-gradient(90deg,#0a1020 36%,rgba(10,16,32,.75) 52%,transparent 74%),linear-gradient(180deg,transparent,rgba(10,16,32,.5));
+  --eyebrow:#22d3ee;--btn-bg:#22d3ee;--btn-ink:#06202a;--btn-r:4px;--btn-shadow:0 0 24px rgba(34,211,238,.45);--btn2-bg:transparent;--btn2-ink:#e6f6ff;--btn2-line:rgba(244,114,182,.5);
+  --panel:#0a1020;--panel-line:rgba(34,211,238,.25);--panel-r:4px;--thumb-r:4px;--stat-ink:#22d3ee}
+.t-d .bg{background:#060a14;background-image:linear-gradient(rgba(34,211,238,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.06) 1px,transparent 1px);background-size:40px 40px}
+.t-d .bg::after{content:"";position:absolute;inset:0;background:radial-gradient(800px 400px at 70% 0%,rgba(244,114,182,.12),transparent 60%),radial-gradient(600px 400px at 10% 100%,rgba(34,211,238,.1),transparent 60%)}
+.t-d h1{text-shadow:0 0 24px rgba(34,211,238,.35)}
+.t-d .stat::before,.t-d .stat::after,.t-d .hero::before,.t-d .hero::after{content:"";position:absolute;width:14px;height:14px;border:1.5px solid var(--accent)}
+.t-d .stat::before,.t-d .hero::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
+.t-d .stat::after,.t-d .hero::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
+.t-d .hero img{filter:saturate(1.1) contrast(1.05)}
+.t-d .stat b{font-family:Consolas,"Cascadia Code",monospace}
+.t-d .stat i{color:#f472b6}
+
+/* ═══════════ E · 杂志黑白 ═══════════ */
+.t-e{--bg:#f3f2ee;--ink:#111;--ink-2:#444;--ink-3:#888;--accent:#e2231a;--on-accent:#fff;
+  --rail-bg:#111;--ic-on-bg:#fff;--ic-on-ink:#111;--logo-r:0;--ic-r:0;
+  --top-line:#111;--ctl-bg:#fff;--ctl-line:#111;--ctl-r:0;
+  --hero-bg:#fff;--hero-line:#111;--hero-r:0;--hero-shade:linear-gradient(90deg,#fff 40%,#fff 46%,transparent 46.2%);
+  --display:"Noto Serif CJK SC","Source Han Serif SC","Songti SC","STSong","SimSun",serif;--display-weight:700;--display-ls:-.01em;--eyebrow:#e2231a;
+  --btn-bg:#111;--btn-ink:#fff;--btn-r:0;--btn2-bg:transparent;--btn2-ink:#111;--btn2-line:#111;
+  --panel:#fff;--panel-line:#111;--panel-r:0;--stat-gap:0;--thumb-r:0;--num-font:"Noto Serif CJK SC","Songti SC",Georgia,serif}
+.t-e .rail .ic{color:#888}
+.t-e .rail .ic.on{background:#e2231a;color:#fff}
+.t-e .logo{background:#fff}.t-e .logo i{border-color:#111}
+.t-e .stats{border:1px solid #111}
+.t-e .stat{border:0;border-right:1px solid #111}
+.t-e .stat:last-child{border-right:0}
+.t-e .stat b{font-size:40px}
+.t-e .hero img{width:54%;object-position:center 22%}
+.t-e h1{font-size:54px}
+.t-e .eyebrow{font-family:inherit;font-weight:700;letter-spacing:.3em}
+.t-e .row figure{border:1px solid #111}
+.t-e .row figcaption{background:#111;padding:6px 10px;font-family:Consolas,monospace;font-size:10px}
+
+/* ═══════════ F · 柔粉治愈 ═══════════ */
+.t-f{--bg:#fff3f8;--ink:#4a2d3d;--ink-2:#7c5a6c;--ink-3:#b393a3;--accent:#ff7eb6;--on-accent:#fff;
+  --rail-bg:#fff;--rail-line:#ffe1ee;--ic-on-bg:#ffe1ee;--ic-on-ink:#ff5fa5;--logo-r:14px;--ic-r:14px;
+  --ctl-bg:#fff;--ctl-line:#ffe1ee;--ctl-r:999px;
+  --hero-bg:linear-gradient(120deg,#ffe4f1,#ece4ff);--hero-line:#fff;--hero-r:28px;--hero-shadow:0 24px 60px rgba(255,126,182,.18);--hero-shade:linear-gradient(90deg,rgba(255,236,245,.98) 36%,rgba(255,236,245,.6) 54%,transparent 74%);
+  --display-weight:700;--display-ls:-.01em;--eyebrow:#ff7eb6;--eyebrow-font:inherit;
+  --btn-bg:linear-gradient(135deg,#ff8fc2,#ff6ea9);--btn-ink:#fff;--btn-r:999px;--btn-shadow:0 12px 28px rgba(255,110,169,.35);--btn2-bg:#fff;--btn2-ink:#7c5a6c;--btn2-line:#ffe1ee;
+  --panel:#fff;--panel-line:#ffe9f2;--panel-r:22px;--panel-shadow:0 14px 34px rgba(255,126,182,.10);--thumb-r:18px;--stat-ink:#ff5fa5}
+.t-f .bg{background:radial-gradient(700px 500px at 100% 0%,#ece4ff,transparent 60%),radial-gradient(600px 500px at 0% 100%,#ffe1ee,transparent 60%),#fff3f8}
+.t-f .stat small{letter-spacing:.06em;font-weight:700}
+.t-f .stat::after{content:"";position:absolute;right:-18px;top:-18px;width:70px;height:70px;border-radius:50%;background:#fff3f8}
+.t-f .hero img{-webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 40%);mask-image:linear-gradient(90deg,transparent 0%,#000 40%)}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <small>Baka TOOLS · 风格板 · 2026-09-20</small>
+  <h1>六种差别很大的方向，选一个你顺眼的</h1>
+  <p>同一套内容（首页：左侧工具栏、封面、三个数字、最近素材），换六种完全不同的气质。点一下卡片可以标记；直接回我字母就行，比如「A」，或者「B 的背景 + C 的字」。选定后我再把所有页面按那种气质精修。</p>
+</div>
+
+<div class="board" id="board"></div>
+<div class="pickbar" id="pickbar">你标记了：<span id="picked"></span></div>
+
+<script>
+const THEMES = [
+  { cls:'t-a', letter:'A', name:'幻境启动器', desc:'整张插画铺满做背景，前面是半透明深色玻璃面板 + 金色细线、宋体标题。像游戏启动器：气派、有仪式感。', who:'适合：想让软件一打开就有"作品感"' },
+  { cls:'t-b', letter:'B', name:'极光玻璃', desc:'粉紫蓝的柔和光斑当底，所有面板都是磨砂白玻璃、大圆角、轻投影。亮、干净、有科技感但不冷。', who:'适合：喜欢 macOS / iOS 那种通透感' },
+  { cls:'t-c', letter:'C', name:'奶油纸感', desc:'米色纸底、暖白卡片、赭红点缀、宋体大标题。安静、温和，像一本设计杂志的内页。', who:'适合：长时间盯着屏幕不想刺眼' },
+  { cls:'t-d', letter:'D', name:'霓虹赛博', desc:'深海军蓝 + 青色/品红霓虹、网格底、HUD 角标、等宽数字发光。就是"赛博 HUD"，但克制、锐利。', who:'适合：想要电竞 / 科幻的劲儿' },
+  { cls:'t-e', letter:'E', name:'杂志黑白', desc:'纯黑白 + 一点红，硬边无圆角、粗宋体大标题、插画硬切。极端有态度，辨识度最高。', who:'适合：喜欢时尚杂志 / 潮牌那种冷感' },
+  { cls:'t-f', letter:'F', name:'柔粉治愈', desc:'粉紫渐变、纯白圆润卡片、胶囊按钮、粉色柔影。回到"可爱"路线，但不幼稚。', who:'适合：想保留原来的软萌调性' },
+]
+
+const ICON = {
+  home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-6h6v6"/>',
+  img:'<rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 18 5-5 3 3 3-4 5 6"/>',
+  globe:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  tag:'<path d="M20 13.5 13.5 20H6a2 2 0 0 1-2-2v-7.5L10.5 4H18a2 2 0 0 1 2 2Z"/><circle cx="15.5" cy="8.5" r="1"/>',
+  cpu:'<rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/>',
+  max:'<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
+  nodes:'<rect x="3" y="4" width="7" height="6" rx="1.5"/><rect x="14" y="14" width="7" height="6" rx="1.5"/><rect x="14" y="4" width="7" height="6" rx="1.5"/><path d="M10 7h4M17.5 10v4M6.5 10v7h7.5"/>',
+  gear:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+}
+const svg = (k) => `<svg viewBox="0 0 24 24">${ICON[k]}</svg>`
+const P = '../../../public/'
+
+function mock(t){
+  return `
+  <div class="mock ${t.cls}">
+    <div class="bg"></div>
+    <aside class="rail">
+      <div class="logo"><i></i></div>
+      <a class="ic on">${svg('home')}</a><a class="ic">${svg('img')}</a><a class="ic">${svg('globe')}</a><a class="ic">${svg('tag')}</a><a class="ic">${svg('cpu')}</a><a class="ic">${svg('max')}</a><a class="ic">${svg('nodes')}</a>
+      <a class="ic" style="margin-top:auto">${svg('gear')}</a>
+    </aside>
+    <div class="body">
+      <header class="top"><b>首页</b><div class="search">搜索页面、动作或标签…<em>Ctrl K</em></div><div class="winctl"><span>—</span><span>▢</span><span>✕</span></div></header>
+      <main class="page">
+        <section class="hero">
+          <img src="${P}branding/dashboard-hero-1920.webp" alt="">
+          <div class="shade"></div>
+          <div class="copy">
+            <p class="eyebrow">Baka Tools · Sunday 09.20</p>
+            <h1>下午好。<span>接着上次的标注继续？</span></h1>
+            <p class="sub">上次停在图库 · 1,284 张素材 · 36 张待标注</p>
+            <div class="btns"><a class="btn">继续标注 →</a><a class="btn ghost">浏览全部工具</a></div>
+          </div>
+        </section>
+        <section class="stats">
+          <div class="stat"><small>图库</small><b>1,284<em>张</em></b><i>3 个来源 · 今日 +24</i></div>
+          <div class="stat"><small>待标注</small><b>36<em>张</em></b><i>已完成 1,248 · 97%</i></div>
+          <div class="stat"><small>训练</small><b>空闲</b><i>上次 “角色A_v3” · 20 轮</i></div>
+        </section>
+        <section class="row">
+          <figure class="live"><img src="${P}tools/tagger.jpg" alt=""><figcaption>00124_pink.png</figcaption></figure>
+          <figure><img src="${P}tools/workbench.jpg" alt=""><figcaption>00123_glasses.png</figcaption></figure>
+          <figure><img src="${P}tools/gallery.jpg" style="object-position:40% 20%" alt=""><figcaption>00122_rose.png</figcaption></figure>
+          <figure><img src="${P}branding/dashboard-hero-1920.webp" style="object-position:70% 20%" alt=""><figcaption>00121_studio.webp</figcaption></figure>
+          <figure><img src="${P}tools/upscale.jpg" alt=""><figcaption>00120_yellow.png</figcaption></figure>
+          <figure><img src="${P}tools/train.jpg" alt=""><figcaption>00119_spectrum.png</figcaption></figure>
+        </section>
+      </main>
+    </div>
+  </div>`
+}
+
+const board = document.getElementById('board')
+board.innerHTML = THEMES.map(t => `
+  <div class="card" data-letter="${t.letter}">
+    <div class="stage"><div class="fit">${mock(t)}</div></div>
+    <div class="cap"><b>${t.letter}</b><div><h3>${t.name}</h3><p>${t.desc}<br><i>${t.who}</i></p></div></div>
+  </div>`).join('')
+
+function fit(){
+  document.querySelectorAll('.stage').forEach(s => {
+    const k = s.clientWidth / 1280
+    s.querySelector('.fit').style.transform = `scale(${k})`
+    s.style.height = (760 * k) + 'px'
+  })
+}
+window.addEventListener('resize', fit); fit()
+
+const picked = new Set()
+document.querySelectorAll('.card').forEach(c => c.addEventListener('click', () => {
+  const l = c.dataset.letter
+  c.classList.toggle('picked'); picked.has(l) ? picked.delete(l) : picked.add(l)
+  document.getElementById('picked').textContent = [...picked].sort().join(' + ') || '—'
+  document.getElementById('pickbar').classList.toggle('on', picked.size > 0)
+}))
+</script>
+</body>
+</html>
