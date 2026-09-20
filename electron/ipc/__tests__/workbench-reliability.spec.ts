@@ -38,7 +38,7 @@ describe('workbench reliability', () => {
   it('applies and persists reduced motion across the whole workbench', () => {
     expect(workbench).toContain("'workbench--reduced': wbStore.reduceMotion")
     expect(workbench).toContain('.workbench--reduced *')
-    expect(sidebar).toContain("'sidebar-workbench--reduced': wbStore.reduceMotion")
+    expect(sidebar).toContain("'rail--reduced': wbStore.reduceMotion")
     expect(store).toContain("localStorage.getItem('baka-workbench-reduce-motion')")
     expect(store).toContain("localStorage.setItem('baka-workbench-reduce-motion'")
   })

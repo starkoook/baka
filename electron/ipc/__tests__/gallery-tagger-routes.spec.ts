@@ -15,22 +15,15 @@ describe('gallery and annotation routes', () => {
     expect(router).not.toContain("component: () => import('@/views/TaggerV2.vue')")
   })
 
-  it('offers gallery and annotation through the tool picker', () => {
+  it('exposes every tool route through the shared tool catalog used by the picker', () => {
+    const catalog = read('src/features/tools/tool-catalog.ts')
+    const router = read('src/router/index.ts')
     const picker = read('src/components/sidebar/ToolPicker.vue')
 
-    expect(picker).toContain("key: 'gallery'")
-    expect(picker).toContain("route: '/gallery'")
-    expect(picker).toContain("key: 'tagger'")
-    expect(picker).toContain("route: '/tagger'")
-  })
-
-  it('exposes every tool route through the tool picker', () => {
-    const picker = read('src/components/sidebar/ToolPicker.vue')
-
-    for (const route of ['/gallery', '/tagger', '/training', '/upscale']) {
-      expect(picker).toContain(`route: '${route}'`)
+    for (const route of ['/gallery', '/booru-gallery', '/tagger', '/training', '/upscale', '/workbench', '/video', '/image-tools', '/console']) {
+      expect(catalog).toContain(`route: '${route}'`)
+      expect(router).toContain(`path: '${route}'`)
     }
-    expect(picker).toContain('@mouseenter="activeTool = tool.key"')
-    expect(picker).toContain('@click="enterTool(tool.route)"')
+    expect(picker).toContain("from '@/features/tools/tool-catalog'")
   })
 })

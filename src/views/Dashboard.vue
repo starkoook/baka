@@ -1,16 +1,18 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import BrandHero from '@/components/dashboard/BrandHero.vue'
-import DashboardRecentWork from '@/components/dashboard/DashboardRecentWork.vue'
-import SystemMonitor from '@/components/monitor/SystemMonitor.vue'
+import HeroCard from '@/components/dashboard/HeroCard.vue'
+import PolaroidFan, { type PolaroidItem } from '@/components/dashboard/PolaroidFan.vue'
+import SystemRings from '@/components/dashboard/SystemRings.vue'
+import WorkspaceList from '@/components/dashboard/WorkspaceList.vue'
 import {
+  getAnnotationProgress,
   getContinueAction,
-  getDashboardSnapshot,
+  getGreeting,
+  getHeroSubline,
   resolveDashboardRoute,
 } from '@/features/dashboard/dashboard-summary'
-import { useDashboardScrollHandoff } from '@/features/dashboard/dashboard-scroll-handoff'
-import { getRememberedWorkspace, loadLastWorkspace } from '@/features/navigation/workspace-history'
+import { getRememberedWorkspace, loadLastWorkspace, loadRecentWorkspaces } from '@/features/navigation/workspace-history'
 import { useAppStore } from '@/stores/app'
 import { useGalleryStore } from '@/stores/gallery'
 import { usePipelineStore } from '@/stores/pipeline'
@@ -21,20 +23,12 @@ const appStore = useAppStore()
 const galleryStore = useGalleryStore()
 const pipelineStore = usePipelineStore()
 const taggerStore = useTaggerStore()
-const rememberedWorkspace = getRememberedWorkspace(loadLastWorkspace())
-const dashboardPage = ref<HTMLElement | null>(null)
-const handoffProgress = useDashboardScrollHandoff(dashboardPage)
 
-const handoffStyle = computed(() => ({
-  '--handoff-progress': handoffProgress.value,
-  '--hero-shift': `${-32 * handoffProgress.value}px`,
-  '--hero-scale': 1 - 0.05 * handoffProgress.value,
-  '--hero-opacity': 1 - 0.14 * handoffProgress.value,
-  '--hero-saturation': 1 - 0.12 * handoffProgress.value,
-  '--ambient-opacity': 0.08 + 0.12 * handoffProgress.value,
-  '--workspace-shift': `${48 - 68 * handoffProgress.value}px`,
-  '--workspace-scale': 0.96 + 0.04 * handoffProgress.value,
-}))
+const rememberedWorkspace = getRememberedWorkspace(loadLastWorkspace())
+const recentWorkspaces = ref(loadRecentWorkspaces())
+const now = new Date()
+const greeting = getGreeting(now.getHours())
+const dateLabel = `${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()]} · ${String(now.getMonth() + 1).padStart(2, '0')}.${String(now.getDate()).padStart(2, '0')}`
 
 const summaryInput = computed(() => ({
   imageCount: galleryStore.roots.reduce((sum, root) => sum + (root.image_count ?? 0), 0),
@@ -45,35 +39,55 @@ const summaryInput = computed(() => ({
 }))
 
 const continueAction = computed(() => getContinueAction(summaryInput.value))
-const snapshot = computed(() => getDashboardSnapshot(summaryInput.value))
-const displayTask = computed(() => {
-  const name = pipelineStore.currentTask?.name.trim()
-  if (!name || !pipelineStore.currentTask) return null
-  return { ...pipelineStore.currentTask, name }
+const subline = computed(() => getHeroSubline(summaryInput.value))
+const question = computed(() => {
+  if (pipelineStore.currentTask) return '训练还在跑，回去看看进度？'
+  if (summaryInput.value.unfinishedAnnotationCount > 0) return '接着上次的标注继续？'
+  if (summaryInput.value.imageCount === 0) return '先导入第一批素材吧。'
+  return '今天想从哪里开始？'
 })
-const annotationTotal = computed(() => taggerStore.queue.length)
-const annotationDone = computed(() => taggerStore.queue.filter((item) => item.status === 'reviewed').length)
-const annotationRemaining = computed(() => Math.max(0, annotationTotal.value - annotationDone.value))
-const annotationPercent = computed(() => (annotationTotal.value > 0 ? Math.round((annotationDone.value / annotationTotal.value) * 100) : 0))
+const progress = computed(() => getAnnotationProgress(
+  taggerStore.queue.length,
+  taggerStore.queue.filter((item) => item.status === 'reviewed').length,
+))
+const ringTitle = computed(() => {
+  if (progress.value.total === 0) return '还没有标注任务'
+  if (progress.value.remaining === 0) return '这批全部标完啦'
+  if (progress.value.percent >= 80) return '快标完啦'
+  return '标注进行中'
+})
+const ringText = computed(() => {
+  if (progress.value.total === 0) return '从图库选一批图送去标注，这里会显示进度。'
+  return `${progress.value.done} 张已确认，还剩 ${progress.value.remaining} 张。`
+})
 const taskPercent = computed(() => {
-  const progress = displayTask.value?.progress ?? 0
-  return Number.isFinite(progress) ? Math.min(100, Math.max(0, progress)) : 0
+  const value = pipelineStore.currentTask?.progress ?? 0
+  return Number.isFinite(value) ? Math.min(100, Math.max(0, Math.round(value))) : 0
 })
 
-const QUICK_TOOLS = [
-  { label: '图库', route: '/gallery' },
-  { label: '标注', route: '/tagger' },
-  { label: '训练', route: '/training' },
-  { label: '放大', route: '/upscale' },
-  { label: '控制台', route: '/console' },
-]
+// ── 最近加入：取最新入库的 6 张，摆成拍立得 ──
+const recentItems = ref<PolaroidItem[]>([])
+async function loadRecentImages() {
+  if (!window.galleryAPI?.getImages) return
+  try {
+    const res = await window.galleryAPI.getImages({ limit: 6 })
+    if (!res.success || !res.data) return
+    const newestDay = res.data[0]?.indexed_at?.slice(0, 10)
+    recentItems.value = res.data.map((image, index) => ({
+      id: image.id,
+      src: '',
+      caption: image.filename.replace(/\.[^.]+$/, ''),
+      isNew: index === 0 && Boolean(newestDay) && newestDay === new Date().toISOString().slice(0, 10),
+    })).reverse()
+    await Promise.all(recentItems.value.map(async (item) => {
+      const thumb = await window.galleryAPI.getThumbnail(item.id)
+      if (thumb.success && thumb.data) item.src = `data:image/jpeg;base64,${thumb.data.base64}`
+    }))
+  } catch { /* 图库未初始化时保持空态 */ }
+}
 
 function getRegisteredRoute(route: string) {
   return resolveDashboardRoute(route, (candidate) => router.resolve(candidate).matched.length > 0)
-}
-
-function continueWork() {
-  appStore.toolPickerOpen = true
 }
 
 function navigate(route: string) {
@@ -84,449 +98,186 @@ onMounted(() => {
   galleryStore.loadRoots()
   galleryStore.loadDatasets()
   taggerStore.restoreSession()
+  void loadRecentImages()
 })
 </script>
 
 <template>
-  <main ref="dashboardPage" class="dashboard-page" :style="handoffStyle">
-    <div class="dashboard-ambient" aria-hidden="true"></div>
-    <div class="dashboard-hero-layer">
-      <BrandHero
-        action-label="开始工作"
-        :show-artwork="appStore.showMascot"
-        @action="continueWork"
-      />
+  <div class="dashboard">
+    <span class="dashboard__spark dashboard__spark--1" aria-hidden="true">✦</span>
+    <span class="dashboard__spark dashboard__spark--2" aria-hidden="true">✦</span>
+    <span class="dashboard__spark dashboard__spark--3" aria-hidden="true">✦</span>
+
+    <div class="dashboard__hero">
+      <HeroCard
+        :greeting="greeting"
+        :question="question"
+        :action-label="continueAction.label"
+        :show-mascot="appStore.showMascot"
+        @action="navigate(continueAction.route)"
+        @open-tools="appStore.openToolPicker()"
+      >
+        <template #eyebrow><p class="dashboard__eyebrow">{{ dateLabel }}</p></template>
+      </HeroCard>
+
+      <button v-if="summaryInput.unfinishedAnnotationCount > 0" class="sticker is-peach dashboard__sticker dashboard__sticker--1" type="button" @click="navigate('/tagger')">
+        <b>{{ summaryInput.unfinishedAnnotationCount }}</b><i>张待标注</i>
+      </button>
+      <button class="sticker is-mint dashboard__sticker dashboard__sticker--2" type="button" @click="navigate(pipelineStore.currentTask ? '/training/run' : '/training')">
+        <i>训练</i><b>{{ pipelineStore.currentTask ? `${taskPercent}%` : '空闲' }}</b>
+      </button>
+      <button v-if="rememberedWorkspace" class="sticker dashboard__sticker dashboard__sticker--3" type="button" @click="navigate(rememberedWorkspace.route)">
+        <i>上次停在</i><b class="dashboard__sticker-text">{{ rememberedWorkspace.shortLabel }}</b><i>→</i>
+      </button>
     </div>
 
-    <div class="dashboard-workspace-layer">
-      <DashboardRecentWork
-        :action="continueAction"
-        :items="snapshot"
-        :task="displayTask"
-        @navigate="navigate"
-      />
-
-      <section class="system-summary" aria-labelledby="system-summary-title">
-        <header>
-          <span>设备状态</span>
-          <h2 id="system-summary-title">系统监控</h2>
-        </header>
-        <SystemMonitor class="dashboard-system" />
+    <aside class="dashboard__side">
+      <section class="ring-card" aria-labelledby="ring-title">
+        <div class="ring-card__donut" :style="{ '--p': progress.percent }">
+          <b>{{ progress.percent }}%<small>标注进度</small></b>
+        </div>
+        <div class="ring-card__text">
+          <h2 id="ring-title">{{ ringTitle }}</h2>
+          <p>{{ ringText }}</p>
+          <div class="ring-card__chips">
+            <span v-if="progress.remaining > 0" class="chip chip-peach">{{ progress.remaining }} 待处理</span>
+            <span v-if="progress.done > 0" class="chip chip-mint">已确认 {{ progress.done }}</span>
+            <span v-if="pipelineStore.currentTask" class="chip chip-lavender">{{ pipelineStore.currentTask.name }} · {{ taskPercent }}%</span>
+          </div>
+        </div>
       </section>
+      <div class="dashboard__tilts">
+        <button class="tilt tilt--pink" type="button" @click="navigate('/gallery')">
+          <small>图库</small>
+          <b>{{ summaryInput.imageCount.toLocaleString() }}<em>张</em></b>
+          <i>{{ galleryStore.roots.length }} 个来源</i>
+        </button>
+        <button class="tilt tilt--lav" type="button" @click="navigate('/gallery')">
+          <small>数据集</small>
+          <b>{{ summaryInput.datasetCount }}<em>个</em></b>
+          <i>{{ galleryStore.datasets[0]?.name ? `最近 “${galleryStore.datasets[0].name}”` : '还没建数据集' }}</i>
+        </button>
+      </div>
+    </aside>
 
-      <section class="dashboard-widgets" aria-label="工作台概览">
-        <article class="widget widget--quick">
-          <header><span>快捷入口</span><h3>快速打开</h3></header>
-          <div class="widget__quick">
-            <button
-              v-for="tool in QUICK_TOOLS"
-              :key="tool.route"
-              type="button"
-              @click="navigate(tool.route)"
-            >
-              {{ tool.label }}
-            </button>
-          </div>
-        </article>
+    <section class="dashboard__recent" aria-labelledby="recent-title">
+      <header>
+        <h2 id="recent-title">最近加入</h2>
+        <button class="dashboard__link" type="button" @click="navigate('/gallery')">查看全部 →</button>
+      </header>
+      <PolaroidFan :items="recentItems" @open="navigate('/gallery')" />
+    </section>
 
-        <article class="widget">
-          <header><span>标注</span><h3>标注进度</h3></header>
-          <div class="widget__progress">
-            <div class="widget__row"><span>已完成</span><b>{{ annotationDone }}</b></div>
-            <div class="widget__row"><span>待处理</span><b>{{ annotationRemaining }}</b></div>
-            <div class="widget__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="annotationPercent">
-              <i :style="{ width: `${annotationPercent}%` }"></i>
-            </div>
-            <p v-if="annotationTotal > 0">{{ annotationPercent }}% 完成</p>
-            <p v-else>暂无标注任务</p>
-          </div>
-        </article>
-
-        <article class="widget">
-          <header><span>训练</span><h3>任务状态</h3></header>
-          <div v-if="displayTask" class="widget__task">
-            <strong>{{ displayTask.name }}</strong>
-            <span>{{ displayTask.speed }} · 预计 {{ displayTask.eta }}</span>
-            <div class="widget__track" role="progressbar" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="taskPercent">
-              <i :style="{ width: `${taskPercent}%` }"></i>
-            </div>
-          </div>
-          <p v-else class="widget__empty">暂无进行中的任务</p>
-        </article>
-
-        <article class="widget">
-          <header><span>图库</span><h3>素材概览</h3></header>
-          <div class="widget__numbers">
-            <div><b>{{ summaryInput.imageCount }}</b><span>图片</span></div>
-            <div><b>{{ galleryStore.roots.length }}</b><span>来源</span></div>
-            <div><b>{{ galleryStore.datasets.length }}</b><span>数据集</span></div>
-          </div>
-        </article>
+    <div class="dashboard__system">
+      <SystemRings />
+      <section class="task-hint">
+        <p v-if="pipelineStore.currentTask">
+          <b>{{ pipelineStore.currentTask.name }} 正在训练。</b><br>
+          {{ pipelineStore.currentTask.speed }} · 预计 {{ pipelineStore.currentTask.eta }}
+        </p>
+        <p v-else>
+          <b>没有进行中的任务。</b><br>
+          <template v-if="progress.total > 0 && progress.remaining === 0">这批素材已经标完，可以准备训练了。</template>
+          <template v-else-if="progress.total > 0">标注还剩 {{ progress.remaining }} 张，标完就能开训练。</template>
+          <template v-else>先导入素材、打好标签，再来这里开训练。</template>
+        </p>
+        <button class="btn btn-soft btn-sm" type="button" @click="navigate(pipelineStore.currentTask ? '/training/run' : '/training')">
+          {{ pipelineStore.currentTask ? '查看进度 →' : '新建训练 →' }}
+        </button>
       </section>
     </div>
 
-    <div class="dashboard-scroll-tail" aria-hidden="true"></div>
-  </main>
+    <WorkspaceList class="dashboard__workspaces" :items="recentWorkspaces" @navigate="navigate" />
+  </div>
 </template>
 
 <style scoped>
-.dashboard-page {
-  --handoff-progress: 0;
-  --hero-shift: 0px;
-  --hero-scale: 1;
-  --hero-opacity: 1;
-  --hero-saturation: 1;
-  --ambient-opacity: 0.08;
-  --workspace-shift: 48px;
-  --workspace-scale: 0.96;
+.dashboard {
   position: relative;
-  width: min(100%, 1400px);
-  min-height: calc(100vh + 240px);
-  margin: 0 auto;
-  padding-bottom: 28px;
-  perspective: 1200px;
-}
-
-.dashboard-ambient {
-  position: absolute;
-  z-index: 0;
-  inset: 44% 8% auto;
-  height: 240px;
-  border-radius: 50%;
-  pointer-events: none;
-  opacity: var(--ambient-opacity);
-  background: var(--brand-primary);
-  filter: blur(110px);
-}
-
-.dashboard-hero-layer {
-  position: sticky;
-  z-index: 1;
-  top: 0;
-  opacity: var(--hero-opacity);
-  transform: translateY(var(--hero-shift)) scale(var(--hero-scale));
-  transform-origin: center top;
-  filter: saturate(var(--hero-saturation));
-  transition: opacity 80ms linear, filter 80ms linear;
-}
-
-.dashboard-workspace-layer {
-  position: relative;
-  z-index: 3;
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
-  align-items: start;
-  gap: 14px;
-  margin: clamp(-112px, -10vh, -78px) clamp(16px, 2.5vw, 36px) 0;
-  transform: translateY(var(--workspace-shift)) scale(var(--workspace-scale));
-  transform-origin: center top;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 430px);
+  grid-template-areas:
+    "hero side"
+    "recent system"
+    "recent workspaces";
+  gap: 22px 24px;
+  padding: 30px 6px 20px 12px;
+  max-width: 1480px;
 }
+.dashboard__spark { position: absolute; color: var(--brand-primary); font-size: 16px; line-height: 1; pointer-events: none; opacity: 0.85; }
+.dashboard__spark--1 { right: 16%; top: -6px; }
+.dashboard__spark--2 { right: 12%; top: 34px; color: var(--accent-lavender); font-size: 12px; }
+.dashboard__spark--3 { left: 45%; top: 340px; font-size: 12px; }
+.dashboard__eyebrow { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em; color: var(--brand-primary); text-transform: uppercase; font-weight: 800; }
 
-.dashboard-scroll-tail {
-  height: clamp(160px, 24vh, 240px);
+.dashboard__hero { grid-area: hero; position: relative; }
+.dashboard__sticker { position: absolute; z-index: 3; cursor: pointer; transition: transform 0.25s var(--ease-bounce); }
+.dashboard__sticker--1 { left: min(66%, calc(100% - 200px)); top: -8px; transform: rotate(-7deg); }
+.dashboard__sticker--2 { right: 24px; bottom: -14px; transform: rotate(4deg); }
+.dashboard__sticker--3 { left: 40px; bottom: -18px; transform: rotate(-3deg); }
+.dashboard__sticker-text { font-family: inherit; font-size: 13px; }
+.dashboard__sticker:hover { transform: rotate(0deg) scale(1.04); }
+
+.dashboard__side { grid-area: side; display: grid; gap: 16px; align-content: start; }
+.ring-card {
+  display: grid; grid-template-columns: 136px 1fr; align-items: center; gap: 14px;
+  padding: 22px 20px 22px 22px; border-radius: var(--radius-hero); background: var(--surface-primary); box-shadow: var(--surface-shadow);
 }
-
-.system-summary {
-  position: relative;
-  z-index: 1;
-  min-width: 0;
-  padding: clamp(22px, 3vw, 36px);
-  border-radius: var(--radius-panel);
-  background: color-mix(in srgb, var(--surface-primary) 88%, var(--brand-soft));
-  box-shadow: var(--surface-shadow);
-  transform-origin: right center;
-  transition: transform 180ms ease, opacity 180ms ease, filter 180ms ease;
+.ring-card__donut {
+  width: 136px; height: 136px; border-radius: 50%; display: grid; place-items: center; position: relative; transform: rotate(-8deg);
+  background: conic-gradient(var(--brand-primary) 0 calc(var(--p, 0) * 1%), var(--brand-soft) calc(var(--p, 0) * 1%) 100%);
 }
+.ring-card__donut::before { content: ""; width: 100px; height: 100px; border-radius: 50%; background: var(--surface-primary); }
+.ring-card__donut b { position: absolute; font-size: 26px; font-weight: 900; color: var(--brand-hover); letter-spacing: -0.02em; transform: rotate(8deg); text-align: center; }
+.ring-card__donut b small { display: block; font-size: 10px; color: var(--ink-tertiary); font-weight: 700; letter-spacing: 0.08em; }
+.ring-card h2 { font-size: 16px; font-weight: 900; }
+.ring-card p { font-size: 12.5px; color: var(--ink-secondary); margin-top: 6px; line-height: 1.6; }
+.ring-card__chips { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+.ring-card__chips .chip { cursor: default; }
 
-.system-summary header {
-  min-height: 48px;
-  margin-bottom: 10px;
+.dashboard__tilts { display: grid; grid-template-columns: 1.15fr 1fr; gap: 14px; padding: 6px 4px 0; }
+.tilt {
+  border: 0; text-align: left; padding: 18px 20px; border-radius: 30px; background: var(--surface-primary); box-shadow: var(--surface-shadow);
+  font: inherit; color: inherit; cursor: pointer; transition: transform 0.25s var(--ease-bounce), box-shadow 0.25s ease;
 }
+.tilt--pink { transform: rotate(-3deg); }
+.tilt--lav { transform: rotate(3deg); background: var(--accent-lavender-soft); }
+.tilt:hover { transform: rotate(0deg) translateY(-4px); box-shadow: var(--surface-shadow-lg); }
+.tilt small { font-size: 11.5px; font-weight: 800; color: var(--ink-tertiary); }
+.tilt--lav small, .tilt--lav i { color: var(--accent-lavender-strong); opacity: 0.8; }
+.tilt b { display: block; margin-top: 8px; font-size: 28px; font-weight: 900; color: var(--brand-hover); letter-spacing: -0.02em; line-height: 1; }
+.tilt--lav b { color: var(--accent-lavender-strong); }
+.tilt b em { font-style: normal; font-size: 13px; color: var(--ink-tertiary); margin-left: 4px; font-weight: 700; }
+.tilt i { display: block; font-style: normal; margin-top: 6px; font-size: 11.5px; color: var(--ink-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.system-summary header span {
-  display: block;
-  margin-bottom: 5px;
-  color: var(--ink-tertiary);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+.dashboard__recent { grid-area: recent; min-width: 0; }
+.dashboard__recent header, .dashboard__link { display: flex; align-items: center; }
+.dashboard__recent header { justify-content: space-between; }
+.dashboard__recent h2 { font-size: 15px; font-weight: 900; }
+.dashboard__link { border: 0; background: none; color: var(--brand-hover); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; padding: 4px 8px; border-radius: 999px; }
+.dashboard__link:hover { background: var(--brand-soft); }
+
+.dashboard__system { grid-area: system; display: grid; gap: 14px; align-content: start; }
+.task-hint {
+  display: flex; align-items: center; gap: 14px; padding: 18px 20px 18px 24px; border-radius: 30px;
+  background: var(--gradient-hero); box-shadow: var(--surface-shadow);
 }
+.task-hint p { flex: 1; font-size: 12.5px; color: var(--ink-secondary); line-height: 1.55; }
+.task-hint p b { color: var(--ink-primary); font-weight: 900; }
+.task-hint .btn { flex: none; }
 
-.system-summary h2 {
-  margin: 0;
-  color: var(--ink-primary);
-  font-size: 21px;
-  line-height: 1.25;
+.dashboard__workspaces { grid-area: workspaces; }
+
+@media (max-width: 1240px) {
+  .dashboard { grid-template-columns: minmax(0, 1fr); grid-template-areas: "hero" "side" "recent" "system" "workspaces"; }
+  .dashboard__side { grid-template-columns: 1fr 1fr; }
+  .dashboard__tilts { padding-top: 0; }
 }
-
-.dashboard-system {
-  gap: 14px;
+@media (max-width: 900px) {
+  .dashboard__side { grid-template-columns: 1fr; }
+  .dashboard__sticker--1 { display: none; }
 }
-
-.dashboard-system :deep(.mon-card) {
-  padding: 12px 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  transform: none;
-}
-
-.dashboard-system :deep(.mon-card:hover) {
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  transform: none;
-}
-
-.dashboard-system :deep(.mon-ic) {
-  display: none;
-}
-
-.dashboard-widgets {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  margin-top: 14px;
-}
-
-.widget {
-  min-width: 0;
-  padding: 18px 18px 20px;
-  border-radius: var(--radius-panel);
-  background: color-mix(in srgb, var(--surface-primary) 88%, var(--brand-soft));
-  box-shadow: var(--surface-shadow);
-  transition: transform 180ms ease, box-shadow 180ms ease;
-}
-
-.widget:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.12);
-}
-
-.widget header {
-  min-height: 42px;
-  margin-bottom: 10px;
-}
-
-.widget header span {
-  display: block;
-  margin-bottom: 4px;
-  color: var(--ink-tertiary);
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-}
-
-.widget h3 {
-  margin: 0;
-  color: var(--ink-primary);
-  font-size: 16px;
-  line-height: 1.25;
-}
-
-.widget__quick {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.widget__quick button {
-  height: 40px;
-  border: 0;
-  border-radius: var(--radius-control);
-  background: var(--surface-secondary);
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 12.5px;
-  font-weight: 620;
-  cursor: pointer;
-  transition: background-color 160ms ease, color 160ms ease, transform 160ms ease;
-}
-
-.widget__quick button:hover {
-  background: var(--brand-soft);
-  color: var(--brand-primary);
-  transform: translateY(-1px);
-}
-
-.widget__progress,
-.widget__task {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.widget__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.widget__row b {
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 14px;
-}
-
-.widget__track {
-  height: 6px;
-  margin-top: 4px;
-  border-radius: 999px;
-  background: var(--surface-secondary);
-  overflow: hidden;
-}
-
-.widget__track i {
-  display: block;
-  height: 100%;
-  border-radius: 999px;
-  background: var(--brand-primary);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--brand-primary) 55%, transparent);
-  transition: width 300ms ease;
-}
-
-.widget__progress p,
-.widget__empty {
-  margin: 2px 0 0;
-  color: var(--text-tertiary);
-  font-size: 11px;
-}
-
-.widget__task strong {
-  color: var(--text-primary);
-  font-size: 13.5px;
-  font-weight: 680;
-}
-
-.widget__task span {
-  color: var(--text-tertiary);
-  font-size: 11px;
-}
-
-.widget__numbers {
-  display: flex;
-  gap: 12px;
-}
-
-.widget__numbers div {
-  flex: 1;
-  min-width: 0;
-  text-align: center;
-}
-
-.widget__numbers b {
-  display: block;
-  color: var(--brand-primary);
-  font-family: var(--font-mono);
-  font-size: 20px;
-  font-weight: 700;
-}
-
-.widget__numbers span {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-tertiary);
-  font-size: 10.5px;
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .dashboard-workspace-layer:has(.recent-work:hover) .system-summary,
-  .dashboard-workspace-layer:has(.system-summary:hover) .recent-work {
-    opacity: 0.72;
-    filter: saturate(0.72);
-    transform: scale(0.985);
-  }
-
-  .system-summary:hover {
-    z-index: 4;
-    transform: translateY(-4px) scale(1.018);
-  }
-}
-
-.dashboard-workspace-layer:has(.recent-work:focus-within) .recent-work {
-  opacity: 1;
-  filter: none;
-  z-index: 4;
-  transform: translateY(-4px) scale(1.012);
-}
-
-.dashboard-workspace-layer:has(.recent-work:focus-within) .system-summary {
-  z-index: 1;
-  opacity: 0.72;
-  filter: saturate(0.72);
-  transform: scale(0.985);
-}
-
-@media (max-width: 1160px) {
-  .dashboard-workspace-layer {
-    grid-template-columns: 1fr;
-    gap: 14px;
-  }
-
-  .system-summary {
-    transform-origin: center;
-  }
-
-  .dashboard-widgets {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 760px) {
-  .dashboard-workspace-layer {
-    margin-inline: 10px;
-  }
-
-  .dashboard-widgets {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-height: 720px) {
-  .dashboard-page {
-    min-height: calc(100vh + 190px);
-  }
-
-  .dashboard-scroll-tail {
-    height: 150px;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .dashboard-page {
-    min-height: auto;
-  }
-
-  .dashboard-hero-layer,
-  .dashboard-workspace-layer {
-    position: relative;
-    opacity: 1;
-    filter: none;
-    transform: none;
-    transition: none;
-  }
-
-  .dashboard-scroll-tail {
-    display: none;
-  }
-
-  .system-summary,
-  .dashboard-workspace-layer .recent-work {
-    transition: none;
-  }
-
-  .dashboard-workspace-layer:has(.recent-work:focus-within) .recent-work,
-  .dashboard-workspace-layer:has(.recent-work:focus-within) .system-summary,
-  .dashboard-workspace-layer:has(.recent-work:hover) .system-summary,
-  .dashboard-workspace-layer:has(.system-summary:hover) .recent-work,
-  .system-summary:hover {
-    opacity: 1;
-    filter: none;
-    transform: none;
-  }
+  .dashboard__sticker, .tilt, .dashboard__sticker:hover, .tilt:hover { transition: none; }
 }
 </style>

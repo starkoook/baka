@@ -1,12 +1,48 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getAnnotationProgress,
   getContinueAction,
   getDashboardSnapshot,
+  getGreeting,
+  getHeroSubline,
   resolveDashboardRoute,
   type DashboardAction,
 } from '../dashboard-summary'
 
 describe('dashboard summary', () => {
+  it('greets by hour of day', () => {
+    expect(getGreeting(3)).toBe('夜深了')
+    expect(getGreeting(8)).toBe('早上好')
+    expect(getGreeting(12)).toBe('中午好')
+    expect(getGreeting(17)).toBe('下午好')
+    expect(getGreeting(22)).toBe('晚上好')
+    expect(getGreeting(Number.NaN)).toBe('你好')
+  })
+
+  it('clamps annotation progress into a safe 0-100 range', () => {
+    expect(getAnnotationProgress(248, 212)).toEqual({ total: 248, done: 212, remaining: 36, percent: 85 })
+    expect(getAnnotationProgress(0, 0)).toEqual({ total: 0, done: 0, remaining: 0, percent: 0 })
+    expect(getAnnotationProgress(10, 99)).toEqual({ total: 10, done: 10, remaining: 0, percent: 100 })
+    expect(getAnnotationProgress(Number.NaN, -3)).toEqual({ total: 0, done: 0, remaining: 0, percent: 0 })
+  })
+
+  it('describes where the user left off in one line', () => {
+    expect(getHeroSubline({
+      imageCount: 1284,
+      datasetCount: 6,
+      unfinishedAnnotationCount: 36,
+      activeTaskName: null,
+      rememberedWorkspace: { label: '继续整理图库', route: '/gallery' },
+    })).toBe('上次停在 整理图库 · 1284 张素材 · 36 张待标注 · 训练空闲')
+    expect(getHeroSubline({
+      imageCount: 0,
+      datasetCount: 0,
+      unfinishedAnnotationCount: 0,
+      activeTaskName: 'lora_v3',
+      rememberedWorkspace: null,
+    })).toBe('0 张素材 · 没有待标注 · 训练进行中')
+  })
+
   it('continues a trimmed active task before annotations and remembered workspace', () => {
     expect(getContinueAction({
       imageCount: 12,

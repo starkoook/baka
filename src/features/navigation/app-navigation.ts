@@ -13,9 +13,15 @@ export interface AppNavigationItem {
   readonly children?: readonly AppNavigationChild[]
 }
 
+/** 侧栏主入口：只有首页。工具全部通过"工具选择"进入。 */
 export const APP_NAVIGATION: readonly AppNavigationItem[] = [
   { id: 'home', label: '首页', route: '/', matches: ['/'] },
+]
+
+/** 侧栏底部的辅助入口。 */
+export const APP_UTILITY_NAVIGATION: readonly AppNavigationItem[] = [
   { id: 'console', label: '控制台', route: '/console', matches: ['/console'] },
+  { id: 'settings', label: '设置', route: '/settings', matches: ['/settings'] },
 ]
 
 export function isNavigationItemActive(item: AppNavigationItem, routePath: string): boolean {

@@ -34,21 +34,18 @@ function openConsole() {
 </template>
 
 <style scoped>
-.statusbar { display: flex; align-items: center; justify-content: space-between; height: var(--statusbar-height); padding: 0 14px; flex-shrink: 0; background: transparent; border: 0; border-radius: 0 0 12px 12px; color: var(--text-secondary); font-size: 11px; user-select: none; }
-.statusbar.has-error { background: var(--danger-bg); border: 0; }
-.status-left, .status-right { display: flex; align-items: center; gap: 7px; }
-.status-dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; background: var(--accent-success); }
-.status-dot.busy { background: var(--accent-warning); }
-.status-dot.error { background: var(--accent-danger); }
-.status-text { color: var(--text-secondary); }
-.status-text.error-text { max-width: 400px; overflow: hidden; color: var(--danger-foreground); text-overflow: ellipsis; white-space: nowrap; }
+.statusbar { position: absolute; z-index: 2; left: var(--sidebar-width); right: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; height: var(--statusbar-height); padding: 0 22px 0 12px; color: var(--ink-tertiary); font-family: var(--font-mono); font-size: 10.5px; user-select: none; }
+.status-left, .status-right { display: flex; align-items: center; gap: 10px; }
+.status-dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; background: var(--accent-mint); }
+.status-dot.busy { background: var(--accent-peach); }
+.status-dot.error { background: var(--accent-rose); }
+.status-text { color: var(--ink-tertiary); }
+.status-text.error-text { max-width: 420px; overflow: hidden; color: var(--danger-foreground); text-overflow: ellipsis; white-space: nowrap; background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-align: left; }
 .status-dismiss, .status-err-badge { border: 0; cursor: pointer; font: inherit; }
 .status-dismiss { padding: 0 4px; background: none; color: var(--danger-foreground); }
-.status-dismiss:hover { color: var(--danger-foreground); text-decoration: underline; }
-.status-err-badge { padding: 2px 8px; border-radius: 10px; background: var(--danger-bg); color: var(--danger-foreground); font-size: 10px; }
-.status-err-badge:hover { background: rgba(239, 68, 68, .18); }
-.status-item { color: var(--text-secondary); }
-.status-text.error-text { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-align: left; }
-.status-console { border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: 11px; cursor: pointer; padding: 2px 6px; border-radius: 8px; }
-.status-console:hover { background: var(--brand-soft); color: var(--brand-primary); }
+.status-dismiss:hover { text-decoration: underline; }
+.status-err-badge { padding: 2px 9px; border-radius: 999px; background: var(--danger-bg); color: var(--danger-foreground); font-size: 10px; }
+.status-item { color: var(--ink-quaternary); }
+.status-console { border: 0; background: transparent; color: var(--ink-tertiary); font: inherit; cursor: pointer; padding: 2px 8px; border-radius: 999px; }
+.status-console:hover { background: var(--brand-soft); color: var(--brand-hover); }
 </style>

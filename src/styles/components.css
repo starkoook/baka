@@ -1,72 +1,68 @@
 /* ═══════════════════════════════════════════
-   Cute Component Styles
+   Baka TOOLS — 柔粉治愈 shared components
+   胶囊按钮 / 圆润输入 / 贴纸 / 芯片 / 白卡片
+   所有页面共用，禁止再私写副本
    ═══════════════════════════════════════════ */
 
-/* ── Primary Button (Cute gradient + paw glow) ── */
+/* ── Buttons (pill) ── */
 .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 9px 16px;
+  height: 38px;
+  padding: 0 18px;
   border: 1px solid transparent;
-  border-radius: var(--radius-control);
+  border-radius: var(--radius-pill);
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   font-family: var(--font-sans);
+  color: var(--ink-secondary);
+  background: var(--surface-primary);
   cursor: pointer;
-  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
   user-select: none;
   white-space: nowrap;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
+  transition: transform 160ms var(--ease-bounce), background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
 
 .btn-primary {
-  background: var(--brand-primary);
+  background: var(--brand-gradient);
   color: var(--brand-on-primary);
-  border-color: var(--brand-primary);
+  box-shadow: 0 12px 26px rgba(var(--brand-primary-rgb), 0.35);
 }
+.btn-primary:hover { box-shadow: 0 14px 30px rgba(var(--brand-primary-rgb), 0.45); transform: translateY(-1px); }
+.btn-primary:active { transform: scale(0.97); }
 
-.btn-primary:hover {
-  background: var(--brand-hover);
-  border-color: var(--brand-hover);
-}
-
-.btn-primary:active { background: var(--brand-primary); }
-
-.btn-primary:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* ── Secondary Button (Frosted glass cute) ── */
 .btn-secondary {
   background: var(--surface-primary);
   color: var(--ink-secondary);
-  border-color: var(--line-subtle);
+  box-shadow: var(--shadow-sm);
 }
+.btn-secondary:hover { color: var(--ink-primary); box-shadow: var(--surface-shadow); }
 
-.btn-secondary:hover {
-  background: var(--surface-secondary);
-  border-color: var(--line-strong);
-  color: var(--ink-primary);
-}
+.btn-soft { background: var(--brand-soft); color: var(--brand-hover); }
+.btn-soft:hover { background: var(--surface-selected); }
 
-.btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-ghost { background: transparent; color: var(--ink-secondary); }
+.btn-ghost:hover { background: var(--brand-tint); color: var(--ink-primary); }
 
-/* ── Ghost Button ── */
-.btn-ghost {
-  background: transparent;
-  color: var(--ink-secondary);
-}
-.btn-ghost:hover { background: var(--surface-secondary); color: var(--ink-primary); }
+.btn-danger { background: var(--danger-bg); color: var(--danger-foreground); }
 
-/* ── Form Controls ── */
+.btn-sm { height: 32px; padding: 0 14px; font-size: 12.5px; }
+.btn-lg { height: 44px; padding: 0 24px; font-size: 14px; }
+.btn-icon { width: 38px; padding: 0; }
+.btn-icon.btn-sm { width: 32px; }
+.btn svg { width: 15px; height: 15px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* ── Form controls (soft rounded) ── */
 .form-label {
   display: block;
   font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
+  font-weight: 700;
+  color: var(--ink-tertiary);
   margin-bottom: 6px;
   letter-spacing: 0.02em;
 }
@@ -82,20 +78,22 @@
   color: var(--ink-primary);
   font-size: 13px;
   font-family: var(--font-sans);
-  transition: border-color 180ms ease, box-shadow 180ms ease;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
 }
+.form-select::placeholder, .form-input::placeholder, .form-textarea::placeholder { color: var(--ink-tertiary); }
 
 .form-select:focus,
 .form-input:focus,
 .form-textarea:focus {
+  outline: none;
   border-color: var(--brand-primary);
-  box-shadow: 0 0 0 2px var(--brand-soft);
+  box-shadow: 0 0 0 4px var(--brand-soft);
 }
 
 .form-select {
   cursor: pointer;
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237a6078' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ad8f9f' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
   padding-right: 38px;
@@ -107,26 +105,64 @@
   height: 6px;
   -webkit-appearance: none;
   appearance: none;
-  background: var(--line-strong);
-  border-radius: var(--radius-control);
+  background: var(--surface-tertiary);
+  border-radius: var(--radius-pill);
   outline: none;
   cursor: pointer;
 }
-
 .form-range::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background: var(--brand-primary);
+  box-shadow: 0 0 0 3px var(--surface-primary), 0 2px 8px rgba(var(--brand-primary-rgb), 0.4);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: transform var(--transition-fast);
 }
+.form-range::-webkit-slider-thumb:hover { transform: scale(1.1); }
 
-.form-range::-webkit-slider-thumb:hover {
-  background: var(--brand-hover);
+/* ── Soft card / sticker / pill ── */
+.soft-card {
+  background: var(--surface-primary);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--surface-shadow);
 }
-
+.sticker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-primary);
+  box-shadow: var(--surface-shadow-lg);
+  border: 2px solid var(--surface-primary);
+  outline: 3px solid rgba(255, 255, 255, 0.55);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--ink-primary);
+  white-space: nowrap;
+}
+.sticker b { font-family: var(--font-mono); font-size: 15px; color: var(--brand-hover); }
+.sticker.is-peach b { color: var(--accent-peach-strong); }
+.sticker.is-mint b { color: var(--accent-mint-strong); }
+.sticker.is-lavender b { color: var(--accent-lavender-strong); }
+.pill-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-primary);
+  box-shadow: var(--shadow-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-secondary);
+  white-space: nowrap;
+}
+.status-dot-live { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-mint); box-shadow: 0 0 0 3px var(--accent-mint-soft); }
 /* ── Empty State ── */
 .empty-state {
   display: flex;
@@ -348,19 +384,21 @@
   transition: all var(--transition-fast); position: relative;
 }
 .segmented button:hover { color: var(--text-secondary); }
-.segmented button.on { color: var(--accent-primary); background: var(--accent-bg); }
-.segmented button + button::before {
-  content: ''; position: absolute; left: 0; top: 20%; height: 60%; width: 1px; background: var(--hud-border);
-}
+.segmented button.on { color: var(--brand-hover); background: var(--surface-primary); box-shadow: 0 2px 8px rgba(var(--brand-primary-rgb), 0.18); border-radius: var(--radius-full); }
+.segmented button + button::before { content: none; }
 
 /* ── Chip ── */
 .chip {
-  padding: 5px 14px; border: 1px solid var(--border-default); background: transparent;
-  border-radius: var(--radius-full); color: var(--text-secondary); font-size: 11px; font-weight: 500;
-  font-family: var(--font-sans); cursor: pointer; transition: all var(--transition-fast);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 12px; border: 1px solid transparent; background: var(--brand-tint);
+  border-radius: var(--radius-full); color: var(--text-secondary); font-size: 11.5px; font-weight: 700;
+  font-family: var(--font-sans); cursor: pointer; transition: transform var(--transition-fast), background-color var(--transition-fast), color var(--transition-fast);
 }
-.chip:hover { border-color: var(--border-accent); color: var(--accent-primary); }
-.chip.active { border-color: var(--border-accent); background: var(--accent-bg); color: var(--accent-primary); }
+.chip:hover { background: var(--brand-soft); color: var(--brand-hover); }
+.chip.active { background: var(--brand-primary); color: var(--brand-on-primary); box-shadow: 0 8px 18px rgba(var(--brand-primary-rgb), 0.3); }
+.chip-lavender { background: var(--accent-lavender-soft); color: var(--accent-lavender-strong); }
+.chip-mint { background: var(--accent-mint-soft); color: var(--accent-mint-strong); }
+.chip-peach { background: var(--accent-peach-soft); color: var(--accent-peach-strong); }
 .chip-x { color: var(--accent-danger); border-color: transparent; }
 .chip-x:hover { border-color: rgba(239,68,68,0.3); }
 
@@ -368,16 +406,16 @@
 .toggle { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .toggle input { display: none; }
 .toggle-track {
-  position: relative; width: 42px; height: 24px; border-radius: 12px;
-  background: var(--hud-bg); border: 1px solid var(--hud-border);
-  transition: all var(--transition-fast); flex-shrink: 0;
+  position: relative; width: 44px; height: 26px; border-radius: 13px;
+  background: var(--ink-quaternary); border: 1px solid transparent;
+  transition: background-color var(--transition-fast); flex-shrink: 0;
 }
-.toggle input:checked + .toggle-track { background: var(--accent-bg); border-color: var(--border-accent); }
+.toggle input:checked + .toggle-track { background: var(--brand-primary); }
 .toggle-knob {
-  position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
-  background: var(--text-tertiary); transition: all var(--transition-fast);
+  position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15); transition: left var(--transition-fast);
 }
-.toggle input:checked + .toggle-track .toggle-knob { left: 20px; background: var(--accent-primary); }
+.toggle input:checked + .toggle-track .toggle-knob { left: 21px; }
 .toggle-label { font-size: 13px; color: var(--text-secondary); }
 
 /* ── Badge ── */

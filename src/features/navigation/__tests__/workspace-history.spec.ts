@@ -3,6 +3,7 @@ import {
   getRememberedWorkspace,
   getSettingsReturnTarget,
   loadLastWorkspace,
+  loadRecentWorkspaces,
   normalizeWorkspaceRoute,
   saveLastWorkspace,
   type StorageReaderWriter,
@@ -136,6 +137,30 @@ describe('workspace history', () => {
     saveLastWorkspace('/training/run', storage)
 
     expect(storage.getItem(STORAGE_KEY)).toBe('/training')
+  })
+
+  it('keeps the three most recent distinct workspaces, newest first', () => {
+    const storage = createMemoryStorage()
+
+    saveLastWorkspace('/gallery', storage)
+    saveLastWorkspace('/tagger', storage)
+    saveLastWorkspace('/training/run', storage)
+    saveLastWorkspace('/gallery', storage)
+    saveLastWorkspace('/', storage)
+
+    expect(loadRecentWorkspaces(storage).map((workspace) => workspace.route)).toEqual(['/gallery', '/training', '/tagger'])
+
+    saveLastWorkspace('/workbench', storage)
+    expect(loadRecentWorkspaces(storage).map((workspace) => workspace.route)).toEqual(['/workbench', '/gallery', '/training'])
+    expect(loadRecentWorkspaces(storage)[0]).toEqual({ route: '/workbench', label: '继续工作台', shortLabel: '工作台' })
+  })
+
+  it('ignores corrupt or stale recent-workspace values', () => {
+    const storage = createMemoryStorage()
+    storage.setItem('baka-recent-workspaces-v1', '{"not":"an array"}')
+    expect(loadRecentWorkspaces(storage)).toEqual([])
+    storage.setItem('baka-recent-workspaces-v1', JSON.stringify(['/removed', 42, '/tagger', '/tagger']))
+    expect(loadRecentWorkspaces(storage).map((workspace) => workspace.route)).toEqual(['/tagger'])
   })
 
   it('returns the remembered workspace as the settings return target', () => {

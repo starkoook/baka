@@ -1,23 +1,16 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { ref } from 'vue'
+import { TOOL_CATALOG, type ToolKey } from '@/features/tools/tool-catalog'
 
 const STORAGE_KEY = 'baka-tools-config'
 const TOOL_POSTERS_KEY = 'baka-tools-tool-posters'
+/** 界面改版后默认改为浅色；老配置里保存的深色只迁移一次，之后尊重用户选择。 */
+const THEME_VERSION = 2
 
-export type ToolPosterKey = 'gallery' | 'booruGallery' | 'tagger' | 'training' | 'upscale' | 'workbench' | 'video' | 'imageTools' | 'console'
+export type ToolPosterKey = ToolKey
 export type ToolPosters = Record<ToolPosterKey, string | null>
 
-const DEFAULT_TOOL_POSTERS: ToolPosters = {
-  gallery: null,
-  booruGallery: null,
-  tagger: null,
-  training: null,
-  upscale: null,
-  workbench: null,
-  video: null,
-  imageTools: null,
-  console: null,
-}
+const DEFAULT_TOOL_POSTERS: ToolPosters = Object.fromEntries(TOOL_CATALOG.map((tool) => [tool.key, null])) as ToolPosters
 
 function loadToolPosters(): ToolPosters {
   try {
@@ -36,17 +29,36 @@ function saveToolPosters(posters: ToolPosters) {
   } catch {}
 }
 
-function loadConfig(): { theme: 'dark' | 'light'; showMascot: boolean } {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return { theme: 'dark', showMascot: true }
+interface AppConfig {
+  theme: 'dark' | 'light'
+  showMascot: boolean
+  themeVersion?: number
 }
 
-function saveConfig(config: Record<string, unknown>) {
+function loadConfig(): AppConfig {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<AppConfig>
+      const config: AppConfig = {
+        theme: parsed.theme === 'dark' ? 'dark' : 'light',
+        showMascot: parsed.showMascot !== false,
+        themeVersion: parsed.themeVersion,
+      }
+      if ((config.themeVersion ?? 1) < THEME_VERSION) {
+        config.theme = 'light'
+        config.themeVersion = THEME_VERSION
+        saveConfig(config)
+      }
+      return config
+    }
+  } catch {}
+  return { theme: 'light', showMascot: true, themeVersion: THEME_VERSION }
+}
+
+function saveConfig(config: AppConfig) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...config, themeVersion: THEME_VERSION }))
   } catch {}
 }
 
@@ -66,6 +78,8 @@ export const useAppStore = defineStore('app', () => {
   const theme = ref<'dark' | 'light'>(saved.theme)
   const showMascot = ref(saved.showMascot)
   const toolPickerOpen = ref(false)
+  /** 每次打开时 +1，工具选择页据此把焦点放进搜索框 */
+  const toolPickerFocusRequest = ref(0)
   const toolPosters = ref<ToolPosters>(loadToolPosters())
 
   let _errorTimer: ReturnType<typeof setTimeout> | null = null
@@ -106,6 +120,11 @@ export const useAppStore = defineStore('app', () => {
     saveConfig({ theme: theme.value, showMascot: showMascot.value })
   }
 
+  function openToolPicker(options: { focusSearch?: boolean } = {}) {
+    toolPickerOpen.value = true
+    if (options.focusSearch) toolPickerFocusRequest.value++
+  }
+
   function toggleToolPicker() {
     toolPickerOpen.value = !toolPickerOpen.value
   }
@@ -127,6 +146,7 @@ export const useAppStore = defineStore('app', () => {
     theme,
     showMascot,
     toolPickerOpen,
+    toolPickerFocusRequest,
     toolPosters,
     setStatus,
     setError,
@@ -135,6 +155,7 @@ export const useAppStore = defineStore('app', () => {
     setTheme,
     toggleTheme,
     toggleMascot,
+    openToolPicker,
     toggleToolPicker,
     closeToolPicker,
     setToolPoster,

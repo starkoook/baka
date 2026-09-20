@@ -53,7 +53,6 @@ onBeforeUnmount(() => {
     <label class="search-box">
       <svg viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5.5"/><path d="m13 13 4 4"/></svg>
       <input :value="search" title="空格 = 同时包含（AND） · | = 包含其一（OR） · - = 排除（NOT）" placeholder="搜索：空格=且，|=或，-=排除" @input="$emit('update:search', ($event.target as HTMLInputElement).value)" />
-      <kbd>Ctrl K</kbd>
     </label>
     <select :value="tagState" @change="$emit('update:tagState', ($event.target as HTMLSelectElement).value as any)">
       <option value="all">全部状态</option><option value="tagged">已标注</option><option value="untagged">未标注</option>

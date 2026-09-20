@@ -3,6 +3,7 @@ import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getSettingsReturnTarget } from '@/features/navigation/workspace-history'
 import { useAppStore, type ToolPosterKey } from '@/stores/app'
+import { TOOL_CATALOG } from '@/features/tools/tool-catalog'
 import { useTaggerStore } from '@/stores/tagger'
 import { setSoundEnabled } from '@/composables/useSound'
 import TrainingComponentsPanel from '@/components/settings/TrainingComponentsPanel.vue'
@@ -117,16 +118,9 @@ watch(soundEnabled, (value) => {
 })
 onMounted(() => setSoundEnabled(soundEnabled.value))
 
-const TOOL_PREVIEWS: { key: ToolPosterKey; label: string; default: string }[] = [
-  { key: 'gallery', label: '\u56fe\u5e93', default: '/tools/gallery.jpg' },
-  { key: 'booruGallery', label: '\u5728\u7ebf\u56fe\u5e93', default: '/tools/upscale.jpg' },
-  { key: 'tagger', label: '\u6807\u6ce8', default: '/tools/tagger.jpg' },
-  { key: 'training', label: '\u8bad\u7ec3', default: '/tools/train.jpg' },
-  { key: 'upscale', label: '\u653e\u5927', default: '/tools/upscale.jpg' },
-  { key: 'workbench', label: '\u5de5\u4f5c\u53f0', default: '/tools/workbench.jpg' },
-  { key: 'video', label: '\u89c6\u9891\u5de5\u5177', default: '/tools/upscale.jpg' },
-  { key: 'imageTools', label: '\u56fe\u50cf\u5de5\u5177', default: '/tools/upscale.jpg' },
-]
+const TOOL_PREVIEWS: { key: ToolPosterKey; label: string; default: string }[] = TOOL_CATALOG
+  .filter((tool) => tool.key !== 'console')
+  .map((tool) => ({ key: tool.key, label: tool.label, default: tool.poster }))
 const posterPreviews = ref<Record<string, string>>({})
 
 async function refreshPosterPreviews() {

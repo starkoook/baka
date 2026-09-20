@@ -9,9 +9,9 @@ const tagger = read('src/views/Tagger.vue')
 const layout = read('src/layouts/MainLayout.vue')
 
 describe('stable workbench UI', () => {
-  it('uses the approved character-led dashboard instead of a tutorial workflow', () => {
-    expect(dashboard).toContain("import BrandHero from '@/components/dashboard/BrandHero.vue'")
-    expect(dashboard).toContain("import DashboardRecentWork from '@/components/dashboard/DashboardRecentWork.vue'")
+  it('uses the character-led dashboard instead of a tutorial workflow', () => {
+    expect(dashboard).toContain("import HeroCard from '@/components/dashboard/HeroCard.vue'")
+    expect(dashboard).toContain("import PolaroidFan, { type PolaroidItem } from '@/components/dashboard/PolaroidFan.vue'")
     expect(dashboard).not.toContain('workflow-grid')
     expect(dashboard).not.toContain('cabin-label')
   })
@@ -148,7 +148,7 @@ describe('workbench dynamic left taskbar', () => {
 
   it('adds workbench buttons to the outermost taskbar when on the canvas', () => {
     expect(sidebar).toContain('useWorkbenchStore')
-    expect(sidebar).toContain('sidebar-workbench')
+    expect(sidebar).toContain('rail--context')
     expect(sidebar).toContain("route.path === '/workbench'")
     expect(sidebar).toContain('wbStore.toggleRail')
     expect(sidebar).not.toContain("issueAction('run')")

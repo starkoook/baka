@@ -77,6 +77,39 @@ export function loadLastWorkspace(
   }
 }
 
+const RECENT_KEY = 'baka-recent-workspaces-v1'
+export const RECENT_WORKSPACE_LIMIT = 3
+
+function readRecentRoutes(storage: StorageReaderWriter): WorkspaceRoute[] {
+  try {
+    const raw = storage.getItem(RECENT_KEY)
+    if (!raw) return []
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    const routes: WorkspaceRoute[] = []
+    for (const value of parsed) {
+      const route = normalizeWorkspaceRoute(typeof value === 'string' ? value : null)
+      if (route && !routes.includes(route)) routes.push(route)
+    }
+    return routes.slice(0, RECENT_WORKSPACE_LIMIT)
+  } catch {
+    return []
+  }
+}
+
+/** 最近打开过的工作区（最新在前，去重，最多 3 个）。 */
+export function loadRecentWorkspaces(
+  storage?: StorageReaderWriter,
+): RememberedWorkspace[] {
+  try {
+    return readRecentRoutes(storage ?? window.localStorage)
+      .map((route) => getRememberedWorkspace(route))
+      .filter((workspace): workspace is RememberedWorkspace => workspace !== null)
+  } catch {
+    return []
+  }
+}
+
 export function saveLastWorkspace(
   routePath: string,
   storage?: StorageReaderWriter,
@@ -85,7 +118,10 @@ export function saveLastWorkspace(
 
   if (route) {
     try {
-      (storage ?? window.localStorage).setItem(STORAGE_KEY, route)
+      const target = storage ?? window.localStorage
+      target.setItem(STORAGE_KEY, route)
+      const recent = [route, ...readRecentRoutes(target).filter((existing) => existing !== route)]
+      target.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, RECENT_WORKSPACE_LIMIT)))
     } catch {
       // Workspace history is optional and must never interrupt navigation.
     }
