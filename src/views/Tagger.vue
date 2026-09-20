@@ -8,7 +8,6 @@ import TagSettingsPanel from '@/components/tagger/TagSettingsPanel.vue'
 import TaggingPreviewDialog from '@/components/tagger/TaggingPreviewDialog.vue'
 import LlmPromptDialog from '@/components/tagger/LlmPromptDialog.vue'
 import BatchTagToolsDialog from '@/components/tagger/BatchTagToolsDialog.vue'
-import VideoToolsDialog from '@/components/tagger/VideoToolsDialog.vue'
 import AppIcon from '@/components/common/AppIcon.vue'
 import ContextMenu, { type ContextMenuItem } from '@/components/common/ContextMenu.vue'
 import { toMediaUrl } from '@/lib/media-url'
@@ -37,7 +36,6 @@ const pageModes = [
 ]
 const showPromptDialog = ref(false)
 const showBatchToolsDialog = ref(false)
-const showVideoDialog = ref(false)
 const canStart = computed(() => taggerStore.queue.length > 0 && taggerStore.phase !== 'running' && taggerStore.phase !== 'stopping')
 const isBusy = computed(() => taggerStore.phase === 'running' || taggerStore.phase === 'stopping')
 const currentFilename = computed(() => taggerStore.currentItem?.path.split(/[/\\]/).pop() || '')
@@ -231,10 +229,8 @@ function onTaggingFailed(message: string) {
   try { useAppStore().setError(message) } catch { /* */ }
 }
 
-function openLlmTagging() {
-  taggerStore.tagSource = 'llm'
-  taggerStore.persistSession()
-  openTagging('llm')
+function focusTagInput() {
+  document.querySelector<HTMLInputElement>('.tag-editor .tag-search input')?.focus()
 }
 
 function returnToGallery() {
@@ -291,7 +287,7 @@ function onPanMove(event: PointerEvent) {
 function onPanEnd() { panning.value = false }
 
 // ── 快捷键：← → 切换，空格保存并下一张，Delete 移出队列，+ / - / 0 缩放 ──
-const anyDialogOpen = computed(() => settingsVisible.value || showTaggingDialog.value || showPromptDialog.value || showBatchToolsDialog.value || showVideoDialog.value)
+const anyDialogOpen = computed(() => settingsVisible.value || showTaggingDialog.value || showPromptDialog.value || showBatchToolsDialog.value)
 function isTypingTarget(target: EventTarget | null) {
   const el = target as HTMLElement | null
   if (!el) return false
@@ -313,6 +309,10 @@ function onShortcut(event: KeyboardEvent) {
     case '+': case '=': event.preventDefault(); zoomIn(); break
     case '-': event.preventDefault(); zoomOut(); break
     case '0': event.preventDefault(); zoomFit(); break
+    // 1 / 2 / 3 切引擎，和参考项目里 B / P / E 切工具一个意思
+    case '1': setPageMode('local'); break
+    case '2': setPageMode('llm'); break
+    case '3': setPageMode('combined'); break
   }
 }
 
@@ -412,8 +412,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
               />
             </div>
           </div>
-          <span v-if="previewSrc && taggerStore.currentItem" class="preview-sticker preview-sticker--tags" aria-hidden="true"><b>{{ currentTagCount }}</b> 个标签</span>
-          <span v-if="previewSrc" class="preview-sticker preview-sticker--threshold" aria-hidden="true">置信度 <b>{{ taggerStore.threshold.toFixed(2) }}</b></span>
+          <button v-if="previewSrc && taggerStore.currentItem" type="button" class="preview-sticker preview-sticker--tags" title="去右侧添加标签" @click="focusTagInput"><b>{{ currentTagCount }}</b> 个标签</button>
+          <button v-if="previewSrc" type="button" class="preview-sticker preview-sticker--threshold" title="调整阈值与模型" @click="settingsVisible = true">置信度 <b>{{ taggerStore.threshold.toFixed(2) }}</b></button>
           <div v-if="previewLoading" class="preview-loading"><span></span>正在读取图片</div>
           <div v-else-if="!previewSrc" class="preview-empty">
             <strong>{{ taggerStore.queue.length ? '图片无法预览' : '先准备一批图片吧' }}</strong>
@@ -463,26 +463,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
               <path d="M8.2 6.4v11.2L18.4 12Z" fill="currentColor" stroke="none" />
             </svg>
           </span>
-          <span class="dock-tile__label">开始</span>
-          <span class="dock-tile__sub">{{ pageModes.find((mode) => mode.id === taggerStore.tagSource)?.label }}</span>
-        </button>
-
-        <button
-          type="button"
-          class="dock-tile"
-          :class="{ 'is-open': showTaggingDialog && taggingInitialSource === 'llm', 'is-muted': taggerStore.tagSource === 'local' }"
-          aria-label="LLM"
-          @click="openLlmTagging"
-        >
-          <span class="dock-tile__icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M5.2 16.6 7.8 8.4h2.1l2.6 8.2" />
-              <path d="M6.1 14.2h5.2" />
-              <path d="M14.4 8.4h4.4" />
-              <path d="M16.6 8.4v8.2" />
-            </svg>
-          </span>
-          <span class="dock-tile__label">LLM</span>
+          <span class="dock-tile__label">开始 · {{ pageModes.find((mode) => mode.id === taggerStore.tagSource)?.label }}</span>
         </button>
 
         <button
@@ -508,13 +489,14 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
           type="button"
           class="dock-tile"
           :class="{ 'is-open': settingsVisible, 'is-muted': taggerStore.tagSource === 'llm' }"
-          aria-label="WD14"
+          aria-label="模型与阈值"
+          title="本地模型、阈值与标签选项"
           @click="settingsVisible = true"
         >
           <span class="dock-tile__icon">
             <AppIcon name="tagger" />
           </span>
-          <span class="dock-tile__label">WD14</span>
+          <span class="dock-tile__label">模型与阈值</span>
         </button>
 
         <button
@@ -632,7 +614,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
             <span>模型：{{ taggerStore.models.find((model) => model.path === taggerStore.activeModelPath)?.name || '未选择' }}</span>
             <span>阈值 {{ taggerStore.threshold.toFixed(2) }}</span>
             <span>{{ taggerStore.providers.join(' / ') || '等待设备信息' }}</span>
-            <span class="run-summary__keys"><kbd>←</kbd><kbd>→</kbd> 切换 · <kbd>空格</kbd> 保存并下一张 · <kbd>Del</kbd> 移出队列 · <kbd>Ctrl</kbd>+滚轮 / <kbd>+</kbd><kbd>-</kbd> 缩放 · 拖动平移 · 双击适应</span>
+            <span class="run-summary__keys" title="← → 切换 · 空格 保存并下一张 · Del 移出队列 · 1/2/3 切引擎 · Ctrl+Z / Ctrl+Y 撤销重做 · Ctrl+滚轮 或 + - 缩放 · 拖动平移 · 双击适应"><kbd>←</kbd><kbd>→</kbd> 切换 · <kbd>空格</kbd> 保存并下一张 · <kbd>Del</kbd> 移出 · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 引擎 · <kbd>Ctrl</kbd>+滚轮 缩放 · 拖动平移</span>
           </div>
         </div>
       </div>
@@ -695,13 +677,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
       :image-paths="taggerStore.queue.map((item) => item.path)"
       @close="showBatchToolsDialog = false"
       @applied="taggerStore.reloadCaptionsFromDisk"
-    />
-
-    <VideoToolsDialog
-      :visible="showVideoDialog"
-      :video-path="taggerStore.currentItem?.path ?? null"
-      @close="showVideoDialog = false"
-      @frames="(paths) => taggerStore.appendPaths(paths)"
     />
 
     <ContextMenu
@@ -779,7 +754,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
 .preview-empty > span { max-width: 300px; font-size: 12.5px; line-height: 1.7; }
 
 /* 贴纸 */
-.preview-sticker { position: absolute; z-index: 3; height: 34px; padding: 0 14px; border-radius: var(--radius-pill); background: var(--surface-primary); border: 2px solid var(--surface-primary); outline: 3px solid rgba(255,255,255,.55); box-shadow: var(--surface-shadow-lg); color: var(--ink-secondary); font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; pointer-events: none; }
+.preview-sticker { position: absolute; z-index: 3; height: 34px; padding: 0 14px; border-radius: var(--radius-pill); background: var(--surface-primary); border: 2px solid var(--surface-primary); outline: 3px solid rgba(255,255,255,.55); box-shadow: var(--surface-shadow-lg); color: var(--ink-secondary); font: inherit; font-size: 12px; font-weight: 800; display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; cursor: pointer; transition: transform .2s var(--ease-bounce); }
+.preview-sticker:hover { transform: rotate(0deg) scale(1.05) !important; }
 .preview-sticker b { font-family: var(--font-mono); font-size: 14px; color: var(--brand-hover); }
 .preview-sticker--tags { top: 18px; left: 22px; transform: rotate(-4deg); }
 .preview-sticker--threshold { bottom: 92px; left: 22px; transform: rotate(3deg); }
@@ -813,7 +789,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
 .dock-tile__icon svg, .dock-tile__icon :deep(svg) { width: 20px; height: 20px; }
 .dock-tile__label { position: absolute; left: 50%; bottom: calc(100% + 8px); transform: translateX(-50%) translateY(4px); padding: 4px 9px; border-radius: 8px; background: var(--ink-primary); color: var(--surface-primary); font-size: 11px; font-weight: 700; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity 140ms ease, transform 140ms ease; }
 .dock-tile:hover .dock-tile__label { opacity: 1; transform: translateX(-50%) translateY(0); }
-.dock-tile__sub { display: none; }
 .dock-tile:hover:not(:disabled) { background: var(--brand-tint); color: var(--brand-hover); }
 .dock-tile:active:not(:disabled) { transform: scale(.94); }
 .dock-tile.is-open { background: var(--brand-soft); color: var(--brand-hover); }

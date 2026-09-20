@@ -129,7 +129,6 @@ const previewGroups = computed(() => {
 })
 
 const TOOL_PREVIEWS: { key: ToolPosterKey; label: string; default: string }[] = TOOL_CATALOG
-  .filter((tool) => tool.key !== 'console')
   .map((tool) => ({ key: tool.key, label: tool.label, default: tool.poster }))
 const posterPreviews = ref<Record<string, string>>({})
 

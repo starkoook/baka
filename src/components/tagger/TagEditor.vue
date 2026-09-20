@@ -31,9 +31,13 @@ function restoreHistory(path: string) {
 
 /** "保存前"的快照：切到这张图或它刚保存成功时记一次，供按住对比 */
 const baseline = ref<TagResult[]>([])
-const comparing = ref(false)
-const diff = computed(() => diffTags(baseline.value, localTags.value))
-const isDirty = computed(() => diff.value.added.length > 0 || diff.value.removed.length > 0 || localTags.value.some((tag) => {
+/** 按住对比的来源：saved = 保存前，step = 上一步编辑前 */
+const compareMode = ref<'saved' | 'step' | null>(null)
+const comparing = computed(() => compareMode.value !== null)
+const compareSource = computed<TagResult[]>(() => compareMode.value === 'step' ? (undoStack.value[undoStack.value.length - 1] ?? []) : baseline.value)
+const savedDiff = computed(() => diffTags(baseline.value, localTags.value))
+const diff = computed(() => diffTags(compareSource.value, localTags.value))
+const isDirty = computed(() => savedDiff.value.added.length > 0 || savedDiff.value.removed.length > 0 || localTags.value.some((tag) => {
   const before = baseline.value.find((entry) => entry.tag === tag.tag)
   return before && (before.weight ?? 1) !== (tag.weight ?? 1)
 }))
@@ -59,7 +63,7 @@ watch(() => props.item?.path, (path) => {
   stashHistory()
   restoreHistory(path ?? '')
   snapshotBaseline()
-  comparing.value = false
+  compareMode.value = null
 }, { immediate: true })
 // 保存成功后 status 变成 reviewed，此时"保存前"就是现在
 watch(() => props.item?.status, (status) => { if (status === 'reviewed') snapshotBaseline() })
@@ -121,8 +125,12 @@ function addTag() { const tag = input.value.trim(); if (!tag || localTags.value.
 function removeTag(name: string) { pushHistory(); localTags.value = localTags.value.filter((tag) => tag.tag !== name); commit() }
 /** 清空全部标签，可撤销 */
 function clearAll() { if (!localTags.value.length) return; pushHistory(); localTags.value = []; commit() }
-function startCompare() { if (isDirty.value) comparing.value = true }
-function stopCompare() { comparing.value = false }
+function startCompare(mode: 'saved' | 'step' = 'saved') {
+  if (mode === 'saved' && !isDirty.value) return
+  if (mode === 'step' && undoStack.value.length === 0) return
+  compareMode.value = mode
+}
+function stopCompare() { compareMode.value = null }
 function compareState(name: string) {
   if (diff.value.removed.includes(name)) return 'will-remove'
   return ''
@@ -143,6 +151,11 @@ function onKeydown(event: KeyboardEvent) {
     event.preventDefault()
     if (event.shiftKey) redo()
     else undo()
+    return
+  }
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'y') {
+    event.preventDefault()
+    redo()
   }
 }
 onMounted(() => window.addEventListener('keydown', onKeydown))
@@ -177,28 +190,48 @@ watch(input, (value) => {
           </div>
         </div>
 
-        <div v-if="isDirty" class="compare-bar">
-          <span><b>{{ diff.added.length }}</b> 新增 · <b>{{ diff.removed.length }}</b> 删除</span>
-          <button
-            type="button"
-            class="compare-bar__hold"
-            :class="{ active: comparing }"
-            title="按住查看保存前的标签，松开返回"
-            @pointerdown.prevent="startCompare"
-            @pointerup="stopCompare"
-            @pointerleave="stopCompare"
-            @pointercancel="stopCompare"
-            @keydown.space.prevent="startCompare"
-            @keyup.space="stopCompare"
-            @blur="stopCompare"
-          >{{ comparing ? '保存前 · 松开返回' : '按住看保存前' }}</button>
+        <div v-if="isDirty || undoStack.length" class="compare-bar">
+          <span v-if="isDirty"><b>{{ savedDiff.added.length }}</b> 新增 · <b>{{ savedDiff.removed.length }}</b> 删除</span>
+          <span v-else>已改 {{ undoStack.length }} 步</span>
+          <span class="compare-bar__buttons">
+            <button
+              v-if="isDirty"
+              type="button"
+              class="compare-bar__hold"
+              :class="{ active: compareMode === 'saved' }"
+              title="按住查看保存前的标签，松开返回"
+              @pointerdown.prevent="startCompare('saved')"
+              @pointerup="stopCompare"
+              @pointerleave="stopCompare"
+              @pointercancel="stopCompare"
+              @keydown.space.prevent="startCompare('saved')"
+              @keydown.enter.prevent="startCompare('saved')"
+              @keyup="stopCompare"
+              @blur="stopCompare"
+            >{{ compareMode === 'saved' ? '保存前 · 松开返回' : '按住看保存前' }}</button>
+            <button
+              v-if="undoStack.length"
+              type="button"
+              class="compare-bar__hold"
+              :class="{ active: compareMode === 'step' }"
+              title="按住查看上一步编辑前的标签，松开返回"
+              @pointerdown.prevent="startCompare('step')"
+              @pointerup="stopCompare"
+              @pointerleave="stopCompare"
+              @pointercancel="stopCompare"
+              @keydown.space.prevent="startCompare('step')"
+              @keydown.enter.prevent="startCompare('step')"
+              @keyup="stopCompare"
+              @blur="stopCompare"
+            >{{ compareMode === 'step' ? '上一步 · 松开返回' : '按住看上一步' }}</button>
+          </span>
         </div>
         <div v-if="comparing" class="compare-view" aria-live="polite">
-          <div><strong>保存前</strong><span>{{ baseline.length }} 个标签 · 红色的是这次会删掉的</span></div>
+          <div><strong>{{ compareMode === 'step' ? '上一步编辑前' : '保存前' }}</strong><span>{{ compareSource.length }} 个标签 · 红色的是现在已经没有的</span></div>
           <div class="tag-chips">
-            <span v-for="tag in baseline" :key="tag.tag" class="tag-chip tag-chip--static" :class="compareState(tag.tag)">{{ tag.tag }}<small v-if="(tag.weight ?? 1) !== 1">{{ formatWeight(tag.weight) }}</small></span>
+            <span v-for="tag in compareSource" :key="tag.tag" class="tag-chip tag-chip--static" :class="compareState(tag.tag)">{{ tag.tag }}<small v-if="(tag.weight ?? 1) !== 1">{{ formatWeight(tag.weight) }}</small></span>
           </div>
-          <p v-if="diff.added.length" class="compare-view__added">这次新增：{{ diff.added.join('、') }}</p>
+          <p v-if="diff.added.length" class="compare-view__added">现在新增：{{ diff.added.join('、') }}</p>
         </div>
         <div v-if="searchResults.length" class="tag-search-results">
           <button v-for="result in searchResults" :key="result.tag" @click="addSearchResult(result.tag)">
@@ -245,8 +278,10 @@ watch(input, (value) => {
 .caption-box__body button { justify-self: end; height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--surface-primary); color: var(--brand-hover); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; box-shadow: var(--shadow-sm); }
 .caption-box__body button:disabled { opacity: .4; cursor: not-allowed; }
 .compare-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; padding: 6px 6px 6px 12px; border-radius: 999px; background: var(--accent-peach-soft); color: var(--accent-peach-strong); font-size: 11.5px; font-weight: 700; }
+.compare-bar > span:first-child { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .compare-bar b { font-family: var(--font-mono); }
-.compare-bar__hold { height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--surface-primary); color: var(--accent-peach-strong); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; user-select: none; touch-action: none; }
+.compare-bar__buttons { display: flex; gap: 4px; flex: none; }
+.compare-bar__hold { height: 28px; padding: 0 10px; white-space: nowrap; border: 0; border-radius: 999px; background: var(--surface-primary); color: var(--accent-peach-strong); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; user-select: none; touch-action: none; }
 .compare-bar__hold.active { background: var(--accent-peach-strong); color: #fff; }
 .compare-view { margin-top: 12px; padding: 12px; border-radius: 16px; border: 1.5px dashed var(--accent-peach); background: var(--surface-primary); }
 .compare-view > div:first-child { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
