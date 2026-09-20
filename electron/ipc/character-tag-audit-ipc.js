@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const { tagDataPath } = require('./tag-data-path')
 const { ipcMain } = require('electron')
 const { ensureDb, queryAll } = require('./gallery')
 const {
@@ -12,13 +13,15 @@ const {
 const { writeImageTagsAndCaption } = require('./tagging-batch')
 const { chatCompletion } = require('./llm')
 const { TagCatalog } = require('./tag-catalog')
+const { classifyTags } = require('./tag-categories')
+const { planTagFixes } = require('./tag-fixes')
 
 let catalogPromise = null
 function getTagCatalog() {
   if (!catalogPromise) {
     catalogPromise = TagCatalog.load({
-      zhPath: path.join(__dirname, '../../resources/tag-data/danbooru-0-zh.csv'),
-      characterPath: path.join(__dirname, '../../resources/tag-data/danbooru_character_tags.csv'),
+      zhPath: tagDataPath('danbooru-0-zh.csv'),
+      characterPath: tagDataPath('danbooru_character_tags.csv'),
     }).catch(() => new TagCatalog([]))
   }
   return catalogPromise
@@ -28,6 +31,13 @@ async function resolveParentByChild(explicit) {
   if (explicit && Object.keys(explicit).length) return explicit
   const catalog = await getTagCatalog()
   return Object.fromEntries(catalog.parentByChild || [])
+}
+
+async function resolveParentByChildMap() {
+  const catalog = await getTagCatalog()
+  const source = catalog.parentByChild
+  if (source instanceof Map) return source
+  return new Map(Object.entries(source || {}))
 }
 
 function getAuditItems(imageIds) {
@@ -127,6 +137,32 @@ function registerCharacterTagAuditHandlers() {
           stages: result.stages,
         },
       }
+    } catch (e) {
+      return { success: false, error: e.message || String(e) }
+    }
+  })
+
+  // 一二级类目：给一批标签返回 { tag: { l1, l2, source } }
+  ipcMain.handle('tagCategories:classify', async (_event, params = {}) => {
+    try {
+      const tags = Array.isArray(params.tags) ? params.tags : []
+      return { success: true, data: classifyTags(tags, params.hints || {}) }
+    } catch (e) {
+      return { success: false, error: e.message || String(e) }
+    }
+  })
+
+  // 错误标签修复：只出计划，不写盘。items 直接来自渲染进程的队列（path + tags）
+  ipcMain.handle('tagFixes:plan', async (_event, params = {}) => {
+    try {
+      const items = Array.isArray(params.items) ? params.items.map((item) => ({ path: String(item.path || ''), tags: (item.tags || []).map((tag) => String(tag)) })) : []
+      const parentByChild = params.fixCharacterVariants === false ? new Map() : await resolveParentByChildMap()
+      const plans = planTagFixes(items, {
+        parentByChild,
+        fixCharacterVariants: params.fixCharacterVariants !== false,
+        childThreshold: Number(params.childThreshold) || 0,
+      })
+      return { success: true, data: { plans } }
     } catch (e) {
       return { success: false, error: e.message || String(e) }
     }

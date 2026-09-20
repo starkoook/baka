@@ -83,6 +83,24 @@ export function ensureTriggerFirst(tags: readonly QueueTag[], trigger: string): 
   return [existing ?? { tag: value, confidence: 1, source: 'manual', category: '触发词' }, ...rest]
 }
 
+/**
+ * 快速替换（BDTM+ 同款）：以规范词的最后一个词为"同类"判据（black shoes → shoes），
+ * 把出现次数低于阈值的同类低频标签并入规范词。
+ */
+export function buildQuickReplacePlan(inventory: readonly QueueTagCount[], canonical: string, threshold: number): QueueTagCount[] {
+  const canon = normalizeTagName(canonical)
+  if (!canon) return []
+  const family = canon.split(' ').filter(Boolean).pop()
+  if (!family) return []
+  return inventory
+    .filter((row) => row.count < threshold)
+    .filter((row) => {
+      const key = normalizeTagName(row.tag)
+      return key !== canon && (key === family || key.endsWith(' ' + family))
+    })
+    .sort((a, b) => a.count - b.count || a.tag.localeCompare(b.tag))
+}
+
 /** 是否需要改动（避免无意义的“已改”状态） */
 export function tagsEqual(a: readonly QueueTag[], b: readonly QueueTag[]): boolean {
   if (a.length !== b.length) return false

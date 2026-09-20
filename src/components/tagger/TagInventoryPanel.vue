@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { buildQuickReplacePlan } from '@/features/tagger/queue-tags'
 import { useAppStore } from '@/stores/app'
 import { useTaggerStore } from '@/stores/tagger'
 
@@ -23,7 +24,24 @@ const selected = computed(() => taggerStore.highlightTag)
 const selectedRow = computed(() => taggerStore.queueInventory.find((row) => row.tag.toLowerCase() === selected.value.toLowerCase()))
 const editedCount = computed(() => taggerStore.queue.filter((item) => item.status === 'ready' || item.status === 'partial' || item.status === 'failed').length)
 
-watch(selected, () => { renameTarget.value = '' })
+watch(selected, () => { renameTarget.value = ''; quickOpen.value = false })
+
+/** 快速替换：把同类低频标签并入选中的规范词 */
+const QUICK_THRESHOLD_KEY = 'baka.tagger.quickReplaceThreshold'
+const quickOpen = ref(false)
+const quickThreshold = ref(Number(localStorage.getItem(QUICK_THRESHOLD_KEY)) || 30)
+watch(quickThreshold, (value) => localStorage.setItem(QUICK_THRESHOLD_KEY, String(value)))
+const quickPlan = computed(() => selected.value ? buildQuickReplacePlan(taggerStore.queueInventory, selected.value, Math.max(1, Math.floor(quickThreshold.value) || 1)) : [])
+const quickAffected = computed(() => new Set(quickPlan.value.flatMap((row) => row.indexes)).size)
+
+function applyQuickReplace() {
+  const target = selected.value
+  if (!target || !quickPlan.value.length) return
+  let changed = 0
+  for (const row of quickPlan.value) changed += taggerStore.renameTagAcrossQueue(row.tag, target)
+  appStore.setStatus(`快速替换：${quickPlan.value.length} 个低频同类标签并入「${target}」，改了 ${changed} 张`)
+  quickOpen.value = false
+}
 
 function pick(tag: string) {
   taggerStore.highlightTag = taggerStore.highlightTag === tag ? '' : tag
@@ -105,7 +123,14 @@ async function saveAll() {
       </div>
       <div class="inventory__row-actions">
         <button type="button" class="danger" @click="removeSelected">从全部图片移除</button>
+        <button type="button" :class="{ on: quickOpen }" title="把同类（最后一个词相同）的低频标签并入这个词" @click="quickOpen = !quickOpen">快速替换</button>
         <button type="button" @click="taggerStore.highlightTag = ''">退出校对</button>
+      </div>
+      <div v-if="quickOpen" class="inventory__quick">
+        <label>低于 <input v-model.number="quickThreshold" type="number" min="1" step="1" /> 次的同类并入「{{ selected }}」</label>
+        <p v-if="quickPlan.length">将并入 {{ quickPlan.length }} 个标签（涉及 {{ quickAffected }} 张）：<span>{{ quickPlan.map((row) => `${row.tag} ×${row.count}`).join('，') }}</span></p>
+        <p v-else class="muted">没有低于阈值的同类标签</p>
+        <button type="button" class="primary" :disabled="!quickPlan.length" @click="applyQuickReplace">确认并入</button>
       </div>
     </section>
 
@@ -152,6 +177,15 @@ async function saveAll() {
 .inventory__rename button:disabled, .inventory__add-row button:disabled { opacity: .4; cursor: not-allowed; }
 .inventory__row-actions { display: flex; gap: 6px; margin-top: 6px; }
 .inventory__row-actions .danger { color: var(--danger-foreground); }
+.inventory__row-actions button.on { background: var(--brand-primary); color: var(--brand-on-primary); }
+.inventory__quick { margin-top: 8px; padding: 8px 10px; border-radius: 12px; background: var(--surface-primary); font-size: 11.5px; color: var(--ink-secondary); }
+.inventory__quick label { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-weight: 700; }
+.inventory__quick label input { width: 52px; height: 26px; padding: 0 8px; border: 1px solid var(--line-subtle); border-radius: 8px; background: var(--surface-primary); color: var(--ink-primary); font: inherit; font-size: 11.5px; text-align: center; }
+.inventory__quick p { margin: 6px 0; line-height: 1.6; }
+.inventory__quick p span { color: var(--ink-primary); font-family: var(--font-mono); font-size: 11px; }
+.inventory__quick .muted { color: var(--ink-tertiary); }
+.inventory__quick .primary { height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--brand-gradient); color: var(--brand-on-primary); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; }
+.inventory__quick .primary:disabled { opacity: .4; cursor: not-allowed; }
 .inventory__add { margin: 0 14px 10px; }
 .inventory__add-row { display: flex; gap: 6px; }
 .inventory__add-row input { background: var(--surface-secondary); }

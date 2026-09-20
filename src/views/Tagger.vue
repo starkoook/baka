@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import TagQueue from '@/components/tagger/TagQueue.vue'
 import TagInventoryPanel from '@/components/tagger/TagInventoryPanel.vue'
+import TagFixDialog from '@/components/tagger/TagFixDialog.vue'
 import TagEditor from '@/components/tagger/TagEditor.vue'
 import TagRunProgress from '@/components/tagger/TagRunProgress.vue'
 import TagSettingsPanel from '@/components/tagger/TagSettingsPanel.vue'
@@ -320,6 +321,7 @@ function onShortcut(event: KeyboardEvent) {
 // ── 标注预设 ──
 const showPresetMenu = ref(false)
 const showInventory = ref(false)
+const showFixes = ref(false)
 const presetName = ref('')
 function savePreset() {
   const name = presetName.value.trim()
@@ -557,6 +559,23 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
           <span class="dock-tile__label">全部标签</span>
         </button>
 
+        <button
+          type="button"
+          class="dock-tile"
+          :disabled="taggerStore.queue.length === 0"
+          aria-label="错误标签修复"
+          title="扫描人数冲突、角色变体重复，预览后一键修复"
+          @click="showFixes = true"
+        >
+          <span class="dock-tile__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z" />
+              <path d="m9 12 2 2 4-4" />
+            </svg>
+          </span>
+          <span class="dock-tile__label">修复</span>
+        </button>
+
         <div class="dock-preset">
           <button
             type="button"
@@ -673,6 +692,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
       @update:replace-underscores="taggerStore.replaceUnderscores = $event; void taggerStore.persistTaggingSettings()"
       @refresh="taggerStore.loadModels"
     />
+
+    <TagFixDialog :visible="showFixes" @close="showFixes = false" />
 
     <TaggingPreviewDialog
       :visible="showTaggingDialog"

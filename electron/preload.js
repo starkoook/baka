@@ -227,6 +227,8 @@ contextBridge.exposeInMainWorld('characterAuditAPI', {
   run: (params) => ipcRenderer.invoke('characterAudit:run', params),
   apply: (params) => ipcRenderer.invoke('characterAudit:apply', params),
   pyramid: (params) => ipcRenderer.invoke('characterAudit:pyramid', params),
+  classify: (params) => ipcRenderer.invoke('tagCategories:classify', params),
+  planFixes: (params) => ipcRenderer.invoke('tagFixes:plan', params),
 })
 
 contextBridge.exposeInMainWorld('imageToolsAPI', {

@@ -572,6 +572,18 @@ declare global {
     paths: string[]
   }
 
+  interface TagCategoryInfo {
+    l1: string
+    l2: string
+    source: 'catalog' | 'rule' | 'hint' | 'none'
+  }
+
+  interface TagFixPlan {
+    path: string
+    remove: { tag: string; reason: string }[]
+    add: { tag: string; reason: string }[]
+  }
+
   type CharacterAuditCategory =
     | 'identity' | 'hair' | 'eyes' | 'face' | 'body' | 'clothing' | 'footwear' | 'legwear' | 'wearable_accessory'
     | 'action' | 'pose' | 'expression' | 'scene' | 'composition' | 'quality' | 'object' | 'other'
@@ -610,6 +622,18 @@ declare global {
     pyramid: (params: { tags: string[]; triggerWords?: string[] }) => Promise<{
       success: boolean
       data?: { ordered: string[]; matched: number }
+      error?: string
+    }>
+    /** 一二级类目（头发 / 眼睛 / 服装 …） */
+    classify: (params: { tags: string[]; hints?: Record<string, string> }) => Promise<{
+      success: boolean
+      data?: Record<string, TagCategoryInfo>
+      error?: string
+    }>
+    /** 错误标签修复计划（不写盘） */
+    planFixes: (params: { items: { path: string; tags: string[] }[]; fixCharacterVariants?: boolean; childThreshold?: number }) => Promise<{
+      success: boolean
+      data?: { plans: TagFixPlan[] }
       error?: string
     }>
     apply: (params: { items: CharacterAuditItem[]; decisions: CharacterAuditDecision[]; parentByChild?: Record<string, string> }) => Promise<{

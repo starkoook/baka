@@ -12,6 +12,7 @@
 const { ipcMain } = require('electron')
 const fs = require('fs')
 const path = require('path')
+const { tagDataPath } = require('./tag-data-path')
 const { ensureDb, queryAll, runSql } = require('./gallery')
 const { writeTextSafe } = require('./safe-file')
 const { createHistoryRecord, restoreVersion, listVersions } = require('./file-history')
@@ -54,7 +55,7 @@ function loadCharacterTags() {
   if (!loadedCharacterTagsPromise) {
     loadedCharacterTagsPromise = (async () => {
       try {
-        const csvPath = path.join(__dirname, '../../resources/tag-data/danbooru_character_tags.csv')
+        const csvPath = tagDataPath('danbooru_character_tags.csv')
         const tags = new Set(STYLE_TAGS)
         const content = await fs.promises.readFile(csvPath, 'utf8')
         const lines = content.split(/\r?\n/)

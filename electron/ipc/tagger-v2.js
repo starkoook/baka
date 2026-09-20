@@ -3,6 +3,7 @@
  */
 const { ipcMain } = require('electron')
 const path = require('path')
+const { tagDataPath } = require('./tag-data-path')
 const fs = require('fs')
 const { ensureDb, queryAll, runSql } = require('./gallery')
 const { TagCatalog } = require('./tag-catalog')
@@ -33,8 +34,8 @@ let catalogPromise = null
 function getTagCatalog() {
   if (!catalogPromise) {
     catalogPromise = TagCatalog.load({
-      zhPath: path.join(__dirname, '../../resources/tag-data/danbooru-0-zh.csv'),
-      characterPath: path.join(__dirname, '../../resources/tag-data/danbooru_character_tags.csv'),
+      zhPath: tagDataPath('danbooru-0-zh.csv'),
+      characterPath: tagDataPath('danbooru_character_tags.csv'),
     }).catch(() => new TagCatalog([]))
   }
   return catalogPromise

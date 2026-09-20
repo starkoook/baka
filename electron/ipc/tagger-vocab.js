@@ -1,5 +1,6 @@
 const fs = require('fs')
 const path = require('path')
+const { tagDataPath } = require('./tag-data-path')
 const { TagCatalog } = require('./tag-catalog')
 
 // ── Trie for prefix-based tag search ──
@@ -150,8 +151,8 @@ let catalogPromise = null
 function getCatalog() {
   if (!catalogPromise) {
     catalogPromise = TagCatalog.load({
-      zhPath: path.join(__dirname, '../../resources/tag-data/danbooru-0-zh.csv'),
-      characterPath: path.join(__dirname, '../../resources/tag-data/danbooru_character_tags.csv'),
+      zhPath: tagDataPath('danbooru-0-zh.csv'),
+      characterPath: tagDataPath('danbooru_character_tags.csv'),
     }).catch(() => new TagCatalog([]))
   }
   return catalogPromise

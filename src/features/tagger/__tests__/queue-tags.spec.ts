@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addTag, buildQueueInventory, ensureTriggerFirst, hasTag, removeTag, renameTag, tagsEqual } from '../queue-tags'
+import { addTag, buildQueueInventory, buildQuickReplacePlan, ensureTriggerFirst, hasTag, removeTag, renameTag, tagsEqual } from '../queue-tags'
 
 const queue = [
   { tags: [{ tag: '1girl' }, { tag: 'pink_hair' }, { tag: 'smile' }] },
@@ -22,6 +22,20 @@ describe('queue tag helpers', () => {
     expect(addTag(queue[0].tags, 'solo', 'first').map((tag) => tag.tag)).toEqual(['solo', '1girl', 'pink_hair', 'smile'])
     expect(addTag(queue[0].tags, '1GIRL')).toEqual(queue[0].tags)
     expect(hasTag(queue[1].tags, 'PINK_HAIR')).toBe(true)
+  })
+
+  it('plans quick replace by the last word of the canonical tag, below the threshold only', () => {
+    const inventory = [
+      { tag: 'black shoes', count: 40, indexes: [] },
+      { tag: 'shoes', count: 12, indexes: [] },
+      { tag: 'red_shoes', count: 3, indexes: [] },
+      { tag: 'brown shoes', count: 30, indexes: [] },
+      { tag: 'horseshoes', count: 1, indexes: [] },
+      { tag: 'black hat', count: 2, indexes: [] },
+    ]
+    expect(buildQuickReplacePlan(inventory, 'black shoes', 20).map((row) => row.tag)).toEqual(['red_shoes', 'shoes'])
+    expect(buildQuickReplacePlan(inventory, 'black shoes', 50).map((row) => row.tag)).toEqual(['red_shoes', 'shoes', 'brown shoes'])
+    expect(buildQuickReplacePlan(inventory, '', 50)).toEqual([])
   })
 
   it('keeps the trigger word first', () => {

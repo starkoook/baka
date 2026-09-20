@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { diffTags, serializeWeightedCaption } from '@/features/tagger/caption'
+import { categoryHue, categoryStyle, sortTagsByCategory } from '@/features/tagger/tag-category-colors'
+import { useTagCategories } from '@/composables/useTagCategories'
 import type { TagQueueItem, TagResult } from '@/stores/tagger'
 
 const props = defineProps<{ item: TagQueueItem | null; affectedCount?: number; saving?: boolean; triggerWord?: string }>()
@@ -104,14 +106,57 @@ watch(() => props.item?.tags, async (tags) => {
     translations.value = map
   }
 }, { immediate: true, deep: true })
+/** 分组方式：来源（WD14 角色 / 通用 / 手动添加）或一级类目（头发 / 眼睛 / 服装 …） */
+const GROUP_MODE_KEY = 'baka.tagger.groupMode'
+const groupMode = ref<'source' | 'category'>((localStorage.getItem(GROUP_MODE_KEY) as 'source' | 'category') || 'category')
+watch(groupMode, (value) => localStorage.setItem(GROUP_MODE_KEY, value))
+const { ensure: ensureCategories, l1Of, l2Of } = useTagCategories()
+watch(() => localTags.value.map((tag) => tag.tag), (names) => {
+  const hints: Record<string, string> = {}
+  for (const tag of localTags.value) if (tag.category) hints[tag.tag] = tag.category
+  void ensureCategories(names, hints)
+}, { immediate: true })
+
 const groupedTags = computed(() => {
   const groups = new Map<string, TagResult[]>()
+  if (groupMode.value === 'category') {
+    const sorted = sortTagsByCategory(localTags.value, (tag) => l1Of(tag.tag))
+    for (const tag of sorted) {
+      const key = l1Of(tag.tag)
+      groups.set(key, [...(groups.get(key) ?? []), tag])
+    }
+    return [...groups.entries()]
+  }
   for (const tag of localTags.value) {
     const key = tag.category || '自动识别'
     groups.set(key, [...(groups.get(key) ?? []), tag])
   }
   return [...groups.entries()]
 })
+
+function chipStyle(tag: TagResult) {
+  return groupMode.value === 'category' ? categoryStyle(l1Of(tag.tag)) : {}
+}
+
+function chipTitle(tag: TagResult) {
+  const zh = showChinese.value ? tag.tag : (translations.value.get(tag.tag) || '')
+  const l2 = l2Of(tag.tag)
+  const cat = l2 && l2 !== l1Of(tag.tag) ? `${l1Of(tag.tag)} / ${l2}` : l1Of(tag.tag)
+  return [zh, cat].filter(Boolean).join(' · ')
+}
+
+/** 本地按类目排序（不走 LLM）：触发词固定第一位 */
+function sortByCategoryLocal() {
+  if (localTags.value.length < 2) return
+  const trigger = (props.triggerWord ?? '').trim().toLowerCase()
+  const pinned = trigger ? localTags.value.filter((tag) => tag.tag.trim().toLowerCase() === trigger) : []
+  const rest = localTags.value.filter((tag) => !pinned.includes(tag))
+  const next = [...pinned, ...sortTagsByCategory(rest, (tag) => l1Of(tag.tag))]
+  if (next.every((tag, index) => tag === localTags.value[index])) return
+  pushHistory()
+  localTags.value = next.map((tag) => ({ ...tag }))
+  commit()
+}
 
 function snapshot() { return localTags.value.map((tag) => ({ ...tag })) }
 function pushHistory() {
@@ -273,9 +318,16 @@ watch(input, (value) => {
             <em>{{ result.category }}</em>
           </button>
         </div>
-        <section v-for="[group, tags] in groupedTags" v-show="!comparing" :key="group" class="tag-group" :data-group="group">
+        <div v-show="!comparing && localTags.length" class="group-bar">
+          <span class="seg" role="group" aria-label="分组方式">
+            <button type="button" :class="{ on: groupMode === 'category' }" @click="groupMode = 'category'">按类目</button>
+            <button type="button" :class="{ on: groupMode === 'source' }" @click="groupMode = 'source'">按来源</button>
+          </span>
+          <button type="button" class="group-bar__sort" title="按 人数 → 头发 → 眼睛 → 身体 → 表情 → 服装 → 饰品 → … 的类目顺序重排（本地、可撤销）" @click="sortByCategoryLocal">按类目排序</button>
+        </div>
+        <section v-for="[group, tags] in groupedTags" v-show="!comparing" :key="group" class="tag-group" :class="{ 'tag-group--cat': groupMode === 'category' }" :data-group="group" :style="groupMode === 'category' ? categoryStyle(group) : undefined">
           <div><strong>{{ group }}</strong><span>{{ tags.length }}</span></div>
-          <div class="tag-chips"><button v-for="tag in tags" :key="tag.tag" class="tag-chip" @click="removeTag(tag.tag)"><span :title="showChinese ? tag.tag : (translations.get(tag.tag) || '')">{{ showChinese ? (translations.get(tag.tag) || tag.tag) : tag.tag }}</span><small v-if="tag.confidence !== undefined && tag.confidence < 1">{{ Math.round(tag.confidence * 100) }}%</small><small class="tag-chip__weight" :class="{ active: (tag.weight ?? 1) !== 1 }" title="点击调整权重" @click.stop="cycleWeight(tag.tag)">{{ (tag.weight ?? 1) === 1 ? '+w' : `${tag.weight! > 1 ? '↑' : '↓'}${formatWeight(tag.weight)}` }}</small><i>×</i></button></div>
+          <div class="tag-chips"><button v-for="tag in tags" :key="tag.tag" class="tag-chip" :class="{ 'tag-chip--cat': groupMode === 'category' && categoryHue(l1Of(tag.tag)) !== null }" :style="chipStyle(tag)" @click="removeTag(tag.tag)"><span :title="chipTitle(tag)">{{ showChinese ? (translations.get(tag.tag) || tag.tag) : tag.tag }}</span><small v-if="tag.confidence !== undefined && tag.confidence < 1">{{ Math.round(tag.confidence * 100) }}%</small><small class="tag-chip__weight" :class="{ active: (tag.weight ?? 1) !== 1 }" title="点击调整权重" @click.stop="cycleWeight(tag.tag)">{{ (tag.weight ?? 1) === 1 ? '+w' : `${tag.weight! > 1 ? '↑' : '↓'}${formatWeight(tag.weight)}` }}</small><i>×</i></button></div>
         </section>
         <div v-if="localTags.length === 0" class="tag-empty"><strong>还没有标签</strong><span>运行自动标注，或在上方手动添加。</span></div>
       </div>
@@ -310,6 +362,19 @@ watch(input, (value) => {
 .pyramid-btn:hover:not(:disabled) { background: var(--accent-lavender); color: #fff; }
 .pyramid-btn:disabled { opacity: .4; cursor: not-allowed; }
 .sort-error { margin: 6px 0 0; padding: 6px 10px; border-radius: 10px; background: var(--danger-bg); color: var(--danger-foreground); font-size: 11px; }
+.group-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 10px; }
+.group-bar .seg { display: inline-flex; padding: 2px; border-radius: 999px; background: var(--surface-secondary); }
+.group-bar .seg button { height: 24px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--ink-tertiary); font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.group-bar .seg button.on { background: var(--surface-primary); color: var(--ink-primary); box-shadow: var(--shadow-sm); }
+.group-bar__sort { height: 28px; padding: 0 10px; border: 0; border-radius: 999px; background: transparent; color: var(--brand-hover); font: inherit; font-size: 11px; font-weight: 800; cursor: pointer; }
+.group-bar__sort:hover { background: var(--brand-tint); }
+/* 类目着色：色相来自 --cat-h，明度按主题；「一般」没有 --cat-h，沿用默认灰 */
+.tag-group--cat > div strong { color: hsl(var(--cat-h, 0) 45% var(--cat-title-l, 42%)); }
+.tag-group--cat > div strong::before { content: ''; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: hsl(var(--cat-h, 0) 70% 62%); vertical-align: 1px; }
+.tag-chip--cat { background: hsl(var(--cat-h) 85% var(--cat-bg-l, 94%)) !important; color: hsl(var(--cat-h) 45% var(--cat-fg-l, 32%)) !important; }
+.tag-chip--cat:hover { background: hsl(var(--cat-h) 80% var(--cat-bg-hover-l, 89%)) !important; }
+:global([data-theme="dark"]) .tag-chip--cat { --cat-bg-l: 22%; --cat-fg-l: 82%; --cat-bg-hover-l: 28%; }
+:global([data-theme="dark"]) .tag-group--cat > div strong { --cat-title-l: 75%; }
 .caption-box { margin-top: 10px; border-radius: 16px; background: var(--surface-secondary); }
 .caption-box__toggle { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-secondary); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; text-align: left; }
 .caption-box__toggle small { flex: 1; color: var(--ink-tertiary); font: 10.5px var(--font-mono); font-weight: 600; }

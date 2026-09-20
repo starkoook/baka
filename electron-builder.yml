@@ -23,6 +23,11 @@ extraResources:
     to: licenses/AGPL-3.0.txt
   - from: resources/component-source.json
     to: component-source.json
+  # 标签数据（中文搜索 / 角色父子表 / 一二级类目）：之前漏打包，安装版里这些功能悄悄失效
+  - from: resources/tag-data
+    to: tag-data
+    filter:
+      - "*.csv"
 win:
   # 只出免安装版：解压到任意文件夹，运行 Baka TOOLS.exe，数据放在旁边的 BakaTOOLS-data
   target:
