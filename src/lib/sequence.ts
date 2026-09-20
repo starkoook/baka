@@ -9,7 +9,7 @@ export interface SeqFrame {
 export interface PixelImage {
   width: number
   height: number
-  data: Uint8ClampedArray
+  data: Uint8ClampedArray<ArrayBuffer>
 }
 
 export interface SliceOptions {

@@ -14,7 +14,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const state = ref<LlmPromptState>(loadLlmPromptState())
 const saveMessage = ref('')
-let saveTimer: ReturnType<typeof setTimeout> | null = null
+let saveTimer: number | null = null
 
 const preview = computed(() => compiledPrompt(state.value))
 const isEmptyMode = computed(() => state.value.annotationMode === 'empty')

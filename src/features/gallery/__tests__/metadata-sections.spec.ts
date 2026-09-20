@@ -67,14 +67,14 @@ describe('metadata sections', () => {
       { name: 'third', weight: 0.5, text_encoder_weight: 1, hidden: false, display_name: 'c.safetensors', lora: 'c.safetensors', trigger_weight: 1, loraWorks: '' },
       { name: 'fourth', weight: 1, text_encoder_weight: 1, hidden: false, display_name: 'd.safetensors', lora: 'd.safetensors', trigger_weight: 1, loraWorks: '' },
     ])}`
-    const result = buildMetadataSections({ prompt: userString, model: 'x' }, [])
+    const result = buildMetadataSections({ hasMetadata: true, prompt: userString, model: 'x' }, [])
     expect(result.generation.some((field) => field.label === '\u6b63\u5411\u63d0\u793a\u8bcd')).toBe(false)
     expect(result.generation.map((field) => field.key)).not.toContain('prompt')
     expect(result.overview).toContainEqual({ key: 'model', label: '\u6a21\u578b', value: 'x' })
   })
 
   it('still shows a real caption as \u6b63\u5411\u63d0\u793a\u8bcd', () => {
-    const result = buildMetadataSections({ prompt: '1girl, solo, smile', model: 'x' }, [])
+    const result = buildMetadataSections({ hasMetadata: true, prompt: '1girl, solo, smile', model: 'x' }, [])
     expect(result.generation).toContainEqual({ key: 'prompt', label: '\u6b63\u5411\u63d0\u793a\u8bcd', value: '1girl, solo, smile' })
   })
 
@@ -82,13 +82,13 @@ describe('metadata sections', () => {
     const prompt = JSON.stringify([
       { name: 'style\\foo', weight: 0.5, text_encoder_weight: 1, loraWorks: '' },
     ])
-    const result = buildMetadataSections({ prompt, model: 'x' }, [])
+    const result = buildMetadataSections({ hasMetadata: true, prompt, model: 'x' }, [])
     expect(result.generation.map((field) => field.key)).not.toContain('prompt')
   })
 
   it('still shows WeiLin artwork XML as \u6b63\u5411\u63d0\u793a\u8bcd', () => {
     const prompt = '<artwork id="celestial_conservatory_waltz_masterpiece"><scene>waltz</scene></artwork>'
-    const result = buildMetadataSections({ prompt, model: 'x' }, [])
+    const result = buildMetadataSections({ hasMetadata: true, prompt, model: 'x' }, [])
     expect(result.generation).toContainEqual({ key: 'prompt', label: '\u6b63\u5411\u63d0\u793a\u8bcd', value: prompt })
   })
 })

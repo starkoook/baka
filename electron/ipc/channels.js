@@ -141,6 +141,7 @@ const Channels = {
   TAGGER_V2_SET_MODEL_DIR: 'taggerV2:setModelDir',
   TAGGER_V2_GET_MODEL_DIR: 'taggerV2:getModelDir',
   TAGGER_V2_IMPORT_MODEL: 'taggerV2:importModel',
+  TAGGER_V2_DELETE_MODEL: 'taggerV2:deleteModel',
   TAGGER_V2_OPEN_MODEL_DIR: 'taggerV2:openModelDir',
   TAGGER_V2_INFER_SINGLE: 'taggerV2:inferSingle',
   TAGGER_V2_INFER_BATCH: 'taggerV2:inferBatch',

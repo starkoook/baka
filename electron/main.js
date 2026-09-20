@@ -42,11 +42,10 @@ const { registerVideoTagHandlers } = require('./ipc/video-tag')
 const { registerAnnotationToolsHandlers } = require('./ipc/annotation-tools')
 const { registerTaggerSettingsHandlers } = require('./ipc/tagger-settings')
 const { registerLogHandlers, writeAppLog } = require('./ipc/app-log')
+const { registerSystemStatsHandlers } = require('./ipc/system-stats')
 const { ensureDb, runSql, importImageFiles } = require('./ipc/gallery')
 const fs = require('fs')
 const path = require('path')
-const os = require('os')
-const { execSync } = require('child_process')
 
 // ── Custom scheme for local media (images/videos) in the renderer ──
 protocol.registerSchemesAsPrivileged([
@@ -388,79 +387,8 @@ ipcMain.handle('fs:scanModels', async (_event, dirPath) => {
   }
 })
 
-// ── System monitor ──
-function getGPUInfo() {
-  try {
-    // Try nvidia-smi on Windows
-    const out = execSync('nvidia-smi --query-gpu=name,memory.used,memory.total,temperature.gpu,utilization.gpu --format=csv,noheader,nounits', {
-      timeout: 3000, encoding: 'utf-8', windowsHide: true,
-    }).trim()
-    const parts = out.split(',').map((s) => s.trim())
-    return {
-      name: parts[0] || 'NVIDIA GPU',
-      vramUsed: parseFloat(parts[1]) || 0,
-      vramTotal: parseFloat(parts[2]) || 0,
-      gpuTemp: parseFloat(parts[3]) || 0,
-      gpuUsage: parseFloat(parts[4]) || 0,
-    }
-  } catch (_) {
-    // Fallback: try checking if OpenGL/Vulkan is available
-    try {
-      const out = execSync('wmic path win32_VideoController get Name,AdapterRAM /format:csv 2>nul', {
-        timeout: 3000, encoding: 'utf-8', windowsHide: true, shell: 'cmd',
-      }).trim()
-      const lines = out.split('\n').filter((l) => l.includes(','))
-      if (lines.length > 1) {
-        const parts = lines[1].split(',')
-        const ramBytes = parseInt(parts[parts.length - 1]) || 0
-        return {
-          name: parts[1] || 'GPU',
-          vramUsed: 0,
-          vramTotal: Math.round(ramBytes / 1024 / 1024),
-          gpuTemp: 0,
-          gpuUsage: 0,
-        }
-      }
-    } catch (_) {}
-    return null
-  }
-}
-
-ipcMain.handle('system:stats', async () => {
-  const totalMem = os.totalmem()
-  const freeMem = os.freemem()
-  const cpus = os.cpus()
-
-  // Average CPU usage across all cores
-  const cpuIdle = cpus.reduce((sum, c) => sum + c.times.idle, 0) / cpus.length
-  const cpuTotal = cpus.reduce((sum, c) => sum + Object.values(c.times).reduce((a, b) => a + b, 0), 0) / cpus.length
-  const cpuUsage = Math.round(((1 - cpuIdle / cpuTotal) * 100))
-
-  const gpu = getGPUInfo()
-
-  return {
-    cpu: {
-      usage: cpuUsage,
-      cores: cpus.length,
-      model: cpus[0]?.model || 'Unknown',
-    },
-    memory: {
-      used: Math.round((totalMem - freeMem) / 1024 / 1024),
-      total: Math.round(totalMem / 1024 / 1024),
-      percent: Math.round(((totalMem - freeMem) / totalMem) * 100),
-    },
-    gpu: gpu ? {
-      name: gpu.name,
-      vramUsed: gpu.vramUsed,
-      vramTotal: gpu.vramTotal,
-      vramPercent: gpu.vramTotal > 0 ? Math.round((gpu.vramUsed / gpu.vramTotal) * 100) : 0,
-      temp: gpu.gpuTemp || 0,
-      usage: gpu.gpuUsage || 0,
-    } : null,
-    uptime: Math.round(os.uptime()),
-    platform: process.platform,
-  }
-})
+// ── System monitor (non-blocking; see electron/ipc/system-stats.js) ──
+registerSystemStatsHandlers(ipcMain)
 
 app.whenReady().then(async () => {
   const { pathToFileURL } = require('url')

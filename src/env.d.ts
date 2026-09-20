@@ -508,6 +508,7 @@ declare global {
     normalization?: string
     padColor?: number[]
     resizeMode?: string
+    inputLayout?: string
     taskId?: string
     mergeStrategy?: 'union' | 'intersect' | 'difference' | 'a_only' | 'b_only'
   }
