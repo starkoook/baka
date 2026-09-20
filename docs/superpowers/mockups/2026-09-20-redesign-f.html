@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baka TOOLS · 新界面 · 柔粉治愈</title>
+<style>
+:root{
+  --bg:#fff4f9; --bg-2:#fff9fc; --surface:#ffffff; --surface-2:#fff7fa; --surface-3:#fdeff5;
+  --ink:#4a2d3d; --ink-2:#7c5a6c; --ink-3:#ad8f9f; --ink-4:#d9c6d0;
+  --pink:#ff7eb6; --pink-2:#ff6ea9; --pink-soft:#ffe1ee; --pink-tint:#fff0f6;
+  --lav:#a78bfa; --lav-soft:#ece6ff; --mint:#5cd6a8; --mint-soft:#e2f9f0; --peach:#ffb86b; --peach-soft:#fff1e0; --rose:#ff6b8b;
+  --line:#ffe4ef; --line-2:#ffd3e5;
+  --sh:0 12px 30px rgba(255,126,182,.12); --sh-2:0 18px 44px rgba(255,126,182,.18); --sh-lav:0 12px 30px rgba(167,139,250,.14);
+  --r-xl:26px; --r-lg:20px; --r-md:14px; --r-sm:10px;
+  --font:"Segoe UI Variable Display","Segoe UI","PingFang SC","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+  --mono:"Cascadia Code","JetBrains Mono",Consolas,ui-monospace,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#fbf0f5;color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased}
+body{padding:56px 40px 140px;max-width:1560px;margin:0 auto}
+a{color:inherit;text-decoration:none}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+kbd{font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:6px;background:var(--pink-tint);color:var(--ink-2);border:1px solid var(--line-2)}
+
+/* ── page chrome ── */
+.intro{display:grid;grid-template-columns:1.2fr .8fr;gap:48px;align-items:end;margin-bottom:64px}
+.intro small{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--ink-3);text-transform:uppercase}
+.intro h1{font-size:42px;font-weight:700;letter-spacing:-.02em;line-height:1.12;margin-top:16px}
+.intro h1 span{color:var(--pink)}
+.intro p{color:var(--ink-2);font-size:15px;line-height:1.75;margin-top:16px;max-width:620px}
+.rules{display:grid;gap:10px;background:#fff;border-radius:var(--r-lg);padding:22px 24px;box-shadow:var(--sh)}
+.rules div{font-size:13px;color:var(--ink-2);display:flex;gap:12px;align-items:baseline;line-height:1.5}
+.rules b{width:22px;height:22px;flex:none;border-radius:50%;background:var(--pink-soft);color:var(--pink-2);font-size:11px;display:grid;place-items:center;font-weight:700;transform:translateY(3px)}
+.screen{margin-bottom:88px}
+.screen>.cap{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--line-2)}
+.screen>.cap h2{font-size:18px;font-weight:700}
+.screen>.cap h2 small{font-family:var(--mono);font-size:11px;color:var(--pink);margin-right:12px;letter-spacing:.1em}
+.screen>.cap p{font-size:13px;color:var(--ink-3)}
+.stage{position:relative;width:100%}
+.fit{position:absolute;top:0;left:0;width:1440px;height:900px;transform-origin:top left}
+.win{position:relative;width:1440px;height:900px;display:grid;grid-template-columns:72px 1fr;background:var(--bg);border-radius:22px;overflow:hidden;box-shadow:0 40px 100px rgba(255,126,182,.22),0 0 0 1px #fff}
+.win .bgblobs{position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(760px 520px at 100% 0%,var(--lav-soft),transparent 62%),radial-gradient(640px 520px at 0% 100%,var(--pink-soft),transparent 62%)}
+
+/* ── rail ── */
+.rail{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;padding:14px 0 14px;gap:6px;background:rgba(255,255,255,.7);backdrop-filter:blur(12px);border-right:1px solid var(--line)}
+.logo{width:34px;height:34px;border-radius:12px;background:linear-gradient(135deg,#ff9ac6,#ff6ea9);display:grid;place-items:center;box-shadow:0 8px 20px rgba(255,110,169,.35);margin-bottom:12px}
+.logo i{width:12px;height:12px;border:2px solid #fff;border-radius:3px;transform:rotate(45deg)}
+.ic{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;color:var(--ink-3);position:relative}
+.ic svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.ic.on{background:var(--pink-soft);color:var(--pink-2)}
+.ic.on::before{content:"";position:absolute;left:-14px;top:14px;width:3px;height:16px;border-radius:3px;background:var(--pink)}
+.ic.fab{background:linear-gradient(135deg,#ff9ac6,#ff6ea9);color:#fff;box-shadow:0 10px 24px rgba(255,110,169,.38);border-radius:16px;margin:8px 0}
+.ic.cur{padding:0;overflow:hidden;border-radius:50%;width:40px;height:40px;box-shadow:0 0 0 2px #fff,0 0 0 4px var(--pink-soft)}
+.ic.cur img{width:100%;height:100%;object-fit:cover}
+.rail .bottom{margin-top:auto;display:flex;flex-direction:column;align-items:center;gap:6px}
+.tip{position:absolute;left:54px;top:50%;transform:translateY(-50%);background:var(--ink);color:#fff;font-size:12px;font-weight:600;padding:6px 10px;border-radius:9px;white-space:nowrap;box-shadow:0 10px 24px rgba(74,45,61,.25)}
+.tip::before{content:"";position:absolute;left:-4px;top:50%;width:8px;height:8px;background:var(--ink);transform:translateY(-50%) rotate(45deg)}
+
+/* ── body ── */
+.body{position:relative;z-index:1;display:grid;grid-template-rows:52px 1fr 28px;min-width:0}
+.top{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;padding:0 18px 0 24px}
+.crumb{font-size:13.5px;color:var(--ink-3);display:flex;gap:10px;align-items:center}
+.crumb b{color:var(--ink);font-weight:700}
+.search{width:420px;height:34px;border-radius:999px;background:#fff;border:1px solid var(--line);box-shadow:0 4px 14px rgba(255,126,182,.08);display:flex;align-items:center;gap:10px;padding:0 8px 0 14px;color:var(--ink-3);font-size:12.5px}
+.search svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8}
+.search span{flex:1}
+.top-right{display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:12px;color:var(--ink-3)}
+.pill{display:flex;align-items:center;gap:7px;padding:0 11px;height:28px;border-radius:999px;background:#fff;border:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--mint);box-shadow:0 0 0 3px var(--mint-soft)}
+.winctl{display:flex;margin-left:8px;gap:2px}
+.winctl span{width:32px;height:28px;display:grid;place-items:center;color:var(--ink-3);font-size:12px;border-radius:8px}
+.status{display:flex;align-items:center;justify-content:space-between;padding:0 22px;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
+.status div{display:flex;gap:16px;align-items:center}
+
+/* ── buttons & controls ── */
+.btn{height:40px;padding:0 20px;border-radius:999px;font-size:13.5px;font-weight:700;display:inline-flex;align-items:center;gap:8px;border:1px solid transparent;white-space:nowrap;flex:none}
+.btn.primary{background:linear-gradient(135deg,#ff8fc2,#ff6ea9);color:#fff;box-shadow:0 12px 28px rgba(255,110,169,.35)}
+.btn.soft{background:var(--pink-soft);color:var(--pink-2)}
+.btn.white{background:#fff;color:var(--ink-2);border-color:var(--line);box-shadow:0 4px 14px rgba(255,126,182,.08)}
+.btn.ghost{background:transparent;color:var(--ink-2)}
+.btn.sm{height:32px;padding:0 14px;font-size:12.5px}
+.btn.icon{width:32px;padding:0;justify-content:center}
+.btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.chip{display:inline-flex;align-items:center;gap:6px;height:26px;padding:0 11px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--pink-tint);color:var(--ink-2);border:1px solid var(--line)}
+.chip em{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.chip.on{background:var(--pink);color:#fff;border-color:var(--pink)}
+.chip.on em{color:rgba(255,255,255,.8)}
+.chip.lav{background:var(--lav-soft);color:#6d55c9;border-color:#e2dbff}
+.chip.mint{background:var(--mint-soft);color:#1f9b6b;border-color:#c9f1e1}
+.chip.peach{background:var(--peach-soft);color:#c6731a;border-color:#ffe2bf}
+.card{background:#fff;border-radius:var(--r-lg);box-shadow:var(--sh);border:1px solid #fff}
+.card>header,.card .hd{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 0}
+.card h2{font-size:15px;font-weight:700}
+.card .hd a{font-size:12px;color:var(--pink-2);font-weight:600}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--pink);text-transform:uppercase;font-weight:700}
+
+/* ── dashboard ── */
+.page{padding:8px 26px 18px 28px;display:flex;flex-direction:column;gap:18px;min-height:0}
+.hero{position:relative;height:312px;border-radius:var(--r-xl);overflow:hidden;background:linear-gradient(120deg,#ffe6f2 0%,#f3eaff 60%,#e9e6ff 100%);box-shadow:var(--sh-2);display:flex;align-items:center;padding:0 44px}
+.hero .blob{position:absolute;border-radius:50%;pointer-events:none}
+.hero .b1{width:360px;height:360px;right:520px;top:-180px;background:rgba(255,255,255,.55)}
+.hero .b2{width:220px;height:220px;right:60px;bottom:-120px;background:rgba(167,139,250,.18)}
+.hero img{position:absolute;right:0;top:0;height:100%;width:66%;object-fit:cover;object-position:center 24%;-webkit-mask-image:linear-gradient(90deg,transparent 0%,#000 42%);mask-image:linear-gradient(90deg,transparent 0%,#000 42%)}
+.hero .copy{position:relative;z-index:1;max-width:520px}
+.hero h1{margin-top:14px;font-size:44px;font-weight:800;letter-spacing:-.02em;line-height:1.1;color:var(--ink)}
+.hero h1 span{display:block;font-size:22px;font-weight:500;color:var(--ink-2);margin-top:10px;letter-spacing:0}
+.hero .sub{margin-top:14px;font-size:13.5px;color:var(--ink-2)}
+.hero .sub b{color:var(--pink-2)}
+.hero .btns{display:flex;gap:10px;margin-top:24px;align-items:center}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.stat{position:relative;overflow:hidden;padding:18px 20px 20px;border-radius:var(--r-lg);background:#fff;box-shadow:var(--sh)}
+.stat::after{content:"";position:absolute;right:-22px;top:-22px;width:84px;height:84px;border-radius:50%;background:var(--pink-tint)}
+.stat.lav::after{background:var(--lav-soft)}.stat.mint::after{background:var(--mint-soft)}.stat.peach::after{background:var(--peach-soft)}
+.stat small{display:block;font-size:11.5px;font-weight:700;color:var(--ink-3);letter-spacing:.04em}
+.stat b{display:block;margin-top:10px;font-size:30px;font-weight:800;letter-spacing:-.02em;color:var(--pink-2);font-variant-numeric:tabular-nums;line-height:1}
+.stat.lav b{color:#7c5cff}.stat.mint b{color:#1f9b6b}.stat.peach b{color:#e08a2c}
+.stat b em{font-style:normal;font-size:13px;color:var(--ink-3);font-weight:600;margin-left:6px}
+.stat i{display:block;font-style:normal;margin-top:10px;font-size:12px;color:var(--ink-3)}
+.stat .ic2{position:absolute;right:16px;top:14px;width:30px;height:30px;color:var(--pink-2)}
+.stat.lav .ic2{color:#7c5cff}.stat.mint .ic2{color:#1f9b6b}.stat.peach .ic2{color:#e08a2c}
+.stat .ic2 svg{width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.grid2{display:grid;grid-template-columns:1.55fr 1fr;gap:16px;flex:1;min-height:0}
+.thumbs{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding:14px 20px 0}
+.thumbs figure{min-width:0;position:relative}
+.thumbs img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:16px;display:block;box-shadow:0 8px 20px rgba(74,45,61,.10)}
+.thumbs figcaption{margin-top:8px;font-size:11px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:var(--mono)}
+.thumbs figure.live img{outline:3px solid var(--pink);outline-offset:-2px}
+.thumbs figure.live::after{content:"新";position:absolute;left:8px;top:8px;height:20px;padding:0 8px;border-radius:999px;background:var(--pink);color:#fff;font-size:10.5px;font-weight:700;line-height:20px}
+.ws{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:16px 20px 20px}
+.ws div{border-radius:var(--r-md);padding:12px 14px;background:var(--surface-2);border:1px solid var(--line)}
+.ws small{font-size:10.5px;color:var(--ink-3);font-weight:700;letter-spacing:.04em}
+.ws b{display:block;margin-top:6px;font-size:13px;font-weight:700}
+.ws i{display:block;font-style:normal;margin-top:3px;font-size:11.5px;color:var(--ink-3)}
+.meters{padding:12px 20px 0}
+.meter{display:grid;grid-template-columns:44px 1fr 96px;align-items:center;gap:14px;padding:10px 0}
+.meter span{font-size:11.5px;font-weight:700;color:var(--ink-3);letter-spacing:.04em}
+.meter .bar{height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden}
+.meter .bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#ff9ac6,#ff6ea9)}
+.meter .bar i.lav{background:linear-gradient(90deg,#c4b5fd,#a78bfa)}.meter .bar i.mint{background:linear-gradient(90deg,#8de5c4,#5cd6a8)}
+.meter b{font-family:var(--mono);font-size:12px;text-align:right;color:var(--ink);font-weight:600}
+.meter b small{color:var(--ink-3);font-size:10.5px;margin-left:5px}
+.task{margin:6px 20px 18px;border-radius:var(--r-md);padding:14px 16px;background:var(--lav-soft);display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:#5b47a8}
+.task a{font-weight:700;color:#7c5cff}
+
+/* ── tool picker (visual effect preserved) ── */
+.tp{position:absolute;inset:0;z-index:5;background:#1b1420;overflow:hidden;display:flex;flex-direction:column}
+.tp .poster{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 30%}
+.tp .shade{position:absolute;inset:0;background:linear-gradient(90deg,rgba(38,22,40,.66) 0%,rgba(38,22,40,.18) 30%,transparent 55%,rgba(38,22,40,.34) 100%),linear-gradient(0deg,rgba(38,22,40,.94) 0%,rgba(38,22,40,.5) 26%,transparent 52%,rgba(38,22,40,.28) 100%)}
+.tp .head{position:relative;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:22px 30px 0}
+.tp .back{display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 16px 0 12px;border-radius:999px;background:rgba(255,255,255,.92);color:var(--ink);font-size:12.5px;font-weight:700;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.tp .back svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.tp .tsearch{display:flex;align-items:center;gap:10px;height:38px;width:300px;padding:0 10px 0 14px;border-radius:999px;background:rgba(255,255,255,.14);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.28);color:rgba(255,255,255,.8);font-size:12.5px}
+.tp .tsearch svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2}
+.tp .tsearch span{flex:1}
+.tp .tsearch kbd{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.25);color:#fff}
+.tp .title{position:relative;z-index:2;margin:auto 0 0 46px;color:#fff;max-width:520px}
+.tp .title small{display:block;font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:#ffb1d2;text-transform:uppercase;font-weight:700}
+.tp .title h2{margin-top:10px;font-size:46px;font-weight:800;letter-spacing:-.02em;line-height:1.05;text-shadow:0 4px 30px rgba(0,0,0,.4)}
+.tp .title p{margin-top:12px;font-size:14px;color:rgba(255,255,255,.82)}
+.tp .title .meta{display:flex;gap:8px;margin-top:16px}
+.tp .title .meta span{height:28px;padding:0 12px;border-radius:999px;background:rgba(255,255,255,.14);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.22);font-size:12px;display:inline-flex;align-items:center;gap:6px}
+.tp .title .meta b{font-family:var(--mono);color:#ffb1d2}
+.tp .cards{position:relative;z-index:2;display:flex;gap:18px;padding:48px 30px 44px;overflow:hidden}
+.tcard{position:relative;width:212px;flex:0 0 212px;height:134px;border-radius:18px;overflow:hidden;border:1.5px solid rgba(255,255,255,.18);box-shadow:0 10px 24px rgba(0,0,0,.3);transition:transform .28s cubic-bezier(.22,1.2,.36,1)}
+.tcard img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.tcard .sh{position:absolute;left:0;right:0;bottom:0;height:64%;background:linear-gradient(180deg,transparent,rgba(27,20,32,.9))}
+.tcard .bd{position:absolute;left:0;right:0;bottom:0;padding:0 14px 12px;display:flex;align-items:flex-end;justify-content:space-between;gap:8px;color:#fff}
+.tcard strong{display:block;font-size:16px;font-weight:800;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+.tcard small{display:block;margin-top:3px;font-size:10.5px;color:rgba(255,255,255,.82)}
+.tcard .n{text-align:right;flex:none}
+.tcard .n b{display:block;font-family:var(--mono);font-size:15px;font-weight:700;color:#ffb1d2}
+.tcard .n i{display:block;font-style:normal;font-size:9px;font-family:var(--mono);color:rgba(255,255,255,.7);margin-top:2px}
+.tcard.active{border-color:var(--pink);box-shadow:0 16px 36px rgba(0,0,0,.36),0 0 0 4px rgba(255,126,182,.28),0 0 30px rgba(255,126,182,.3)}
+.tcard.hover{transform:translateY(-16px) scale(1.12);z-index:3;border-color:#fff;box-shadow:0 18px 42px rgba(0,0,0,.42)}
+.tp .hint{position:absolute;z-index:2;right:30px;bottom:16px;font-family:var(--mono);font-size:10.5px;color:rgba(255,255,255,.55)}
+
+/* ── gallery ── */
+.gal{display:grid;grid-template-columns:232px 1fr 320px;gap:14px;padding:6px 20px 16px 22px;min-height:0}
+.panel{background:#fff;border-radius:var(--r-lg);box-shadow:var(--sh);min-height:0;display:flex;flex-direction:column}
+.tree{padding:16px 12px;gap:16px}
+.tree h4{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-3);padding:0 10px;margin-bottom:8px;display:flex;justify-content:space-between}
+.tree h4 a{color:var(--pink-2);font-size:13px}
+.tree .row{display:flex;align-items:center;justify-content:space-between;height:36px;padding:0 10px;border-radius:12px;color:var(--ink-2);font-size:13px}
+.tree .row svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;margin-right:9px}
+.tree .row span{display:flex;align-items:center}
+.tree .row em{font-style:normal;font-family:var(--mono);font-size:10.5px;color:var(--ink-4)}
+.tree .row.on{background:var(--pink-soft);color:var(--pink-2);font-weight:700}
+.tree .row.on em{color:var(--pink-2)}
+.tree .row.sub{padding-left:26px;height:32px}
+.tree .chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 6px}
+.tree .bin{margin-top:auto}
+.center{display:flex;flex-direction:column;min-width:0;gap:10px}
+.gtool{display:flex;align-items:center;gap:8px;padding:10px 12px;background:#fff;border-radius:var(--r-lg);box-shadow:var(--sh)}
+.gtool .search{width:280px;height:32px;box-shadow:none;background:var(--surface-2)}
+.dd{height:32px;padding:0 12px;border-radius:999px;border:1px solid var(--line);font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:8px;background:#fff;white-space:nowrap;font-weight:600}
+.dd::after{content:"";width:6px;height:6px;border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);transform:rotate(45deg) translateY(-2px)}
+.spacer{flex:1}
+.slider{display:flex;align-items:center;gap:8px;color:var(--ink-3)}
+.slider .track{width:100px;height:4px;background:var(--surface-3);position:relative;border-radius:2px}
+.slider .track i{position:absolute;left:38%;top:-5px;width:14px;height:14px;border-radius:50%;background:var(--pink);box-shadow:0 0 0 3px #fff,0 2px 8px rgba(255,126,182,.4)}
+.seg{display:flex;background:var(--surface-2);border-radius:999px;padding:3px;border:1px solid var(--line)}
+.seg span{width:30px;height:26px;border-radius:999px;display:grid;place-items:center;color:var(--ink-3)}
+.seg span.on{background:#fff;color:var(--pink-2);box-shadow:0 2px 8px rgba(255,126,182,.18)}
+.seg svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.7}
+.gsub{display:flex;align-items:center;gap:12px;padding:0 6px;font-size:12px;color:var(--ink-3)}
+.gsub b{color:var(--ink);font-weight:800;font-size:13px}
+.masonry{display:grid;grid-template-columns:repeat(6,1fr);grid-auto-rows:116px;grid-auto-flow:dense;gap:12px;overflow:hidden;flex:1;padding:2px}
+.tile{position:relative;border-radius:16px;overflow:hidden;background:var(--surface-3);box-shadow:0 6px 16px rgba(74,45,61,.08)}
+.tile img{width:100%;height:100%;object-fit:cover;display:block}
+.tile.tall{grid-row:span 2}.tile.wide{grid-column:span 2}
+.tile .chk{position:absolute;left:10px;top:10px;width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,.85);background:rgba(74,45,61,.25);opacity:0}
+.tile.hov .chk{opacity:1}
+.tile.sel{outline:3px solid var(--pink);outline-offset:-2px}
+.tile.sel .chk{opacity:1;background:var(--pink);border-color:#fff}
+.tile.sel .chk::after{content:"";position:absolute;left:7px;top:3px;width:5px;height:9px;border-right:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(45deg)}
+.tile .meta{position:absolute;left:10px;bottom:10px;display:flex;gap:4px;opacity:0}
+.tile.hov .meta,.tile.sel .meta{opacity:1}
+.tile .meta span{font-family:var(--mono);font-size:9.5px;color:#fff;background:rgba(74,45,61,.6);padding:3px 7px;border-radius:999px;backdrop-filter:blur(6px);white-space:nowrap}
+.tile .tags{position:absolute;left:10px;bottom:10px;display:flex;gap:4px}
+.tile .tags span{font-size:9.5px;font-weight:600;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.9);color:var(--ink-2)}
+.insp{padding:16px;gap:14px;overflow:hidden}
+.insp .pv{border-radius:16px;overflow:hidden;aspect-ratio:4/3;background:var(--surface-3)}
+.insp .pv img{width:100%;height:100%;object-fit:contain;display:block}
+.insp h3{font-size:14px;font-weight:800;word-break:break-all}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;font-size:12px}
+.kv small{display:block;font-size:10.5px;font-weight:700;color:var(--ink-3);margin-bottom:3px;letter-spacing:.04em}
+.kv b{font-weight:600;font-family:var(--mono);font-size:12px;color:var(--ink)}
+.insp h4{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-3);display:flex;justify-content:space-between}
+.insp h4 a{color:var(--pink-2);letter-spacing:0;font-size:11.5px}
+.insp .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.prompt{font-size:12px;line-height:1.6;color:var(--ink-2);border-radius:14px;padding:10px 12px;background:var(--surface-2);border:1px solid var(--line);max-height:88px;overflow:hidden;position:relative;margin-top:10px}
+.prompt::after{content:"";position:absolute;inset:auto 0 0 0;height:34px;background:linear-gradient(transparent,var(--surface-2))}
+.insp .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:auto}
+.insp .acts .btn{justify-content:center}
+.insp .acts .danger{color:var(--rose)}
+
+/* ── tagger ── */
+.tg{display:grid;grid-template-columns:250px 1fr 300px;gap:14px;padding:6px 20px 16px 22px;min-height:0}
+.queue{padding:14px 12px;gap:8px;overflow:hidden}
+.queue .qh{display:flex;justify-content:space-between;align-items:center;padding:0 6px 6px}
+.queue .qh b{font-size:13px;font-weight:800}
+.queue .qh span{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.qi{display:grid;grid-template-columns:44px 1fr auto;gap:10px;align-items:center;padding:8px;border-radius:14px}
+.qi img{width:44px;height:44px;border-radius:12px;object-fit:cover}
+.qi b{display:block;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qi small{display:block;font-size:10.5px;color:var(--ink-3);margin-top:2px}
+.qi .st{width:8px;height:8px;border-radius:50%;background:var(--mint)}
+.qi .st.todo{background:var(--ink-4)}
+.qi.on{background:var(--pink-soft)}
+.qi.on b{color:var(--pink-2)}
+.qi.on .st{background:var(--pink)}
+.qprog{margin-top:auto;padding:12px 8px 4px}
+.qprog .bar{height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden}
+.qprog .bar i{display:block;height:100%;width:76%;border-radius:999px;background:linear-gradient(90deg,#ff9ac6,#ff6ea9)}
+.qprog p{margin-top:8px;font-size:11.5px;color:var(--ink-3);display:flex;justify-content:space-between}
+.stagebox{position:relative;border-radius:var(--r-lg);background:radial-gradient(700px 400px at 50% 40%,#fff,#f5edf9);box-shadow:var(--sh);overflow:hidden;display:flex;flex-direction:column}
+.stagebox .bar-top{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;font-size:12.5px;color:var(--ink-2)}
+.stagebox .bar-top b{color:var(--ink);font-weight:800}
+.stagebox .img{flex:1;display:grid;place-items:center;padding:0 40px 90px}
+.stagebox .img img{max-height:100%;max-width:100%;height:520px;border-radius:18px;box-shadow:0 30px 60px rgba(74,45,61,.22)}
+.dock{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:8px;border-radius:999px;background:rgba(255,255,255,.92);backdrop-filter:blur(14px);box-shadow:0 18px 44px rgba(255,126,182,.22);border:1px solid #fff}
+.dock .seg{background:var(--surface-2)}
+.dock .seg span{width:auto;padding:0 12px;font-size:12px;font-weight:700;white-space:nowrap}
+.dock .btn.icon{width:36px;height:36px}
+.dock .div{width:1px;height:22px;background:var(--line-2);margin:0 4px}
+.tags-panel{padding:16px;gap:14px;overflow:hidden}
+.tags-panel .th{display:flex;justify-content:space-between;align-items:center}
+.tags-panel .th b{font-size:13px;font-weight:800}
+.tags-panel .th span{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.tgroup h5{font-size:11px;font-weight:700;color:var(--ink-3);letter-spacing:.06em;margin-bottom:8px;display:flex;justify-content:space-between}
+.tgroup h5 i{font-style:normal;font-family:var(--mono);color:var(--ink-4)}
+.tgroup .chips{display:flex;flex-wrap:wrap;gap:6px}
+.tag{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 6px 0 11px;border-radius:999px;font-size:12px;font-weight:600;background:var(--pink-tint);color:var(--ink);border:1px solid var(--line)}
+.tag em{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.tag i{width:16px;height:16px;border-radius:50%;background:#fff;display:grid;place-items:center;color:var(--ink-3);font-style:normal;font-size:11px}
+.tag.char{background:var(--lav-soft);border-color:#e2dbff}.tag.char em{color:#7c5cff}
+.tag.low{opacity:.55}
+.addtag{display:flex;align-items:center;gap:8px;height:34px;padding:0 12px;border-radius:999px;border:1.5px dashed var(--line-2);color:var(--ink-3);font-size:12px}
+.tags-panel .foot{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tags-panel .foot .btn{justify-content:center}
+
+/* ── components sheet ── */
+.sheet{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.sheet .box{background:#fff;border-radius:var(--r-lg);padding:20px 22px;box-shadow:var(--sh)}
+.sheet h3{font-size:13px;font-weight:800;margin-bottom:14px;color:var(--ink)}
+.sheet .rowx{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.input{height:38px;border-radius:999px;border:1px solid var(--line);background:#fff;padding:0 14px;display:flex;align-items:center;font-size:12.5px;color:var(--ink-3);min-width:220px}
+.input.focus{border-color:var(--pink);box-shadow:0 0 0 4px var(--pink-soft);color:var(--ink)}
+.toggle{width:44px;height:26px;border-radius:999px;background:var(--pink);position:relative;box-shadow:inset 0 0 0 1px rgba(0,0,0,.02)}
+.toggle::after{content:"";position:absolute;right:3px;top:3px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.15)}
+.toggle.off{background:var(--ink-4)}.toggle.off::after{right:auto;left:3px}
+.prog{height:8px;border-radius:999px;background:var(--surface-3);overflow:hidden;width:100%}
+.prog i{display:block;height:100%;width:62%;border-radius:999px;background:linear-gradient(90deg,#ff9ac6,#ff6ea9)}
+.toast{display:inline-flex;align-items:center;gap:10px;padding:10px 14px 10px 12px;border-radius:14px;background:var(--ink);color:#fff;font-size:12.5px;font-weight:600;box-shadow:0 14px 34px rgba(74,45,61,.3)}
+.toast i{width:18px;height:18px;border-radius:50%;background:var(--mint);display:grid;place-items:center;font-style:normal;font-size:11px;color:#0b3d2a}
+.dialog{border-radius:22px;background:#fff;box-shadow:0 30px 80px rgba(255,126,182,.28);padding:22px;width:100%}
+.dialog h4{font-size:16px;font-weight:800}
+.dialog p{font-size:12.5px;color:var(--ink-2);margin-top:8px;line-height:1.6}
+.dialog .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+.empty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:18px 0 6px}
+.empty .bl{width:64px;height:64px;border-radius:50%;background:radial-gradient(circle at 30% 30%,#fff 0 20%,var(--pink-soft) 21%);position:relative;margin-bottom:12px}
+.empty .bl::after{content:"";position:absolute;right:-6px;bottom:2px;width:22px;height:22px;border-radius:50%;background:var(--lav-soft)}
+.empty b{font-size:13.5px;font-weight:800}
+.empty span{font-size:12px;color:var(--ink-3);margin-top:4px}
+.sw{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.sw span{width:44px;height:44px;border-radius:14px;position:relative;box-shadow:inset 0 0 0 1px rgba(74,45,61,.06)}
+.sw span::after{content:attr(data-n);position:absolute;left:0;top:48px;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);white-space:nowrap}
+.sw{margin-bottom:36px}
+.notes{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.notes .box{background:#fff;border-radius:var(--r-lg);padding:20px 22px;box-shadow:var(--sh)}
+.notes h3{font-size:13px;font-weight:800;margin-bottom:12px}
+.notes p,.notes li{font-size:13px;color:var(--ink-2);line-height:1.7}
+.notes ul{padding-left:16px}
+</style>
+</head>
+<body>
+
+<header class="intro">
+  <div>
+    <small>Baka TOOLS · 新界面 · 柔粉治愈 · 2026-09-20</small>
+    <h1>柔粉治愈，<span>但每一页都能干活。</span></h1>
+    <p>粉紫渐变打底、纯白圆润卡片、胶囊按钮、粉色柔影——F 的气质铺到全部页面。工具依旧通过「工具选择」切换：那套全屏海报 + 底部卡片的效果原样保留，只换外圈的按钮和卡片描边；左侧窄栏里多一个圆形的"当前工具"头像，点它也能回到工具选择。</p>
+  </div>
+  <div class="rules">
+    <div><b>1</b>工具切换 = 工具选择页（保留海报切换 + 卡片悬浮效果）；侧栏不再堆 9 个图标，只放：首页、当前工具、工具选择、控制台、设置</div>
+    <div><b>2</b>白卡片 + 粉柔影分区，圆角 20 / 26 px；一个主色粉、一个辅色薰衣草紫，绿 / 桃色只做状态</div>
+    <div><b>3</b>动效只用位移与透明度，≤ 220 ms；工具选择的海报淡入淡出（450 ms）与卡片抬起是唯一例外</div>
+    <div><b>4</b>所有数字来自真实数据；每页统一"标题 + 说明 + 右侧动作"的头部与胶囊控件</div>
+  </div>
+</header>
+
+<!-- ═══════════ 01 首页 ═══════════ -->
+<section class="screen">
+  <div class="cap"><h2><small>01</small>首页</h2><p>1440 × 900 · 左侧窄栏 72 px · 粉紫渐变封面卡 + 白色数据卡</p></div>
+  <div class="stage"><div class="fit">
+  <div class="win">
+    <div class="bgblobs"></div>
+    <aside class="rail">
+      <div class="logo"><i></i></div>
+      <a class="ic on"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-6h6v6"/></svg></a>
+      <a class="ic cur" title="当前工具：图库"><img src="../../../public/tools/gallery.jpg" alt=""></a>
+      <a class="ic fab" title="工具选择"><svg viewBox="0 0 24 24"><path d="m14.5 6.5 3-3 3 3-3 3"/><path d="m13 8-8.5 8.5a2.1 2.1 0 0 0 3 3L16 11"/><path d="m5 5 4 4M4 20l4-4"/></svg></a>
+      <div class="bottom">
+        <a class="ic"><svg viewBox="0 0 24 24"><path d="m5 8 4 4-4 4M11 16h8"/></svg></a>
+        <a class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></a>
+      </div>
+    </aside>
+    <div class="body">
+      <header class="top">
+        <div class="crumb"><b>首页</b></div>
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>搜索工具、图片标签或动作…</span><kbd>Ctrl K</kbd></div>
+        <div class="top-right"><div class="pill"><i class="dot"></i>就绪</div><div class="pill">GPU 4% · 2.1 / 24 GB</div><div class="winctl"><span>—</span><span>▢</span><span>✕</span></div></div>
+      </header>
+      <main class="page">
+        <section class="hero">
+          <i class="blob b1"></i><i class="blob b2"></i>
+          <img src="../../../public/branding/dashboard-hero-1920.webp" alt="">
+          <div class="copy">
+            <p class="eyebrow">Sunday · 09.20 · 17:26</p>
+            <h1>下午好 ✿<span>接着上次的标注继续？</span></h1>
+            <p class="sub">上次停在 <b>图库</b> · 1,284 张素材 · 36 张待标注 · 训练空闲</p>
+            <div class="btns"><a class="btn primary">继续标注 →</a><a class="btn white">打开工具选择</a></div>
+          </div>
+        </section>
+        <section class="stats">
+          <div class="stat"><span class="ic2"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 18 5-5 3 3 3-4 5 6"/></svg></span><small>图库</small><b>1,284<em>张</em></b><i>3 个来源 · 今日 +24</i></div>
+          <div class="stat lav"><span class="ic2"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><small>数据集</small><b>6<em>个</em></b><i>最近编辑 “角色A_v3”</i></div>
+          <div class="stat peach"><span class="ic2"><svg viewBox="0 0 24 24"><path d="M20 13.5 13.5 20H6a2 2 0 0 1-2-2v-7.5L10.5 4H18a2 2 0 0 1 2 2Z"/><circle cx="15.5" cy="8.5" r="1"/></svg></span><small>待标注</small><b>36<em>张</em></b><i>已完成 1,248 · 97%</i></div>
+          <div class="stat mint"><span class="ic2"><svg viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="3"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg></span><small>训练</small><b>空闲</b><i>上次 “角色A_v3” · 20 轮 · 昨天</i></div>
+        </section>
+        <section class="grid2">
+          <div class="card">
+            <div class="hd"><h2>最近加入</h2><a>查看全部 →</a></div>
+            <div class="thumbs">
+              <figure class="live"><img src="../../../public/tools/tagger.jpg" alt=""><figcaption>00124_pink.png</figcaption></figure>
+              <figure><img src="../../../public/tools/workbench.jpg" alt=""><figcaption>00123_glasses.png</figcaption></figure>
+              <figure><img src="../../../public/tools/gallery.jpg" style="object-position:40% 20%" alt=""><figcaption>00122_rose.png</figcaption></figure>
+              <figure><img src="../../../public/branding/dashboard-hero-1920.webp" style="object-position:70% 20%" alt=""><figcaption>00121_studio.webp</figcaption></figure>
+              <figure><img src="../../../public/tools/upscale.jpg" alt=""><figcaption>00120_yellow.png</figcaption></figure>
+              <figure><img src="../../../public/tools/train.jpg" alt=""><figcaption>00119_spectrum.png</figcaption></figure>
+            </div>
+            <div class="ws">
+              <div><small>最近工作区</small><b>图库 · 全部图片</b><i>10 分钟前</i></div>
+              <div><small>最近工作区</small><b>标注 · 角色A_v3</b><i>昨天 23:10 · 停在第 212 张</i></div>
+              <div><small>最近工作区</small><b>工作台 · 抽帧→打标</b><i>3 天前</i></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="hd"><h2>系统</h2><span class="mono" style="font-size:11px;color:var(--ink-3)">RTX 4090 · 51 °C</span></div>
+            <div class="meters">
+              <div class="meter"><span>CPU</span><div class="bar"><i style="width:18%"></i></div><b>18%<small>16 核</small></b></div>
+              <div class="meter"><span>GPU</span><div class="bar"><i class="lav" style="width:9%"></i></div><b>2.1<small>/ 24 GB</small></b></div>
+              <div class="meter"><span>RAM</span><div class="bar"><i class="mint" style="width:42%"></i></div><b>13.4<small>/ 32 GB</small></b></div>
+            </div>
+            <div class="task"><span>没有进行中的任务</span><a>新建训练 →</a></div>
+          </div>
+        </section>
+      </main>
+      <footer class="status"><div><span>● 就绪</span><span>v0.2.0-preview</span></div><div><span>0 个错误</span><span>控制台</span></div></footer>
+    </div>
+  </div>
+  </div></div>
+</section>
+
+<!-- ═══════════ 02 工具选择 ═══════════ -->
+<section class="screen">
+  <div class="cap"><h2><small>02</small>工具选择</h2><p>视觉效果原样保留：全屏海报随悬停切换（450 ms 淡入淡出）、底部卡片悬停抬起放大 · 新增：真实数字、搜索、当前工具粉色描边</p></div>
+  <div class="stage"><div class="fit">
+  <div class="win">
+    <div class="tp">
+      <img class="poster" src="../../../public/tools/gallery.jpg" alt="">
+      <div class="shade"></div>
+      <div class="head">
+        <a class="back"><svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>返回</a>
+        <div class="tsearch"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>输入工具名快速跳转…</span><kbd>Ctrl K</kbd></div>
+      </div>
+      <div class="title">
+        <small>Tool · 01 / 09</small>
+        <h2>图库</h2>
+        <p>整理与筛选素材，导入、打标、回收站都在这里。</p>
+        <div class="meta"><span><b>1,284</b> 张图片</span><span><b>3</b> 个来源</span><span><b>+24</b> 今日</span></div>
+      </div>
+      <div class="cards">
+        <div class="tcard active"><img src="../../../public/tools/gallery.jpg" alt=""><i class="sh"></i><div class="bd"><span><strong>图库</strong><small>整理与筛选素材</small></span><span class="n"><b>1,284</b><i>张图片</i></span></div></div>
+        <div class="tcard"><img src="../../../public/tools/upscale.jpg" alt=""><i class="sh"></i><div class="bd"><span><strong>在线画廊</strong><small>多图站搜索素材</small></span><span class="n"><b>5</b><i>图站</i></span></div></div>
+        <div class="tcard hover"><img src="../../../public/tools/tagger.jpg" alt=""><i class="sh"></i><div class="bd"><span><strong>标注</strong><small>自动打标与校对</small></span><span class="n"><b>36</b><i>待处理</i></span></div></div>
+        <div class="tcard"><img src="../../../public/tools/train.jpg" alt=""><i class="sh"></i><div class="bd"><span><strong>训练</strong><small>LoRA 模型训练</small></span><span class="n"><b>空闲</b><i>上次 昨天</i></span></div></div>
+        <div class="tcard"><img src="../../../public/branding/dashboard-hero-1920.webp" style="object-position:70% 20%" alt=""><i class="sh"></i><div class="bd"><span><strong>放大</strong><small>高清超分辨率</small></span><span class="n"><b>就绪</b><i>2 个模型</i></span></div></div>
+        <div class="tcard"><img src="../../../public/tools/workbench.jpg" alt=""><i class="sh"></i><div class="bd"><span><strong>工作台</strong><small>无限画布 · 自由整理</small></span><span class="n"><b>2</b><i>个画布</i></span></div></div>
+        <div class="tcard"><img src="../../../public/tools/upscale.jpg" style="object-position:20% 60%" alt=""><i class="sh"></i><div class="bd"><span><strong>视频工具</strong><small>抽帧与转换</small></span><span class="n"><b>—</b><i>抽帧</i></span></div></div>
+      </div>
+      <div class="hint">← → 切换 · 回车进入 · Esc 返回</div>
+    </div>
+  </div>
+  </div></div>
+</section>
+
+<!-- ═══════════ 03 图库 ═══════════ -->
+<section class="screen">
+  <div class="cap"><h2><small>03</small>图库</h2><p>三张白卡片：来源与标签 232 px · 网格（只渲染可见区域）· 详情 320 px</p></div>
+  <div class="stage"><div class="fit">
+  <div class="win">
+    <div class="bgblobs"></div>
+    <aside class="rail">
+      <div class="logo"><i></i></div>
+      <a class="ic"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-6h6v6"/></svg></a>
+      <a class="ic cur on" style="box-shadow:0 0 0 2px #fff,0 0 0 4px var(--pink)"><img src="../../../public/tools/gallery.jpg" alt=""><span class="tip">当前：图库</span></a>
+      <a class="ic fab"><svg viewBox="0 0 24 24"><path d="m14.5 6.5 3-3 3 3-3 3"/><path d="m13 8-8.5 8.5a2.1 2.1 0 0 0 3 3L16 11"/><path d="m5 5 4 4M4 20l4-4"/></svg></a>
+      <div class="bottom">
+        <a class="ic"><svg viewBox="0 0 24 24"><path d="m5 8 4 4-4 4M11 16h8"/></svg></a>
+        <a class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></a>
+      </div>
+    </aside>
+    <div class="body">
+      <header class="top">
+        <div class="crumb"><span>图库</span><span style="color:var(--ink-4)">/</span><b>全部图片</b></div>
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>搜索工具、图片标签或动作…</span><kbd>Ctrl K</kbd></div>
+        <div class="top-right"><div class="pill"><i class="dot"></i>就绪</div><div class="pill">GPU 4% · 2.1 / 24 GB</div><div class="winctl"><span>—</span><span>▢</span><span>✕</span></div></div>
+      </header>
+      <main class="gal">
+        <aside class="panel tree">
+          <div>
+            <h4>素材</h4>
+            <div class="row on"><span><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m4 18 5-5 3 3 3-4 5 6"/></svg>全部图片</span><em>1,284</em></div>
+            <div class="row"><span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>最近加入</span><em>24</em></div>
+            <div class="row"><span><svg viewBox="0 0 24 24"><path d="M20 13.5 13.5 20H6a2 2 0 0 1-2-2v-7.5L10.5 4H18a2 2 0 0 1 2 2Z"/></svg>未标注</span><em>36</em></div>
+            <div class="row"><span><svg viewBox="0 0 24 24"><path d="m12 20-7.5-7.6a4.6 4.6 0 0 1 6.5-6.5l1 1 1-1a4.6 4.6 0 0 1 6.5 6.5Z"/></svg>收藏</span><em>12</em></div>
+          </div>
+          <div>
+            <h4>数据集 <a>＋</a></h4>
+            <div class="row sub"><span>角色A_v3</span><em>212</em></div>
+            <div class="row sub"><span>背景素材</span><em>480</em></div>
+            <div class="row sub"><span>服装参考</span><em>96</em></div>
+          </div>
+          <div>
+            <h4>常用标签</h4>
+            <div class="chips"><span class="chip on">1girl<em>1,102</em></span><span class="chip">solo<em>980</em></span><span class="chip">long_hair<em>640</em></span><span class="chip">smile<em>402</em></span><span class="chip">pink_hair<em>188</em></span><span class="chip">gloves<em>77</em></span></div>
+          </div>
+          <div class="bin"><div class="row"><span><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>回收站</span><em>3</em></div></div>
+        </aside>
+        <div class="center">
+          <div class="gtool">
+            <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>1girl -blurry</span><kbd>/</kbd></div>
+            <div class="dd">全部状态</div><div class="dd">最近修改</div>
+            <div class="spacer"></div>
+            <div class="slider"><div class="track"><i></i></div></div>
+            <div class="seg"><span class="on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></span><span><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="1.5"/><rect x="3" y="14" width="18" height="7" rx="1.5"/></svg></span><span><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span></div>
+            <a class="btn white sm">同步</a><a class="btn primary sm">导入 ▾</a>
+          </div>
+          <div class="gsub"><b>1,284</b><span>张 · 已选 1 · 按修改时间</span><span class="spacer"></span><span class="chip on" style="height:24px">1girl ×</span></div>
+          <div class="masonry">
+            <div class="tile tall sel"><img src="../../../public/tools/tagger.jpg" alt=""><i class="chk"></i><div class="meta"><span>1024 × 1536</span></div></div>
+            <div class="tile"><img src="../../../public/tools/workbench.jpg" alt=""></div>
+            <div class="tile wide"><img src="../../../public/branding/dashboard-hero-1920.webp" alt=""><div class="tags"><span>1girl</span><span>pink_hair</span><span>+12</span></div></div>
+            <div class="tile"><img src="../../../public/tools/train.jpg" alt=""></div>
+            <div class="tile tall"><img src="../../../public/tools/upscale.jpg" alt=""></div>
+            <div class="tile hov"><img src="../../../public/tools/gallery.jpg" style="object-position:30% 20%" alt=""><i class="chk"></i><div class="meta"><span>1200 × 1200</span></div></div>
+            <div class="tile"><img src="../../../public/tools/tagger.jpg" style="object-position:50% 10%" alt=""></div>
+            <div class="tile"><img src="../../../public/tools/workbench.jpg" style="object-position:60% 30%" alt=""></div>
+            <div class="tile wide"><img src="../../../public/tools/train.jpg" style="object-position:20% 50%" alt=""></div>
+            <div class="tile"><img src="../../../public/branding/dashboard-hero-1920.webp" style="object-position:80% 30%" alt=""></div>
+            <div class="tile tall"><img src="../../../public/tools/gallery.jpg" style="object-position:70% 40%" alt=""></div>
+            <div class="tile"><img src="../../../public/tools/upscale.jpg" style="object-position:40% 10%" alt=""></div>
+            <div class="tile"><img src="../../../public/tools/tagger.jpg" style="object-position:20% 60%" alt=""></div>
+            <div class="tile wide"><img src="../../../public/tools/workbench.jpg" style="object-position:30% 60%" alt=""></div>
+            <div class="tile"><img src="../../../public/tools/train.jpg" style="object-position:80% 20%" alt=""></div>
+            <div class="tile"><img src="../../../public/branding/dashboard-hero-1920.webp" style="object-position:30% 60%" alt=""></div>
+            <div class="tile"><img src="../../../public/tools/upscale.jpg" style="object-position:70% 70%" alt=""></div>
+            <div class="tile"><img src="../../../public/tools/gallery.jpg" style="object-position:10% 80%" alt=""></div>
+            <div class="tile"><img src="../../../public/tools/tagger.jpg" style="object-position:80% 40%" alt=""></div>
+            <div class="tile"><img src="../../../public/tools/workbench.jpg" style="object-position:10% 10%" alt=""></div>
+            <div class="tile"><img src="../../../public/branding/dashboard-hero-1920.webp" style="object-position:55% 45%" alt=""></div>
+            <div class="tile"><img src="../../../public/tools/train.jpg" style="object-position:50% 90%" alt=""></div>
+            <div class="tile"><img src="../../../public/tools/upscale.jpg" style="object-position:20% 30%" alt=""></div>
+          </div>
+        </div>
+        <aside class="panel insp">
+          <div class="pv"><img src="../../../public/tools/tagger.jpg" alt=""></div>
+          <div><h3>00124_pink_hair.png</h3>
+            <div class="kv" style="margin-top:12px"><div><small>尺寸</small><b>1024 × 1536</b></div><div><small>大小</small><b>2.4 MB</b></div><div><small>加入</small><b>09-18 22:41</b></div><div><small>数据集</small><b>角色A_v3</b></div></div>
+          </div>
+          <div><h4>标签 · 16 <a>编辑</a></h4>
+            <div class="chips"><span class="chip">1girl</span><span class="chip">solo</span><span class="chip lav">pink_hair</span><span class="chip">long_hair</span><span class="chip">black_gloves</span><span class="chip">smile</span><span class="chip">looking_at_viewer</span><span class="chip" style="color:var(--ink-4)">+9</span></div>
+          </div>
+          <div><h4>生成信息 <a>复制全部</a></h4>
+            <div class="kv" style="margin-top:10px"><div><small>模型</small><b>anime-xl-v3</b></div><div><small>采样</small><b>DPM++ 2M · 28</b></div><div><small>CFG</small><b>6.0</b></div><div><small>种子</small><b>3141592653</b></div></div>
+            <div class="prompt">1girl, solo, pink hair, long hair, black gloves, smile, looking at viewer, black turtleneck, earrings, upper body, soft lighting, masterpiece, best quality, very aesthetic, absurdres…</div>
+          </div>
+          <div class="acts"><a class="btn primary sm">送去标注</a><a class="btn white sm">打开位置</a><a class="btn white sm">加入数据集</a><a class="btn white sm danger">移到回收站</a></div>
+        </aside>
+      </main>
+      <footer class="status"><div><span>● 就绪</span><span>已选 1 / 1,284 · 2.4 MB</span></div><div><span>缩略图缓存 1,284 / 1,284</span><span>控制台</span></div></footer>
+    </div>
+  </div>
+  </div></div>
+</section>
+
+<!-- ═══════════ 04 标注 ═══════════ -->
+<section class="screen">
+  <div class="cap"><h2><small>04</small>标注</h2><p>左：任务队列 · 中：图片舞台 + 底部胶囊操作坞（保留现有交互）· 右：标签校对（按类别分色）</p></div>
+  <div class="stage"><div class="fit">
+  <div class="win">
+    <div class="bgblobs"></div>
+    <aside class="rail">
+      <div class="logo"><i></i></div>
+      <a class="ic"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-6h6v6"/></svg></a>
+      <a class="ic cur" style="box-shadow:0 0 0 2px #fff,0 0 0 4px var(--pink)"><img src="../../../public/tools/tagger.jpg" alt=""></a>
+      <a class="ic fab"><svg viewBox="0 0 24 24"><path d="m14.5 6.5 3-3 3 3-3 3"/><path d="m13 8-8.5 8.5a2.1 2.1 0 0 0 3 3L16 11"/><path d="m5 5 4 4M4 20l4-4"/></svg></a>
+      <div class="bottom">
+        <a class="ic"><svg viewBox="0 0 24 24"><path d="m5 8 4 4-4 4M11 16h8"/></svg></a>
+        <a class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></a>
+      </div>
+    </aside>
+    <div class="body">
+      <header class="top">
+        <div class="crumb"><span>标注</span><span style="color:var(--ink-4)">/</span><b>角色A_v3</b><span class="chip peach" style="height:22px;margin-left:6px">36 待处理</span></div>
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>搜索工具、图片标签或动作…</span><kbd>Ctrl K</kbd></div>
+        <div class="top-right"><div class="pill"><i class="dot"></i>WD14 · 已加载</div><div class="pill">GPU 38% · 6.2 / 24 GB</div><div class="winctl"><span>—</span><span>▢</span><span>✕</span></div></div>
+      </header>
+      <main class="tg">
+        <aside class="panel queue">
+          <div class="qh"><b>任务队列</b><span>212 / 248</span></div>
+          <div class="qi"><img src="../../../public/tools/gallery.jpg" alt=""><span><b>00210_rose.png</b><small>16 个标签 · 已确认</small></span><i class="st"></i></div>
+          <div class="qi"><img src="../../../public/tools/workbench.jpg" alt=""><span><b>00211_glasses.png</b><small>14 个标签 · 已确认</small></span><i class="st"></i></div>
+          <div class="qi on"><img src="../../../public/tools/tagger.jpg" alt=""><span><b>00212_pink.png</b><small>16 个标签 · 校对中</small></span><i class="st"></i></div>
+          <div class="qi"><img src="../../../public/tools/upscale.jpg" alt=""><span><b>00213_yellow.png</b><small>待打标</small></span><i class="st todo"></i></div>
+          <div class="qi"><img src="../../../public/tools/train.jpg" alt=""><span><b>00214_spectrum.png</b><small>待打标</small></span><i class="st todo"></i></div>
+          <div class="qi"><img src="../../../public/branding/dashboard-hero-1920.webp" alt=""><span><b>00215_studio.webp</b><small>待打标</small></span><i class="st todo"></i></div>
+          <div class="qi"><img src="../../../public/tools/gallery.jpg" style="object-position:20% 70%" alt=""><span><b>00216_rose2.png</b><small>待打标</small></span><i class="st todo"></i></div>
+          <div class="qprog"><div class="bar"><i></i></div><p><span>已完成 212</span><span>剩余 36 · 约 6 分钟</span></p></div>
+        </aside>
+        <div class="stagebox">
+          <div class="bar-top"><span><b>00212_pink.png</b> · 1024 × 1536</span><span>← 上一张 &nbsp;·&nbsp; 下一张 → &nbsp;·&nbsp; 空格 保存并下一张</span></div>
+          <div class="img"><img src="../../../public/tools/tagger.jpg" alt=""></div>
+          <div class="dock">
+            <div class="seg"><span class="on">WD14</span><span>LLM</span><span>混合</span></div>
+            <div class="div"></div>
+            <a class="btn primary sm">▶ 开始</a>
+            <a class="btn white sm icon" title="刷新"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></a>
+            <a class="btn white sm icon" title="批量"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></a>
+            <a class="btn white sm icon" title="撤销"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg></a>
+            <div class="div"></div>
+            <a class="btn soft sm">中文标签</a>
+          </div>
+        </div>
+        <aside class="panel tags-panel">
+          <div class="th"><b>标签校对</b><span>16 个 · 阈值 0.35</span></div>
+          <div class="tgroup"><h5>角色 <i>2</i></h5><div class="chips"><span class="tag char">hatsune_miku<em>.92</em><i>×</i></span><span class="tag char low">vocaloid<em>.41</em><i>×</i></span></div></div>
+          <div class="tgroup"><h5>通用 <i>12</i></h5><div class="chips"><span class="tag">1girl<em>.99</em><i>×</i></span><span class="tag">solo<em>.98</em><i>×</i></span><span class="tag">pink_hair<em>.96</em><i>×</i></span><span class="tag">long_hair<em>.95</em><i>×</i></span><span class="tag">black_gloves<em>.91</em><i>×</i></span><span class="tag">smile<em>.88</em><i>×</i></span><span class="tag">looking_at_viewer<em>.86</em><i>×</i></span><span class="tag">earrings<em>.79</em><i>×</i></span><span class="tag">turtleneck<em>.74</em><i>×</i></span><span class="tag low">upper_body<em>.52</em><i>×</i></span><span class="tag low">blush<em>.44</em><i>×</i></span><span class="tag low">jewelry<em>.38</em><i>×</i></span></div></div>
+          <div class="tgroup"><h5>质量 <i>2</i></h5><div class="chips"><span class="chip mint">masterpiece</span><span class="chip mint">best_quality</span></div></div>
+          <div class="addtag">＋ 输入标签，回车添加，支持中文</div>
+          <div class="foot"><a class="btn white sm">跳过</a><a class="btn primary sm">保存并下一张 ⏎</a></div>
+        </aside>
+      </main>
+      <footer class="status"><div><span>● WD14 · 0.9s / 张</span><span>自动保存 已开</span></div><div><span>本次已确认 12</span><span>控制台</span></div></footer>
+    </div>
+  </div>
+  </div></div>
+</section>
+
+<!-- ═══════════ 05 控件 ═══════════ -->
+<section class="screen">
+  <div class="cap"><h2><small>05</small>控件与颜色</h2><p>所有页面共用这一套；不再各页私写样式</p></div>
+  <div class="sheet">
+    <div class="box">
+      <h3>按钮 · 胶囊</h3>
+      <div class="rowx"><a class="btn primary">开始标注</a><a class="btn soft">中文标签</a><a class="btn white">打开位置</a><a class="btn ghost">取消</a></div>
+      <div class="rowx"><a class="btn primary sm">导入 ▾</a><a class="btn white sm">同步</a><a class="btn white sm icon"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></a><a class="btn white sm" style="color:var(--rose)">移到回收站</a></div>
+      <h3 style="margin-top:22px">输入与开关</h3>
+      <div class="rowx"><div class="input">搜索：空格=且，|=或，-=排除</div><div class="input focus">1girl -blurry</div></div>
+      <div class="rowx"><span class="toggle"></span><span class="toggle off"></span><div class="seg"><span class="on" style="width:auto;padding:0 12px;font-size:12px;font-weight:700">WD14</span><span style="width:auto;padding:0 12px;font-size:12px;font-weight:700">LLM</span><span style="width:auto;padding:0 12px;font-size:12px;font-weight:700">混合</span></div></div>
+      <div class="rowx"><div class="prog"><i></i></div></div>
+    </div>
+    <div class="box">
+      <h3>标签胶囊 · 按类别分色</h3>
+      <div class="rowx"><span class="chip">通用 general</span><span class="chip lav">角色 character</span><span class="chip mint">质量 quality</span><span class="chip peach">待处理 36</span><span class="chip on">选中</span></div>
+      <div class="rowx"><span class="tag">pink_hair<em>.96</em><i>×</i></span><span class="tag char">hatsune_miku<em>.92</em><i>×</i></span><span class="tag low">blush<em>.44</em><i>×</i></span></div>
+      <h3 style="margin-top:22px">提示与弹窗</h3>
+      <div class="rowx"><span class="toast"><i>✓</i>已保存 16 个标签，下一张</span></div>
+      <div class="dialog"><h4>移到回收站？</h4><p>3 张图片和它们的标签文件会移到回收站，30 天内可以恢复。</p><div class="acts"><a class="btn white sm">取消</a><a class="btn primary sm" style="background:linear-gradient(135deg,#ff8aa6,#ff6b8b);box-shadow:0 10px 24px rgba(255,107,139,.3)">移到回收站</a></div></div>
+    </div>
+    <div class="box">
+      <h3>颜色</h3>
+      <div class="sw">
+        <span style="background:#fff4f9" data-n="#fff4f9 底"></span><span style="background:#ffffff" data-n="#ffffff 卡片"></span><span style="background:#fff0f6" data-n="#fff0f6 浅粉面"></span><span style="background:#ff7eb6" data-n="#ff7eb6 主色"></span><span style="background:#a78bfa" data-n="#a78bfa 辅色"></span><span style="background:#5cd6a8" data-n="#5cd6a8 成功"></span><span style="background:#ffb86b" data-n="#ffb86b 提醒"></span><span style="background:#ff6b8b" data-n="#ff6b8b 危险"></span><span style="background:#4a2d3d" data-n="#4a2d3d 文字"></span><span style="background:#7c5a6c" data-n="#7c5a6c 次要"></span>
+      </div>
+      <h3>空状态</h3>
+      <div class="empty"><i class="bl"></i><b>这里还没有图片</b><span>点右上角「导入」，选图片或文件夹就能开始整理</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════ 06 说明 ═══════════ -->
+<section class="screen">
+  <div class="cap"><h2><small>06</small>与现在的区别 · 保留了什么</h2><p></p></div>
+  <div class="notes">
+    <div class="box"><h3>保留</h3><ul>
+      <li>工具选择页：全屏海报随悬停切换、底部卡片悬停抬起 12%、拖动横向滚动、自定义海报（设置里换图）全部保留。</li>
+      <li>侧栏的"回到上一个工具"圆形海报按钮，升级为常驻的"当前工具"头像。</li>
+      <li>标注页底部胶囊操作坞、图库的搜索语法、回收站、安全移动。</li>
+      <li>点击音效（nya）和深浅主题切换（深色版另出一稿）。</li>
+    </ul></div>
+    <div class="box"><h3>改掉</h3><ul>
+      <li>紫黑"编辑风"外壳 → 粉紫渐变底 + 白卡片 + 粉柔影。</li>
+      <li>首页 620 px 呼吸大图 → 312 px 静态封面卡，插画从右侧柔和渐入。</li>
+      <li>工具选择里写死的 1,284 / 36 / E03 → 真实数字；4 个工具共用一张海报 → 每个工具一张。</li>
+      <li>模糊光晕、滚动视差、3D 透视全部去掉；卡片投影统一为粉色柔影。</li>
+      <li>在线画廊、标注、训练各自一套样式 → 同一套控件（05）。</li>
+    </ul></div>
+    <div class="box"><h3>下一步</h3><ul>
+      <li>你点头后：先做外壳（窄栏 + 顶栏 + 工具选择换皮）和首页，出安装包给你实机看。</li>
+      <li>再做图库三栏 + 缩略图走 media:// + 只渲染可见区域。</li>
+      <li>然后标注、训练、在线画廊逐页套用 05 的控件。</li>
+      <li>深色版：同一结构，底色换成深梅子紫，粉色主色不变，工具选择页本来就是深的不用改。</li>
+    </ul></div>
+  </div>
+</section>
+
+<script>
+function fit(){document.querySelectorAll('.stage').forEach(function(s){var b=s.querySelector('.fit');var k=Math.min(1,s.clientWidth/1440);b.style.transform='scale('+k+')';s.style.height=(900*k)+'px'})}
+window.addEventListener('resize',fit);fit();
+</script>
+</body>
+</html>
