@@ -7,12 +7,10 @@ import { APP_NAVIGATION, APP_UTILITY_NAVIGATION, isNavigationItemActive } from '
 import { getRememberedWorkspace, loadLastWorkspace } from '@/features/navigation/workspace-history'
 import { findToolByRoute } from '@/features/tools/tool-catalog'
 import { useAppStore } from '@/stores/app'
-import { useWorkbenchStore } from '@/stores/workbench'
 
 const route = useRoute()
 const router = useRouter()
 const appStore = useAppStore()
-const wbStore = useWorkbenchStore()
 const { posterOf } = useToolPosters()
 
 /** 正在使用的工具；不在工具页时退回上次工作区对应的工具，方便一键回去。 */
@@ -26,7 +24,6 @@ const avatarLabel = computed(() => {
   if (!avatarTool.value) return ''
   return currentTool.value ? `当前工具：${avatarTool.value.label}` : `回到${avatarTool.value.label}`
 })
-const isWorkbench = computed(() => route.path === '/workbench')
 
 function navigateTo(path: string) {
   void router.push(path)
@@ -94,28 +91,6 @@ function onAvatarClick() {
         <AppIcon :name="item.id" />
       </button>
     </nav>
-
-    <div v-if="isWorkbench" class="rail rail--context" :class="{ 'rail--reduced': wbStore.reduceMotion }" aria-label="工作台">
-      <template v-if="!wbStore.activeNode">
-        <button class="ctx-btn" type="button" aria-label="项目" @click="wbStore.toggleRail('projects')">▤</button>
-        <button class="ctx-btn" type="button" aria-label="结果" @click="wbStore.toggleRail('assets')">◫</button>
-        <button class="ctx-btn" type="button" aria-label="画布设置" @click="wbStore.toggleRail('settings')">…</button>
-      </template>
-      <template v-else>
-        <button class="ctx-btn" type="button" aria-label="运行此节点" @click="wbStore.issueAction('run-node')">▶</button>
-        <button class="ctx-btn" type="button" aria-label="复制" @click="wbStore.issueAction('copy')">⧉</button>
-        <button class="ctx-btn" type="button" aria-label="粘贴" @click="wbStore.issueAction('paste')">⎘</button>
-        <button class="ctx-btn" type="button" aria-label="删除" @click="wbStore.issueAction('delete-selected')">✕</button>
-        <button class="ctx-btn" type="button" aria-label="保存内容" @click="wbStore.issueAction('save-node-content')">⤓</button>
-        <button
-          v-if="wbStore.activeNode.genOpen !== undefined"
-          class="ctx-btn"
-          type="button"
-          :aria-label="wbStore.activeNode.genOpen ? '收起生成器' : '展开生成器'"
-          @click="wbStore.issueAction('toggle-gen')"
-        >⇅</button>
-      </template>
-    </div>
   </aside>
 </template>
 
@@ -125,7 +100,7 @@ function onAvatarClick() {
 .rail__logo { width: 34px; height: 34px; border-radius: 13px; background: var(--brand-gradient); display: grid; place-items: center; box-shadow: 0 8px 20px rgba(var(--brand-primary-rgb), 0.35); transform: rotate(-8deg); margin-bottom: 6px; }
 .rail__logo i { width: 11px; height: 11px; border: 2.4px solid #fff; border-radius: 3px; transform: rotate(45deg); }
 .rail__gap { height: 26px; }
-.nav-item, .tool-picker-toggle, .nav-current, .ctx-btn { position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-tertiary); font: inherit; cursor: pointer; transition: background-color 160ms ease, color 160ms ease, transform 180ms var(--ease-bounce); }
+.nav-item, .tool-picker-toggle, .nav-current { position: relative; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-tertiary); font: inherit; cursor: pointer; transition: background-color 160ms ease, color 160ms ease, transform 180ms var(--ease-bounce); }
 .nav-item :deep(svg), .tool-picker-toggle :deep(svg) { width: 21px; height: 21px; }
 .nav-item.active { background: var(--brand-soft); color: var(--brand-hover); }
 .nav-item.active::after { content: ""; position: absolute; right: 5px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--brand-primary); box-shadow: 0 0 0 3px var(--surface-primary); }
@@ -135,18 +110,14 @@ function onAvatarClick() {
 .tool-picker-toggle { width: 48px; height: 48px; margin: 4px 0; background: var(--brand-gradient); color: #fff; box-shadow: 0 12px 26px rgba(var(--brand-primary-rgb), 0.42); }
 .tool-picker-toggle::before { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid rgba(var(--brand-primary-rgb), 0.3); transition: transform 180ms var(--ease-bounce), opacity 180ms ease; }
 .tool-picker-toggle.active { transform: rotate(-12deg) scale(1.04); }
-.rail--context { padding: 8px 0; gap: 2px; }
-.ctx-btn { width: 38px; height: 38px; font-size: 14px; color: var(--ink-secondary); }
-.ctx-btn:hover { background: var(--brand-tint); color: var(--brand-hover); }
-.rail--reduced, .rail--reduced * { transition: none !important; transform: none !important; }
 
 /* tooltips */
-.nav-item::before, .tool-picker-toggle::after, .nav-current::before, .ctx-btn::before {
+.nav-item::before, .tool-picker-toggle::after, .nav-current::before {
   content: attr(aria-label); position: absolute; left: calc(100% + 14px); top: 50%; transform: translateY(-50%) translateX(-4px);
   padding: 6px 11px; border-radius: 9px; background: var(--ink-primary); color: var(--surface-primary); font-size: 11.5px; font-weight: 700; white-space: nowrap;
   box-shadow: var(--ink-shadow); opacity: 0; pointer-events: none; transition: opacity 140ms ease, transform 140ms ease; z-index: 60;
 }
-.nav-item:hover::before, .tool-picker-toggle:hover::after, .nav-current:hover::before, .ctx-btn:hover::before { opacity: 1; transform: translateY(-50%) translateX(0); }
+.nav-item:hover::before, .tool-picker-toggle:hover::after, .nav-current:hover::before { opacity: 1; transform: translateY(-50%) translateX(0); }
 
 @media (hover: hover) and (pointer: fine) {
   .nav-item:hover { background: var(--brand-tint); color: var(--brand-hover); transform: translateX(2px) scale(1.04); }
@@ -155,9 +126,9 @@ function onAvatarClick() {
   .tool-picker-toggle:hover::before { transform: scale(1.1); opacity: .6; }
 }
 .nav-item:active, .tool-picker-toggle:active, .nav-current:active { transform: scale(0.95); }
-.nav-item:focus-visible, .tool-picker-toggle:focus-visible, .nav-current:focus-visible, .ctx-btn:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 3px; }
+.nav-item:focus-visible, .tool-picker-toggle:focus-visible, .nav-current:focus-visible { outline: 2px solid var(--brand-primary); outline-offset: 3px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .nav-item, .tool-picker-toggle, .nav-current, .ctx-btn, .tool-picker-toggle::before { transition: none !important; transform: none !important; }
+  .nav-item, .tool-picker-toggle, .nav-current, .tool-picker-toggle::before { transition: none !important; transform: none !important; }
 }
 </style>

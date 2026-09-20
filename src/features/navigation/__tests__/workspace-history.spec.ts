@@ -59,7 +59,7 @@ describe('workspace history', () => {
 
   it('normalizes additional tool routes that can be resumed', () => {
     expect(normalizeWorkspaceRoute('/booru-gallery')).toBe('/booru-gallery')
-    expect(normalizeWorkspaceRoute('/workbench')).toBe('/workbench')
+    expect(normalizeWorkspaceRoute('/workbench')).toBeNull()
     expect(normalizeWorkspaceRoute('/video')).toBe('/video')
     expect(normalizeWorkspaceRoute('/image-tools')).toBe('/image-tools')
   })
@@ -107,12 +107,10 @@ describe('workspace history', () => {
   it('returns labels for newly resumable workspaces', () => {
     expect([
       '/booru-gallery',
-      '/workbench',
       '/video',
       '/image-tools',
     ].map(getRememberedWorkspace)).toEqual([
       { route: '/booru-gallery', label: '继续浏览在线图库', shortLabel: '在线图库' },
-      { route: '/workbench', label: '继续工作台', shortLabel: '工作台' },
       { route: '/video', label: '继续视频工具', shortLabel: '视频工具' },
       { route: '/image-tools', label: '继续图像工具', shortLabel: '图像工具' },
     ])
@@ -150,9 +148,9 @@ describe('workspace history', () => {
 
     expect(loadRecentWorkspaces(storage).map((workspace) => workspace.route)).toEqual(['/gallery', '/training', '/tagger'])
 
-    saveLastWorkspace('/workbench', storage)
-    expect(loadRecentWorkspaces(storage).map((workspace) => workspace.route)).toEqual(['/workbench', '/gallery', '/training'])
-    expect(loadRecentWorkspaces(storage)[0]).toEqual({ route: '/workbench', label: '继续工作台', shortLabel: '工作台' })
+    saveLastWorkspace('/upscale', storage)
+    expect(loadRecentWorkspaces(storage).map((workspace) => workspace.route)).toEqual(['/upscale', '/gallery', '/training'])
+    expect(loadRecentWorkspaces(storage)[0]).toEqual({ route: '/upscale', label: '继续超分放大', shortLabel: '放大' })
   })
 
   it('ignores corrupt or stale recent-workspace values', () => {

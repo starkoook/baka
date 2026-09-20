@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -20,10 +20,12 @@ describe('gallery and annotation routes', () => {
     const router = read('src/router/index.ts')
     const picker = read('src/components/sidebar/ToolPicker.vue')
 
-    for (const route of ['/gallery', '/booru-gallery', '/tagger', '/training', '/upscale', '/workbench', '/video', '/image-tools', '/console']) {
+    for (const route of ['/gallery', '/booru-gallery', '/tagger', '/training', '/upscale', '/video', '/image-tools', '/console']) {
       expect(catalog).toContain(`route: '${route}'`)
       expect(router).toContain(`path: '${route}'`)
     }
     expect(picker).toContain("from '@/features/tools/tool-catalog'")
+    expect(router).not.toContain("path: '/workbench'")
+    expect(existsSync(resolve(process.cwd(), 'src/views/Workbench.vue'))).toBe(false)
   })
 })

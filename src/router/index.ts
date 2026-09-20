@@ -15,11 +15,6 @@ const router = createRouter({
       component: () => import('@/views/Upscale.vue'),
     },
     {
-      path: '/workbench',
-      name: 'workbench',
-      component: () => import('@/views/Workbench.vue'),
-    },
-    {
       path: '/gallery',
       name: 'gallery',
       component: () => import('@/views/Gallery.vue'),

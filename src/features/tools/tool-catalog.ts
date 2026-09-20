@@ -8,7 +8,6 @@ export type ToolKey =
   | 'tagger'
   | 'training'
   | 'upscale'
-  | 'workbench'
   | 'video'
   | 'imageTools'
   | 'console'
@@ -32,10 +31,9 @@ export const TOOL_CATALOG: readonly ToolEntry[] = [
   { key: 'tagger', label: '标注', desc: '自动打标、批量编辑、逐张校对', route: '/tagger', matches: ['/tagger'], poster: '/tools/tagger.jpg', posterPosition: 'center 22%' },
   { key: 'training', label: '训练', desc: 'LoRA 训练配置、运行与日志', route: '/training', matches: ['/training'], poster: '/tools/train.jpg', posterPosition: 'center 45%' },
   { key: 'upscale', label: '放大', desc: '本地超分辨率放大', route: '/upscale', matches: ['/upscale'], poster: '/tools/upscale.jpg', posterPosition: 'center 20%' },
-  { key: 'workbench', label: '工作台', desc: '无限画布，把素材和 AI 节点连起来', route: '/workbench', matches: ['/workbench'], poster: '/tools/workbench.jpg', posterPosition: 'center 30%' },
   { key: 'video', label: '视频工具', desc: '抽帧、转换与视频打标', route: '/video', matches: ['/video'], poster: '/tools/train.jpg', posterPosition: '20% 60%' },
   { key: 'imageTools', label: '图像工具', desc: '背景处理、编辑与图库体检', route: '/image-tools', matches: ['/image-tools'], poster: '/tools/upscale.jpg', posterPosition: '35% 65%' },
-  { key: 'console', label: '控制台', desc: '运行日志、错误与诊断', route: '/console', matches: ['/console'], poster: '/tools/workbench.jpg', posterPosition: '70% 60%' },
+  { key: 'console', label: '控制台', desc: '运行日志、错误与诊断', route: '/console', matches: ['/console'], poster: '/tools/workbench.jpg', posterPosition: 'center 30%' },
 ]
 
 export function findTool(key: ToolKey): ToolEntry {

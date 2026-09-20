@@ -5,7 +5,9 @@ describe('tool catalog', () => {
   it('lists every tool route once with a poster', () => {
     const routes = TOOL_CATALOG.map((tool) => tool.route)
     expect(new Set(routes).size).toBe(routes.length)
-    expect(routes).toEqual(expect.arrayContaining(['/gallery', '/booru-gallery', '/tagger', '/training', '/upscale', '/workbench', '/video', '/image-tools', '/console']))
+    expect(routes).toEqual(expect.arrayContaining(['/gallery', '/booru-gallery', '/tagger', '/training', '/upscale', '/video', '/image-tools', '/console']))
+    // 画布（工作台）已从工具里剔除
+    expect(routes).not.toContain('/workbench')
     for (const tool of TOOL_CATALOG) expect(tool.poster).toMatch(/^\/(tools|branding)\//)
   })
 
