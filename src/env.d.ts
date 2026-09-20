@@ -232,6 +232,7 @@ declare global {
     file_modified_at: string
     indexed_at: string
     thumb_hash: string | null
+    favorite?: number
   }
 
   interface LibraryRoot {
@@ -291,11 +292,12 @@ declare global {
     getRoots: () => Promise<{ success: boolean; data?: LibraryRoot[]; error?: string }>
     removeRoot: (rootId: number, deleteImages: boolean) => Promise<{ success: boolean; error?: string }>
     scan: (folderPath?: string) => Promise<{ success: boolean; data?: { newCount: number; skipCount: number; errorCount: number }; error?: string }>
-    getImages: (params: { rootId?: number; sort?: string; order?: string; limit?: number; offset?: number }) => Promise<{ success: boolean; data?: GalleryImage[]; error?: string }>
+    getImages: (params: { rootId?: number; sort?: string; order?: string; limit?: number; offset?: number; favoritesOnly?: boolean }) => Promise<{ success: boolean; data?: GalleryImage[]; error?: string }>
+    setFavorite: (imageId: number, favorite: boolean) => Promise<{ success: boolean; data?: { favorite: boolean; favoriteCount: number }; error?: string }>
     getThumbnail: (imageId: number) => Promise<{ success: boolean; data?: { base64: string; thumbHash: string }; error?: string }>
     getThumbnailUrl: (imageId: number) => Promise<{ success: boolean; data?: { url: string; imageUrl: string; thumbHash: string }; error?: string }>
     getThumbnailUrlByPath: (imagePath: string) => Promise<{ success: boolean; data?: { url: string; imageUrl: string; thumbHash: string }; error?: string }>
-    getStats: () => Promise<{ success: boolean; data?: { totalImages: number; totalRoots: number; totalSize: number }; error?: string }>
+    getStats: () => Promise<{ success: boolean; data?: { totalImages: number; totalRoots: number; totalSize: number; favoriteCount?: number; recentCount?: number; untaggedCount?: number }; error?: string }>
     getImageTags: (imageId: number) => Promise<{ success: boolean; data?: TagInfo[]; error?: string }>
     batchGetTags: (imageIds: number[]) => Promise<{ success: boolean; data?: { [id: string]: TagInfo[] }; error?: string }>
     setImageTags: (imageId: number, tags: { tag: string; category?: string; confidence?: number; source?: string; weight?: number }[]) => Promise<{ success: boolean; error?: string }>

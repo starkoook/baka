@@ -1,6 +1,6 @@
 <script setup lang="ts">
 defineProps<{ image: GalleryImage | null; tags: TagInfo[]; preview?: string; metadata?: SDMetadata | null }>()
-defineEmits<{ openMetadata: []; sendToTagger: []; batchTools: []; audit: []; reveal: []; delete: [] }>()
+defineEmits<{ openMetadata: []; sendToTagger: []; batchTools: []; audit: []; reveal: []; delete: []; toggleFavorite: [] }>()
 
 function formatSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -19,6 +19,10 @@ function shortModel(name?: string) {
       <img v-if="preview" :src="preview" alt="" draggable="false" />
       <span v-else class="polaroid__blank" aria-hidden="true"></span>
       <span class="polaroid__hint">点击放大</span>
+    </button>
+    <button class="fav" :class="{ 'fav--on': image.favorite }" type="button" :aria-pressed="Boolean(image.favorite)" @click="$emit('toggleFavorite')">
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17s-6-3.6-6-8.2A3.5 3.5 0 0 1 10 6.4a3.5 3.5 0 0 1 6 2.4C16 13.4 10 17 10 17Z" /></svg>
+      {{ image.favorite ? '已收藏' : '收藏' }}
     </button>
 
     <div class="file-title" :title="image.filename">{{ image.filename }}</div>
@@ -66,6 +70,12 @@ function shortModel(name?: string) {
 .polaroid img, .polaroid__blank { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 12px; background: var(--surface-tertiary); }
 .polaroid__blank { background: linear-gradient(135deg, var(--surface-tertiary), var(--brand-tint)); }
 .polaroid__hint { position: absolute; left: 0; right: 0; bottom: 7px; text-align: center; font: 10px var(--font-mono); color: var(--ink-quaternary); }
+.fav { position: absolute; top: 14px; right: 14px; z-index: 2; display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 12px 0 9px; border: 0; border-radius: 999px; background: var(--surface-primary); color: var(--ink-tertiary); box-shadow: var(--surface-shadow); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; transform: rotate(3deg); transition: transform .2s var(--ease-bounce), color .15s ease; }
+.fav svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linejoin: round; }
+.fav:hover { transform: rotate(0deg) scale(1.05); color: var(--accent-rose); }
+.fav--on { color: var(--accent-rose); }
+.fav--on svg { fill: currentColor; }
+.gallery-inspector { position: relative; }
 .file-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-primary); font-size: 14px; font-weight: 900; }
 .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; margin: 12px 0 16px; }
 .facts div { min-width: 0; }

@@ -109,6 +109,7 @@ export const useGalleryStore = defineStore('gallery', () => {
       rootId: activeRootId.value || undefined,
       limit: pageSize,
       offset: reset ? 0 : currentOffset.value,
+      favoritesOnly: quickView.value === 'favorites' || undefined,
     })
 
     if (res.success && res.data) {
@@ -246,6 +247,7 @@ export const useGalleryStore = defineStore('gallery', () => {
     const res = await window.galleryAPI.setImageTags(imageId, tags)
     if (res.success) {
       await fetchTags(imageId)
+      void loadStats()
     }
   }
 
@@ -255,7 +257,54 @@ export const useGalleryStore = defineStore('gallery', () => {
 
   function setActiveRoot(rootId: number | null) {
     activeRootId.value = rootId
+    quickView.value = 'all'
     loadImages(true)
+  }
+
+  // ── 快速查看：最近加入 / 未标注 / 收藏 ──
+  // “未标注”直接复用工具栏的标注状态筛选；“最近加入”“收藏”是独立视图
+  type QuickView = 'all' | 'recent' | 'favorites'
+  const quickView = ref<QuickView>('all')
+  const stats = ref<{ favoriteCount: number; recentCount: number; untaggedCount: number }>({ favoriteCount: 0, recentCount: 0, untaggedCount: 0 })
+
+  async function loadStats() {
+    if (!window.galleryAPI?.getStats) return
+    const res = await window.galleryAPI.getStats()
+    if (res.success && res.data) {
+      stats.value = {
+        favoriteCount: res.data.favoriteCount ?? 0,
+        recentCount: res.data.recentCount ?? 0,
+        untaggedCount: res.data.untaggedCount ?? 0,
+      }
+    }
+  }
+
+  /** 再点一次同一个快速查看就回到全部 */
+  async function setQuickView(view: QuickView | 'untagged') {
+    activeDatasetId.value = null
+    if (view === 'untagged') {
+      tagStateFilter.value = tagStateFilter.value === 'untagged' ? 'all' : 'untagged'
+      return
+    }
+    const next: QuickView = quickView.value === view ? 'all' : view
+    const favoritesChanged = (quickView.value === 'favorites') !== (next === 'favorites')
+    quickView.value = next
+    if (favoritesChanged) await loadImages(true)
+  }
+
+  async function toggleFavorite(image: { id: number; favorite?: number }) {
+    if (!window.galleryAPI?.setFavorite) return
+    const next = !image.favorite
+    const res = await window.galleryAPI.setFavorite(image.id, next)
+    if (!res.success) return
+    const target = images.value.find((item) => item.id === image.id)
+    if (target) target.favorite = next ? 1 : 0
+    stats.value = { ...stats.value, favoriteCount: res.data?.favoriteCount ?? stats.value.favoriteCount }
+    // 在“收藏”视图里取消收藏，就把它从列表里拿掉
+    if (quickView.value === 'favorites' && !next) {
+      images.value = images.value.filter((item) => item.id !== image.id)
+      selectedIds.value.delete(image.id)
+    }
   }
 
   // ── Dataset ──
@@ -508,6 +557,7 @@ export const useGalleryStore = defineStore('gallery', () => {
     captureReturnContext, restoreReturnContext, replaceImagePaths,
     fetchTags, fetchBatchTags, saveTags, sendToTagger,
     setActiveRoot, setupScanListener,
+    quickView, stats, loadStats, setQuickView, toggleFavorite,
     datasets, activeDatasetId, datasetImageItems,
     loadDatasets, createDataset, addToDataset, importFolderDataset, removeFromDataset, deleteDataset,
     loadDatasetImages, loadDatasetCaptions, saveDatasetCaption, exportDatasetCaptions,

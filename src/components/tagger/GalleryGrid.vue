@@ -10,6 +10,7 @@ interface ImageCard {
   height: number
   file_size: number
   file_modified_at: string
+  favorite?: number
 }
 
 const props = defineProps<{
@@ -32,6 +33,7 @@ const emit = defineEmits<{
   scrollEnd: []
   requestThumb: [imageId: number, el: HTMLImageElement]
   delete: [image: ImageCard]
+  toggleFavorite: [image: ImageCard]
 }>()
 
 let observer: IntersectionObserver | null = null
@@ -108,6 +110,7 @@ function onContextMenu(image: ImageCard, index: number, event: MouseEvent) {
     items: [
       { label: '查看图片与元数据', action: () => emit('openMetadata', image, index) },
       { label: '送去标注', action: () => emit('sendToTagger', image) },
+      { label: image.favorite ? '取消收藏' : '收藏', action: () => emit('toggleFavorite', image) },
       { label: '打开文件位置', action: () => emit('reveal', image) },
       { label: '移入回收站', danger: true, action: () => emit('delete', image) },
     ],
@@ -199,6 +202,17 @@ defineExpose({ setThumbSrc, getScrollTop, restoreScroll, focusImage })
             <svg v-if="selectedIds.has(image.id)" viewBox="0 0 16 16" aria-hidden="true"><path d="m3.2 8.2 3 3 6.6-6.6" /></svg>
           </button>
           <span class="image-card__dimensions">{{ image.width }} × {{ image.height }}</span>
+          <button
+            class="image-card__heart"
+            :class="{ 'image-card__heart--active': image.favorite }"
+            type="button"
+            :aria-label="image.favorite ? '取消收藏' : '收藏'"
+            :aria-pressed="Boolean(image.favorite)"
+            @click.stop="emit('toggleFavorite', image)"
+            @dblclick.stop
+          >
+            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17s-6-3.6-6-8.2A3.5 3.5 0 0 1 10 6.4a3.5 3.5 0 0 1 6 2.4C16 13.4 10 17 10 17Z" /></svg>
+          </button>
           <div class="image-card__foot">
             <template v-if="imageTags.get(image.id)?.length">
               <span v-for="tag in imageTags.get(image.id)!.slice(0, 2)" :key="tag.tag" class="image-card__tag">{{ tag.tag }}</span>
@@ -246,9 +260,16 @@ defineExpose({ setThumbSrc, getScrollTop, restoreScroll, focusImage })
 .image-card:hover .image-card__check, .image-card__check--active { opacity: 1; }
 .image-card__check--active { border-color: #fff; background: var(--brand-primary); transform: scale(1.06); }
 .image-card__check svg { width: 14px; fill: none; stroke: currentColor; stroke-width: 2.4; }
+.image-card__heart { position: absolute; right: 10px; bottom: 10px; z-index: 2; width: 30px; height: 30px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: rgba(255,255,255,.92); color: var(--ink-tertiary); box-shadow: 0 4px 12px rgba(74,45,61,.18); opacity: 0; cursor: pointer; transition: opacity .15s ease, transform .2s var(--ease-bounce), color .15s ease; }
+.image-card__heart svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.image-card:hover .image-card__heart, .image-card__heart--active { opacity: 1; }
+.image-card__heart:hover { transform: scale(1.12); color: var(--accent-rose); }
+.image-card__heart--active { color: var(--accent-rose); }
+.image-card__heart--active svg { fill: currentColor; }
+.image-card__heart:active { transform: scale(.9); }
 .image-card__dimensions { position: absolute; top: 10px; right: 10px; padding: 3px 8px; border-radius: 999px; background: rgba(74,45,61,.6); color: rgba(255,255,255,.9); font: 9.5px/1.3 var(--font-mono); opacity: 0; backdrop-filter: blur(6px); transition: opacity .15s ease; }
 .image-card:hover .image-card__dimensions { opacity: 1; }
-.image-card__foot { position: absolute; left: 0; right: 0; bottom: 0; display: flex; gap: 4px; padding: 26px 10px 10px; background: linear-gradient(180deg, transparent, rgba(74,45,61,.42)); opacity: 0; transform: translateY(6px); transition: opacity .18s ease, transform .18s ease; pointer-events: none; }
+.image-card__foot { position: absolute; left: 0; right: 44px; bottom: 0; display: flex; gap: 4px; padding: 26px 10px 10px; background: linear-gradient(180deg, transparent, rgba(74,45,61,.42)); opacity: 0; transform: translateY(6px); transition: opacity .18s ease, transform .18s ease; pointer-events: none; }
 .image-card:hover .image-card__foot, .image-card--selected .image-card__foot { opacity: 1; transform: none; }
 .image-card__tag { max-width: 46%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.92); color: var(--ink-secondary); font-size: 9.5px; font-weight: 700; }
 .image-card__tag--more { background: var(--brand-primary); color: #fff; font-family: var(--font-mono); }
@@ -258,6 +279,8 @@ defineExpose({ setThumbSrc, getScrollTop, restoreScroll, focusImage })
 .gallery-grid--list .image-card { display: grid; grid-template-columns: 64px 1fr; align-items: center; border-radius: 16px; min-height: 64px; }
 .gallery-grid--list .image-card__preview { position: relative; width: 64px; height: 64px; }
 .gallery-grid--list .image-card__foot, .gallery-grid--list .image-card__dimensions { display: none; }
+.gallery-grid--list .image-card__heart { right: auto; left: 38px; bottom: 4px; width: 22px; height: 22px; }
+.gallery-grid--list .image-card__heart svg { width: 12px; height: 12px; }
 .gallery-grid--list .image-card__check { top: 19px; left: 19px; }
 .gallery-grid--list .image-card__caption { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 14px; }
 .image-card__caption span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink-primary); font-size: 12px; font-weight: 700; }

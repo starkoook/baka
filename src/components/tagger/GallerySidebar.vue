@@ -6,10 +6,14 @@ defineProps<{
   activeDatasetId: string | null
   frequentTags?: { tag: string; count: number }[]
   activeTag?: string
+  quickView?: 'all' | 'recent' | 'favorites'
+  tagState?: 'all' | 'tagged' | 'untagged'
+  stats?: { favoriteCount: number; recentCount: number; untaggedCount: number }
 }>()
 
 defineEmits<{
   searchTag: [tag: string]
+  quickView: [view: 'recent' | 'untagged' | 'favorites']
   selectAll: []
   selectRoot: [root: LibraryRoot]
   selectDataset: [folderPath: string]
@@ -24,11 +28,11 @@ defineEmits<{
     <div class="sidebar-scroll">
       <section>
         <div class="section-heading"><span>图片来源</span></div>
-        <button class="source-row" :class="{ active: activeRootId === null && !activeDatasetId }" @click="$emit('selectAll')">
+        <button class="source-row" :class="{ active: activeRootId === null && !activeDatasetId && (!quickView || quickView === 'all') }" @click="$emit('selectAll')">
           <span class="source-icon"><svg viewBox="0 0 20 20"><rect x="2.5" y="3" width="15" height="14" rx="3"/><path d="m3 13 4-4 3 3 2-2 5 5"/></svg></span>
           <span>全部图片</span>
         </button>
-        <button v-for="root in roots" :key="root.id" class="source-row" :class="{ active: activeRootId === root.id && !activeDatasetId }" @click="$emit('selectRoot', root)">
+        <button v-for="root in roots" :key="root.id" class="source-row" :class="{ active: activeRootId === root.id && !activeDatasetId && (!quickView || quickView === 'all') }" @click="$emit('selectRoot', root)">
           <span class="source-icon"><svg viewBox="0 0 20 20"><path d="M2.5 5.5h6l1.5 2h7.5v8a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2z"/><path d="M2.5 8h15"/></svg></span>
           <span class="source-name">{{ root.label }}</span>
           <small>{{ root.image_count ?? 0 }}</small>
@@ -37,8 +41,15 @@ defineEmits<{
 
       <section>
         <div class="section-heading"><span>快速查看</span></div>
-        <button class="source-row source-row--muted"><span class="dot dot--new"></span><span>最近加入</span></button>
-        <button class="source-row source-row--muted"><span class="dot dot--empty"></span><span>未标注</span></button>
+        <button class="source-row" :class="{ active: quickView === 'recent' && !activeDatasetId }" type="button" title="最近 7 天加入的图片" @click="$emit('quickView', 'recent')">
+          <span class="dot dot--new"></span><span>最近加入</span><small v-if="stats">{{ stats.recentCount }}</small>
+        </button>
+        <button class="source-row" :class="{ active: tagState === 'untagged' && !activeDatasetId }" type="button" title="一张标签都没有的图片" @click="$emit('quickView', 'untagged')">
+          <span class="dot dot--empty"></span><span>未标注</span><small v-if="stats">{{ stats.untaggedCount }}</small>
+        </button>
+        <button class="source-row" :class="{ active: quickView === 'favorites' && !activeDatasetId }" type="button" title="点过心的图片" @click="$emit('quickView', 'favorites')">
+          <span class="dot dot--heart"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 17s-6-3.6-6-8.2A3.5 3.5 0 0 1 10 6.4a3.5 3.5 0 0 1 6 2.4C16 13.4 10 17 10 17Z" /></svg></span><span>收藏</span><small v-if="stats">{{ stats.favoriteCount }}</small>
+        </button>
       </section>
 
       <section>
@@ -97,6 +108,9 @@ section + section { margin-top: 18px; }
 .dot { width: 8px; height: 8px; margin: 0 5px; border-radius: 50%; }
 .dot--new { background: var(--accent-sky); box-shadow: 0 0 0 3px var(--accent-sky-soft); }
 .dot--empty { border: 2px solid var(--accent-peach); }
+.dot--heart { width: 17px; height: 17px; margin: 0; border-radius: 0; display: grid; place-items: center; color: var(--accent-rose); }
+.dot--heart svg { width: 14px; height: 14px; fill: currentColor; }
+.source-row.active .dot--heart { color: #fff; }
 .tag-cloud { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 6px; }
 .tag-cloud__chip { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 0; border-radius: var(--radius-pill); background: var(--brand-tint); color: var(--ink-secondary); font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: transform .2s var(--ease-bounce), background-color 140ms ease; }
 .tag-cloud__chip b { color: var(--ink-quaternary); font: 10px var(--font-mono); font-weight: 700; }

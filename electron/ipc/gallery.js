@@ -239,6 +239,13 @@ async function initDb(root = undefined) {
     runSql('INSERT OR REPLACE INTO schema_version (version) VALUES (7)')
   }
 
+  // v8: 收藏标记（侧栏"收藏"快速查看 + 卡片上的心形按钮）
+  if (version < 8) {
+    try { db.run('ALTER TABLE images ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0') } catch (_) {}
+    try { db.run('CREATE INDEX IF NOT EXISTS idx_images_favorite ON images(favorite)') } catch (_) {}
+    runSql('INSERT OR REPLACE INTO schema_version (version) VALUES (8)')
+  }
+
   saveDb(dbRoot)
   return db
 }
@@ -741,7 +748,7 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
-  ipcMain.handle('gallery:getImages', async (_event, { rootId, sort, order, limit, offset }) => {
+  ipcMain.handle('gallery:getImages', async (_event, { rootId, sort, order, limit, offset, favoritesOnly } = {}) => {
     try {
       await ensureDb()
       const sortCol = sort === 'name' ? 'filename'
@@ -750,17 +757,27 @@ function registerGalleryHandlers(mainWindow) {
         : 'indexed_at'
       const sortOrder = order === 'asc' ? 'ASC' : 'DESC'
 
-      let sql, params
-      if (rootId) {
-        sql = `SELECT * FROM images WHERE root_id = ? ORDER BY ${sortCol} ${sortOrder}, id ${sortOrder} LIMIT ? OFFSET ?`
-        params = [rootId, limit || 100, offset || 0]
-      } else {
-        sql = `SELECT * FROM images ORDER BY ${sortCol} ${sortOrder}, id ${sortOrder} LIMIT ? OFFSET ?`
-        params = [limit || 100, offset || 0]
-      }
+      const where = []
+      const params = []
+      if (rootId) { where.push('root_id = ?'); params.push(rootId) }
+      if (favoritesOnly) where.push('favorite = 1')
+      const sql = `SELECT * FROM images${where.length ? ' WHERE ' + where.join(' AND ') : ''} ORDER BY ${sortCol} ${sortOrder}, id ${sortOrder} LIMIT ? OFFSET ?`
+      params.push(limit || 100, offset || 0)
 
       const images = queryAll(sql, params)
       return { success: true, data: images }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
+  ipcMain.handle('gallery:setFavorite', async (_event, imageId, favorite) => {
+    try {
+      await ensureDb()
+      runSql('UPDATE images SET favorite = ? WHERE id = ?', [favorite ? 1 : 0, imageId])
+      saveDb()
+      const row = queryOne('SELECT COUNT(*) as count FROM images WHERE favorite = 1')
+      return { success: true, data: { favorite: Boolean(favorite), favoriteCount: row ? row.count : 0 } }
     } catch (e) {
       return { success: false, error: e.message }
     }
@@ -810,12 +827,20 @@ function registerGalleryHandlers(mainWindow) {
       const totalImages = queryOne('SELECT COUNT(*) as count FROM images')
       const totalRoots = queryOne('SELECT COUNT(*) as count FROM library_roots')
       const sizeRow = queryOne('SELECT COALESCE(SUM(file_size), 0) as total FROM images')
+      const favoriteRow = queryOne('SELECT COUNT(*) as count FROM images WHERE favorite = 1')
+      // 最近 7 天加入的数量，给侧栏"最近加入"用
+      const recentRow = queryOne("SELECT COUNT(*) as count FROM images WHERE indexed_at >= datetime('now', '-7 days')")
+      // 一张标签都没有的图片数，给侧栏"未标注"用
+      const untaggedRow = queryOne('SELECT COUNT(*) as count FROM images WHERE NOT EXISTS (SELECT 1 FROM image_tags WHERE image_tags.image_id = images.id)')
       return {
         success: true,
         data: {
           totalImages: totalImages ? totalImages.count : 0,
           totalRoots: totalRoots ? totalRoots.count : 0,
           totalSize: sizeRow ? sizeRow.total : 0,
+          favoriteCount: favoriteRow ? favoriteRow.count : 0,
+          recentCount: recentRow ? recentRow.count : 0,
+          untaggedCount: untaggedRow ? untaggedRow.count : 0,
         },
       }
     } catch (e) {

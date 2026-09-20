@@ -64,6 +64,8 @@ const visibleImages = computed(() => {
     if (!matchesQuery(searchText, clauses)) return false
     if (galleryStore.tagStateFilter === 'tagged' && tags.length === 0) return false
     if (galleryStore.tagStateFilter === 'untagged' && tags.length > 0) return false
+    // “最近加入”：只看 7 天内入库的（列表本身就按入库时间倒序，所以前几页就是它们）
+    if (galleryStore.quickView === 'recent' && !isRecent(image.indexed_at)) return false
     return true
   })
   return [...filtered].sort((a, b) => {
@@ -72,6 +74,16 @@ const visibleImages = computed(() => {
     return String(b.file_modified_at).localeCompare(String(a.file_modified_at))
   })
 })
+
+const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+function isRecent(indexedAt: string | null | undefined) {
+  if (!indexedAt) return false
+  // SQLite 的 datetime('now') 是 UTC，没有时区后缀，这里补上再解析
+  const time = Date.parse(indexedAt.includes('T') || indexedAt.endsWith('Z') ? indexedAt : indexedAt.replace(' ', 'T') + 'Z')
+  return Number.isFinite(time) && Date.now() - time <= RECENT_WINDOW_MS
+}
+
+const quickViewTitle = computed(() => ({ recent: '最近加入', untagged: '未标注', favorites: '收藏' }[galleryStore.quickView as 'recent' | 'untagged' | 'favorites'] ?? ''))
 
 const viewerImages = computed(() => droppedViewerImage.value ? [droppedViewerImage.value] : visibleImages.value)
 const isTemporaryViewer = computed(() => droppedViewerImage.value !== null)
@@ -671,6 +683,7 @@ async function focusImageFromQuery() {
 
 onMounted(async () => {
   galleryStore.setupScanListener()
+  void galleryStore.loadStats()
   await galleryStore.loadRoots()
   if (galleryStore.activeDatasetId) {
     galleryStore.loadDatasetImages(galleryStore.activeDatasetId)
@@ -712,7 +725,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         :active-dataset-id="galleryStore.activeDatasetId"
         :frequent-tags="frequentTags"
         :active-tag="galleryStore.searchQuery.trim()"
+        :quick-view="galleryStore.quickView"
+        :tag-state="galleryStore.tagStateFilter"
+        :stats="galleryStore.stats"
         @search-tag="searchTag"
+        @quick-view="galleryStore.setQuickView"
         @select-all="selectAllImages"
         @select-root="selectRoot"
         @select-dataset="selectDataset"
@@ -724,7 +741,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
       <div class="gallery-content">
         <GalleryToolbar
           v-if="!galleryStore.activeDatasetId"
-          :title="activeRoot?.label || '全部图片'"
+          :title="quickViewTitle || activeRoot?.label || '全部图片'"
           :search="galleryStore.searchQuery"
           :tag-state="galleryStore.tagStateFilter"
           :sort="galleryStore.sortMode"
@@ -774,6 +791,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             @send-to-tagger="sendGridImageToTagger"
             @reveal="revealGridImage"
             @delete="deleteSingleMedia"
+            @toggle-favorite="galleryStore.toggleFavorite($event)"
           />
 
           <div v-else ref="datasetGridRef" class="dataset-grid">
@@ -800,6 +818,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             @audit="openCharacterAuditDialog"
             @delete="deleteSelectedMedia"
             @reveal="revealSelected"
+            @toggle-favorite="selectedImage && galleryStore.toggleFavorite(selectedImage)"
           />
 
           <GallerySelectionBar

@@ -205,6 +205,7 @@ const Channels = {
   GALLERY_GET_THUMBNAIL: 'gallery:getThumbnail',
   GALLERY_GET_THUMBNAIL_URL: 'gallery:getThumbnailUrl',
   GALLERY_GET_THUMBNAIL_URL_BY_PATH: 'gallery:getThumbnailUrlByPath',
+  GALLERY_SET_FAVORITE: 'gallery:setFavorite',
   GALLERY_GET_STATS: 'gallery:getStats',
   GALLERY_GET_IMAGE_TAGS: 'gallery:getImageTags',
   GALLERY_BATCH_GET_TAGS: 'gallery:batchGetTags',
