@@ -94,6 +94,11 @@ function navigate(route: string) {
   void router.push(getRegisteredRoute(route))
 }
 
+/** 点拍立得：进图库并定位到这张图 */
+function openImageInGallery(item: PolaroidItem) {
+  void router.push({ path: '/gallery', query: { focus: String(item.id) } })
+}
+
 onMounted(() => {
   galleryStore.loadRoots()
   galleryStore.loadDatasets()
@@ -165,7 +170,7 @@ onMounted(() => {
         <h2 id="recent-title">最近加入</h2>
         <button class="dashboard__link" type="button" @click="navigate('/gallery')">查看全部 →</button>
       </header>
-      <PolaroidFan :items="recentItems" @open="navigate('/gallery')" />
+      <PolaroidFan :items="recentItems" @open="openImageInGallery" />
     </section>
 
     <div class="dashboard__system">

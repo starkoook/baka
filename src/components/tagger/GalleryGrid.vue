@@ -102,7 +102,26 @@ function restoreScroll(scrollTop: number) {
   if (scrollContainer.value) scrollContainer.value.scrollTop = scrollTop
 }
 
-defineExpose({ setThumbSrc, getScrollTop, restoreScroll })
+let focusTimer: ReturnType<typeof setTimeout> | null = null
+
+/** 从首页跳进来时：把这张图滚到视野中间，并闪一圈粉色光环提示位置。 */
+function focusImage(imageId: number): boolean {
+  const img = gridRef.value?.querySelector<HTMLImageElement>(`img[data-image-id="${imageId}"]`)
+  const card = img?.closest<HTMLElement>('.image-card')
+  if (!card) return false
+  card.scrollIntoView?.({ block: 'center', behavior: 'smooth' })
+  gridRef.value?.querySelectorAll('.image-card--focus').forEach((el) => el.classList.remove('image-card--focus'))
+  // 重新触发动画：先移除再加回
+  void card.offsetWidth
+  card.classList.add('image-card--focus')
+  card.focus({ preventScroll: true })
+  if (focusTimer) clearTimeout(focusTimer)
+  focusTimer = setTimeout(() => card.classList.remove('image-card--focus'), 2000)
+  requestAnimationFrame(observeCards)
+  return true
+}
+
+defineExpose({ setThumbSrc, getScrollTop, restoreScroll, focusImage })
 </script>
 
 <template>
@@ -173,6 +192,13 @@ defineExpose({ setThumbSrc, getScrollTop, restoreScroll })
 .image-card { min-width: 0; overflow: hidden; border: 0; border-radius: 22px; background: var(--surface-primary); box-shadow: 0 8px 18px rgba(74, 45, 61, .08); cursor: default; outline: none; transition: transform .25s var(--ease-bounce), box-shadow .2s ease; }
 .image-card:hover, .image-card:focus-visible { transform: translateY(-3px) scale(1.02); box-shadow: var(--surface-shadow-lg); z-index: 2; }
 .image-card--selected { box-shadow: 0 0 0 4px var(--brand-primary), var(--surface-shadow); }
+.image-card--focus { animation: card-focus 1.8s cubic-bezier(.2,.8,.2,1) both; z-index: 3; }
+@keyframes card-focus {
+  0% { transform: scale(1.1) rotate(-2deg); box-shadow: 0 0 0 4px var(--brand-primary), 0 0 0 10px rgba(var(--brand-primary-rgb), .45), var(--surface-shadow-lg); }
+  35% { transform: scale(1.06) rotate(1deg); }
+  60% { transform: scale(1.03) rotate(0deg); box-shadow: 0 0 0 4px var(--brand-primary), 0 0 0 26px rgba(var(--brand-primary-rgb), 0), var(--surface-shadow-lg); }
+  100% { transform: scale(1) rotate(0deg); box-shadow: 0 0 0 4px var(--brand-primary), 0 0 0 30px rgba(var(--brand-primary-rgb), 0), var(--surface-shadow); }
+}
 .image-card__preview { position: relative; aspect-ratio: 1; overflow: hidden; background: var(--surface-tertiary); }
 .image-card__preview img { width: 100%; height: 100%; object-fit: cover; user-select: none; }
 .image-card__check { position: absolute; top: 10px; left: 10px; width: 26px; height: 26px; display: grid; place-items: center; padding: 0; border: 2px solid rgba(255,255,255,.9); border-radius: 50%; background: rgba(74,45,61,.28); color: white; opacity: 0; cursor: pointer; backdrop-filter: blur(6px); transition: opacity .15s ease, transform .2s var(--ease-bounce); }
@@ -197,5 +223,5 @@ defineExpose({ setThumbSrc, getScrollTop, restoreScroll })
 .gallery-loading { display: flex; align-items: center; justify-content: center; gap: 7px; padding: 18px; color: var(--ink-tertiary); font-size: 11px; }
 .gallery-loading span { width: 10px; height: 10px; border: 2px solid var(--brand-soft); border-top-color: var(--brand-primary); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { .image-card { transition: none; } .image-card:hover, .image-card:focus-visible { transform: none; } .state-spinner, .gallery-loading span { animation-duration: 1.8s; } }
+@media (prefers-reduced-motion: reduce) { .image-card { transition: none; } .image-card:hover, .image-card:focus-visible { transform: none; } .image-card--focus { animation: none; box-shadow: 0 0 0 4px var(--brand-primary), 0 0 0 10px rgba(var(--brand-primary-rgb), .35); } .state-spinner, .gallery-loading span { animation-duration: 1.8s; } }
 </style>

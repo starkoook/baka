@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import GallerySidebar from '@/components/tagger/GallerySidebar.vue'
 import GalleryToolbar from '@/components/tagger/GalleryToolbar.vue'
 import GalleryGrid from '@/components/tagger/GalleryGrid.vue'
@@ -20,6 +20,7 @@ import { useGalleryStore } from '@/stores/gallery'
 import { useTaggerStore } from '@/stores/tagger'
 
 const router = useRouter()
+const route = useRoute()
 const appStore = useAppStore()
 const galleryStore = useGalleryStore()
 const taggerStore = useTaggerStore()
@@ -77,6 +78,22 @@ const isTemporaryViewer = computed(() => droppedViewerImage.value !== null)
 
 const selectedImage = computed(() => galleryStore.selectedCount === 1 ? galleryStore.selectedImages[0] ?? null : null)
 const selectedTags = computed(() => selectedImage.value ? galleryStore.imageTags.get(selectedImage.value.id) ?? [] : [])
+/** 详情栏的拍立得预览与生成信息：选中变化时按需取，走缓存 */
+const selectedPreview = ref('')
+const selectedMetadata = ref<SDMetadata | null>(null)
+watch(selectedImage, async (image) => {
+  selectedPreview.value = ''
+  selectedMetadata.value = null
+  if (!image || !window.galleryAPI) return
+  const id = image.id
+  const [thumb, meta] = await Promise.all([
+    window.galleryAPI.getThumbnailUrl?.(id).catch(() => null),
+    window.galleryAPI.getMetadata(id).catch(() => null),
+  ])
+  if (selectedImage.value?.id !== id) return
+  if (thumb?.success && thumb.data?.url) selectedPreview.value = thumb.data.url
+  if (meta?.success && meta.data) selectedMetadata.value = meta.data
+})
 const orderedSelectedImages = computed(() => visibleImages.value.filter((image) => galleryStore.selectedIds.has(image.id)))
 const activeRoot = computed(() => galleryStore.roots.find((root) => root.id === galleryStore.activeRootId) ?? null)
 const activeDataset = computed(() => galleryStore.datasets.find((dataset) => dataset.folderPath === galleryStore.activeDatasetId) ?? null)
@@ -606,6 +623,40 @@ function onKeydown(event: KeyboardEvent) {
 watch(() => galleryStore.images.length, refreshVisibleTags)
 watch(selectedImage, (image) => { if (image) galleryStore.fetchTags(image.id) })
 
+/** 从首页拍立得点进来：?focus=<imageId>，找到这张图、选中并滚到它那里闪一下。 */
+const MAX_FOCUS_PAGES = 20
+async function focusImageFromQuery() {
+  const raw = route.query.focus
+  const imageId = Number(Array.isArray(raw) ? raw[0] : raw)
+  if (!Number.isFinite(imageId) || imageId <= 0) return false
+  // 首页显示的是全库最新图片，所以先回到“全部图片”、清掉筛选，保证它能出现在列表里
+  if (galleryStore.activeDatasetId || galleryStore.activeRootId || galleryStore.searchQuery || galleryStore.tagStateFilter !== 'all') {
+    galleryStore.activeDatasetId = null
+    galleryStore.searchQuery = ''
+    galleryStore.tagStateFilter = 'all'
+    galleryStore.setActiveRoot(null)
+    await galleryStore.loadImages(true)
+  }
+  let pages = 0
+  while (!galleryStore.images.some((image) => image.id === imageId) && galleryStore.hasMore && pages < MAX_FOCUS_PAGES) {
+    await galleryStore.loadMore()
+    pages++
+  }
+  const target = galleryStore.images.find((image) => image.id === imageId)
+  // 清掉地址里的 focus，避免刷新/返回时反复定位
+  void router.replace({ path: '/gallery' })
+  if (!target) {
+    appStore.setStatus('这张图片不在当前图库里')
+    return false
+  }
+  galleryStore.clearSelection()
+  galleryStore.toggleSelect(target.id)
+  await nextTick()
+  await refreshVisibleTags()
+  requestAnimationFrame(() => gridRef.value?.focusImage(target.id))
+  return true
+}
+
 onMounted(async () => {
   galleryStore.setupScanListener()
   await galleryStore.loadRoots()
@@ -615,7 +666,8 @@ onMounted(async () => {
     await galleryStore.loadImages(true)
     await refreshVisibleTags()
   }
-  if (galleryStore.pendingScrollTop) {
+  const focused = await focusImageFromQuery()
+  if (!focused && galleryStore.pendingScrollTop) {
     await nextTick()
     if (galleryStore.activeDatasetId && datasetGridRef.value) datasetGridRef.value.scrollTop = galleryStore.pendingScrollTop
     else gridRef.value?.restoreScroll(galleryStore.pendingScrollTop)
@@ -623,6 +675,8 @@ onMounted(async () => {
   }
   window.addEventListener('keydown', onKeydown)
 })
+
+watch(() => route.query.focus, (value) => { if (value) void focusImageFromQuery() })
 
 onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 </script>
@@ -717,6 +771,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
             v-if="selectedImage && !galleryStore.activeDatasetId"
             :image="selectedImage"
             :tags="selectedTags"
+            :preview="selectedPreview"
+            :metadata="selectedMetadata"
             @open-metadata="selectedImage && openMetadata(selectedImage, visibleImages.indexOf(selectedImage))"
             @send-to-tagger="sendSelectedToTagger"
             @batch-tools="openBatchToolsDialog"

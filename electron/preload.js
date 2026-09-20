@@ -275,6 +275,7 @@ contextBridge.exposeInMainWorld('galleryAPI', {
   getImages: (params) => ipcRenderer.invoke('gallery:getImages', params),
   getThumbnail: (imageId) => ipcRenderer.invoke('gallery:getThumbnail', imageId),
   getThumbnailUrl: (imageId) => ipcRenderer.invoke('gallery:getThumbnailUrl', imageId),
+  getThumbnailUrlByPath: (imagePath) => ipcRenderer.invoke('gallery:getThumbnailUrlByPath', imagePath),
   getStats: () => ipcRenderer.invoke('gallery:getStats'),
   getImageTags: (imageId) => ipcRenderer.invoke('gallery:getImageTags', imageId),
   batchGetTags: (imageIds) => ipcRenderer.invoke('gallery:batchGetTags', imageIds),

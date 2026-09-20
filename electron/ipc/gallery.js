@@ -779,6 +779,18 @@ function registerGalleryHandlers(mainWindow) {
     }
   })
 
+  // 按路径取缩略图（标注队列、数据集等只有路径没有图库 id 的地方用），同一套缓存
+  ipcMain.handle('gallery:getThumbnailUrlByPath', async (_event, imagePath) => {
+    try {
+      if (typeof imagePath !== 'string' || !imagePath) return { success: false, error: 'Invalid path' }
+      if (!fs.existsSync(imagePath)) return { success: false, error: 'File not found' }
+      const { thumbPath, hash } = await ensureThumbnailPath(imagePath)
+      return { success: true, data: { url: toMediaUrl(thumbPath), imageUrl: toMediaUrl(imagePath), thumbHash: hash } }
+    } catch (e) {
+      return { success: false, error: e.message }
+    }
+  })
+
   // media:// 版本：只保证缩略图文件存在，返回地址，不经 IPC 搬运图片数据
   ipcMain.handle('gallery:getThumbnailUrl', async (_event, imageId) => {
     try {

@@ -23,7 +23,11 @@ describe('gallery workspace UI', () => {
   it('shows detail for one image and the batch bar for multiple images', () => {
     const gallery = read('src/views/Gallery.vue')
 
-    expect(gallery).toContain('v-if="galleryStore.selectedCount === 1"')
+    // 单选：右侧详情卡（带拍立得预览与生成信息）；多选：底部批量操作条
+    expect(gallery).toContain('galleryStore.selectedCount === 1 ? galleryStore.selectedImages[0] ?? null : null')
+    expect(gallery).toContain('v-if="selectedImage && !galleryStore.activeDatasetId"')
+    expect(gallery).toContain(':preview="selectedPreview"')
+    expect(gallery).toContain(':metadata="selectedMetadata"')
     expect(gallery).toContain('v-if="galleryStore.selectedCount > 1"')
   })
 
