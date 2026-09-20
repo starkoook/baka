@@ -244,26 +244,26 @@ const catalogBusy = computed(() => !!downloadingId.value)
   position: fixed; inset: 0; z-index: 650;
   display: flex; align-items: center; justify-content: center;
   padding: 20px;
-  background: rgba(7, 6, 9, 0.42);
+  background: rgba(49, 71, 46, 0.32); backdrop-filter: blur(6px);
 }
 .wd14-dialog {
   width: min(520px, 100%);
   max-height: min(86vh, 760px);
   display: flex; flex-direction: column;
-  border: 1px solid var(--line-subtle, rgba(255,255,255,.1));
+  border: 1px solid var(--line-subtle);
   border-radius: 12px;
   background: var(--surface-primary, #19171d);
-  box-shadow: 0 24px 72px rgba(0,0,0,.36);
+  box-shadow: var(--surface-shadow-lg);
 }
 .wd14-dialog header {
   display: flex; align-items: center; justify-content: space-between;
   padding: 16px 18px 12px;
-  border-bottom: 1px solid var(--line-subtle, rgba(255,255,255,.06));
+  border-bottom: 1px solid var(--line-subtle);
 }
 .wd14-dialog header p { margin: 0 0 2px; color: var(--brand-primary); font-size: 10px; font-weight: 750; letter-spacing: .14em; }
 .wd14-dialog h2 { margin: 0; font-size: 18px; color: var(--text-primary); }
 .wd14-dialog header > button {
-  width: 32px; height: 32px; border: 1px solid var(--line-subtle, rgba(255,255,255,.08));
+  width: 32px; height: 32px; border: 1px solid var(--line-subtle);
   border-radius: 8px; background: transparent; color: var(--text-tertiary); cursor: pointer; font-size: 18px;
 }
 .wd14-body { display: grid; gap: 14px; padding: 16px 18px; overflow: auto; }
@@ -275,15 +275,15 @@ const catalogBusy = computed(() => !!downloadingId.value)
   border: 0; background: transparent; color: var(--brand-primary); cursor: pointer; font-size: 12px;
 }
 .wd14-empty { margin: 0; color: var(--text-tertiary); font-size: 12px; }
-.wd14-error { margin: 0; color: #ff9a86; font-size: 12px; }
+.wd14-error { margin: 0; color: var(--danger-foreground); font-size: 12px; }
 .wd14-cards { display: grid; gap: 8px; }
 .wd14-card {
   position: relative;
   display: grid; gap: 2px; text-align: left;
   padding: 10px 12px 10px 14px;
-  border: 1px solid rgba(255,255,255,.08);
+  border: 1px solid var(--line-subtle);
   border-radius: 10px;
-  background: rgba(255,255,255,.03);
+  background: var(--surface-secondary);
   color: inherit;
   font: inherit;
   cursor: pointer;
@@ -306,7 +306,7 @@ const catalogBusy = computed(() => !!downloadingId.value)
   align-items: center;
   gap: 6px 10px;
   padding: 8px 10px;
-  border: 1px solid rgba(255,255,255,.06);
+  border: 1px solid var(--line-subtle);
   border-radius: 10px;
 }
 .wd14-dl__meta { min-width: 0; display: grid; gap: 2px; }
@@ -314,7 +314,7 @@ const catalogBusy = computed(() => !!downloadingId.value)
 .wd14-dl__meta small { color: var(--text-tertiary); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wd14-dl__btn {
   height: 28px; padding: 0 10px;
-  border: 1px solid rgba(255,255,255,.1);
+  border: 1px solid var(--line-subtle);
   border-radius: 8px;
   background: transparent;
   color: var(--text-secondary);
@@ -326,7 +326,7 @@ const catalogBusy = computed(() => !!downloadingId.value)
   grid-column: 1 / -1;
   height: 3px;
   border-radius: 99px;
-  background: rgba(255,255,255,.08);
+  background: var(--surface-tertiary);
   overflow: hidden;
 }
 .wd14-dl__bar i {
