@@ -10,39 +10,15 @@ const queue = read('src/components/tagger/TagQueue.vue')
 const editor = read('src/components/tagger/TagEditor.vue')
 const progress = read('src/components/tagger/TagRunProgress.vue')
 
-describe('annotation workspace UI (mint three-column workbench)', () => {
-  it('lays out settings, canvas, and tag editor as three columns', () => {
+describe('annotation workspace UI', () => {
+  it('uses queue, preview, and tag editor columns', () => {
     expect(page).toContain("import TagQueue from '@/components/tagger/TagQueue.vue'")
     expect(page).toContain("import TagEditor from '@/components/tagger/TagEditor.vue'")
     expect(page).toContain("import TagRunProgress from '@/components/tagger/TagRunProgress.vue'")
     expect(page).toContain("import TagSettingsPanel from '@/components/tagger/TagSettingsPanel.vue'")
-    expect(page).toContain('class="tg-panel tg-left"')
-    expect(page).toContain('class="tg-editor tagger-workspace"')
-    expect(page).toMatch(/\.tagger-layout\s*\{[^}]*grid-template-columns:\s*250px minmax\(360px, 1fr\) 300px/)
+    expect(page).toContain('class="tagger-layout"')
+    expect(page).toContain('class="tagger-workspace"')
     expect(page).not.toContain('class="tagger-shell"')
-  })
-
-  it('keeps engine, model, thresholds and options inline in the left panel', () => {
-    expect(page).toContain('class="tg-tabs" role="tablist"')
-    expect(page).toContain('01 · 模型')
-    expect(page).toContain('02 · 运行')
-    expect(page).toContain('id="tg-threshold"')
-    expect(page).toContain('id="tg-char-threshold"')
-    expect(page).toContain('管理 / 下载模型')
-    expect(page).toContain("onToggleOption('addCharacter', $event)")
-    expect(page).toContain('开始自动标注')
-  })
-
-  it('puts the image strip under the canvas with quiet toolbar actions', () => {
-    expect(page).toContain('class="tg-board" aria-label="图片工作区"')
-    expect(page).toContain('class="tg-view-controls"')
-    expect(page).toContain('＋ 添加图片')
-    expect(page).toContain('导入文件夹')
-    expect(queue).toContain('role="listbox"')
-    expect(queue).toContain('IntersectionObserver')
-    expect(queue).toContain('getThumbnailUrlByPath')
-    expect(queue).toContain('queue-item__badge')
-    expect(queue).toMatch(/\.queue-list\s*\{[^}]*overflow-x:\s*auto/)
   })
 
   it('keeps progress inline and exposes truthful stopping state', () => {
@@ -56,31 +32,44 @@ describe('annotation workspace UI (mint three-column workbench)', () => {
   it('uses save-and-next as the primary review action and can return to gallery context', () => {
     expect(editor).toContain('保存并下一张')
     expect(page).toContain('consumeReturnContext()')
-    expect(page).toContain('返回图库原位置')
+    expect(page).toContain('returnToGallery')
   })
 
-  it('keeps the primary empty state in the canvas only', () => {
-    expect(page).toContain('先准备一批图片吧')
-    expect(queue).not.toContain('<strong>队列是空的</strong>')
-    expect(editor).toContain('<div v-else class="editor-empty"><span>选择图片后在这里校对标签</span></div>')
-  })
-
-  it('uses the calm mint palette without leftover dark-theme values', () => {
-    expect(page).toContain('--tg-bg: #f5f7f1')
-    expect(page).toContain('--tg-primary: #58734a')
+  it('shows the picture as a white photo frame with playful stickers, and only peeks the mascot when enabled', () => {
+    expect(page).toContain('class="preview-sticker preview-sticker--tags"')
+    expect(page).toContain('class="preview-sticker preview-sticker--threshold"')
+    expect(page).toContain('v-if="appStore.showMascot" class="tagger-mascot"')
+    expect(page).not.toContain('class="tagger-rail"')
+    expect(page).not.toContain('tagger-identity')
+    // 相框、队列、编辑器都是白卡片，不再写死深色值
     for (const source of [page, queue, editor, progress]) {
       expect(source).not.toMatch(/#1[0-9a-f]{5}\b/i)
       expect(source).not.toMatch(/rgba\(255,\s*255,\s*255,\s*\.0\d+\)/)
     }
-    expect(page).not.toContain('tagger-identity')
-    expect(page).not.toContain('preview-sticker')
   })
 
-  it('overlays the editor on narrow screens and hides the settings column on tiny ones', () => {
+  it('renders the queue as lazy-loaded thumbnails with status badges and stays collapsible', () => {
+    expect(queue).toContain('collapsed: boolean')
+    expect(queue).toContain('toggleCollapsed: []')
+    expect(queue).toContain('IntersectionObserver')
+    expect(queue).toContain('getThumbnailUrlByPath')
+    expect(queue).toContain('queue-item__badge')
+    expect(queue).toMatch(/\.tag-queue--collapsed\s*\{[^}]*width:\s*48px/)
+    expect(queue).not.toContain('<strong>队列是空的</strong>')
+  })
+
+  it('keeps the primary empty state in the preview only', () => {
+    expect(page).toContain('先准备一批图片吧')
+    expect(editor).not.toContain('<strong>选择一张图片开始</strong>')
+    expect(editor).toContain('<div v-else class="editor-empty"><span>选择图片后在这里校对标签</span></div>')
+  })
+
+  it('colors tag groups by category and overlays the editor on narrow screens', () => {
+    expect(editor).toContain(':data-group="group"')
+    expect(editor).toContain('.tag-group[data-group="角色"] .tag-chip')
     const overlay = mediaBlock(editor, 980)
     expect(overlay).toMatch(/\.tag-editor\s*\{[^}]*position:\s*absolute/)
     expect(overlay).toMatch(/z-index:\s*12/)
     expect(mediaBlock(page, 760)).toMatch(/overflow-x:\s*hidden/)
-    expect(mediaBlock(page, 760)).toMatch(/\.tg-left\s*\{\s*display:\s*none/)
   })
 })
