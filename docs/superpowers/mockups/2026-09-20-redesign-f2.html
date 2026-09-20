@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baka TOOLS · 柔粉治愈 · 灵动版</title>
+<style>
+:root{
+  --bg:#fff2f8; --surface:#fff; --surface-2:#fff7fa; --surface-3:#fdeaf2;
+  --ink:#4a2d3d; --ink-2:#7c5a6c; --ink-3:#ad8f9f; --ink-4:#dcc8d2;
+  --pink:#ff7eb6; --pink-2:#ff6ea9; --pink-soft:#ffe1ee; --pink-tint:#fff0f6;
+  --lav:#a78bfa; --lav-2:#7c5cff; --lav-soft:#ece6ff; --mint:#5cd6a8; --mint-2:#1f9b6b; --mint-soft:#e2f9f0; --peach:#ffb86b; --peach-2:#e08a2c; --peach-soft:#fff1e0; --rose:#ff6b8b; --sky:#7dd3fc; --sky-soft:#e6f6ff;
+  --line:#ffe4ef;
+  --sh:0 12px 30px rgba(255,126,182,.14); --sh-2:0 22px 50px rgba(255,126,182,.22); --sh-ink:0 14px 30px rgba(74,45,61,.14);
+  --font:"Segoe UI Variable Display","Segoe UI","PingFang SC","Microsoft YaHei UI","Microsoft YaHei",system-ui,sans-serif;
+  --mono:"Cascadia Code","JetBrains Mono",Consolas,ui-monospace,monospace;
+  --bounce:cubic-bezier(.34,1.56,.64,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#fbeff5;color:var(--ink);font-family:var(--font);-webkit-font-smoothing:antialiased}
+body{padding:56px 40px 140px;max-width:1560px;margin:0 auto}
+a{color:inherit;text-decoration:none}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+kbd{font-family:var(--mono);font-size:10px;padding:1px 6px;border-radius:6px;background:var(--pink-tint);color:var(--ink-2);border:1px solid var(--line)}
+
+.intro{display:grid;grid-template-columns:1.15fr .85fr;gap:48px;align-items:end;margin-bottom:64px}
+.intro small{font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--ink-3);text-transform:uppercase}
+.intro h1{font-size:42px;font-weight:800;letter-spacing:-.02em;line-height:1.12;margin-top:16px}
+.intro h1 span{color:var(--pink)}
+.intro p{color:var(--ink-2);font-size:15px;line-height:1.75;margin-top:16px;max-width:620px}
+.rules{display:grid;gap:9px;background:#fff;border-radius:28px;padding:22px 24px;box-shadow:var(--sh)}
+.rules div{font-size:13px;color:var(--ink-2);display:flex;gap:12px;align-items:baseline;line-height:1.5}
+.rules b{min-width:56px;flex:none;height:22px;padding:0 9px;border-radius:999px;background:var(--pink-soft);color:var(--pink-2);font-size:11px;display:inline-grid;place-items:center;font-weight:800;transform:translateY(3px) rotate(-3deg)}
+.screen{margin-bottom:88px}
+.screen>.cap{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.screen>.cap h2{font-size:18px;font-weight:800}
+.screen>.cap h2 small{font-family:var(--mono);font-size:11px;color:var(--pink);margin-right:12px;letter-spacing:.1em}
+.screen>.cap p{font-size:13px;color:var(--ink-3)}
+.stage{position:relative;width:100%}
+.fit{position:absolute;top:0;left:0;width:1440px;height:900px;transform-origin:top left}
+.win{position:relative;width:1440px;height:900px;background:var(--bg);border-radius:26px;overflow:hidden;box-shadow:0 40px 100px rgba(255,126,182,.22),0 0 0 1px #fff}
+
+/* ── living background ── */
+.blobs{position:absolute;inset:0;z-index:0;pointer-events:none;overflow:hidden}
+.blobs i{position:absolute;border-radius:50%;filter:blur(2px);opacity:.9}
+.blobs .p1{width:640px;height:640px;right:-160px;top:-260px;background:radial-gradient(circle,#ece4ff 0%,rgba(236,228,255,0) 68%)}
+.blobs .p2{width:560px;height:560px;left:-180px;bottom:-220px;background:radial-gradient(circle,#ffdcec 0%,rgba(255,220,236,0) 68%)}
+.blobs .p3{width:420px;height:420px;left:46%;bottom:-200px;background:radial-gradient(circle,#e6f6ff 0%,rgba(230,246,255,0) 68%)}
+.dots{position:absolute;inset:0;z-index:0;pointer-events:none;background-image:radial-gradient(rgba(255,126,182,.16) 1px,transparent 1.2px);background-size:26px 26px;-webkit-mask-image:radial-gradient(60% 60% at 50% 50%,#000 20%,transparent 100%);mask-image:radial-gradient(60% 60% at 50% 50%,#000 20%,transparent 100%)}
+.spark{position:absolute;z-index:1;color:var(--pink);font-size:18px;line-height:1;pointer-events:none;opacity:.9}
+.spark.l{color:var(--lav)}.spark.s{font-size:12px}.spark.m{color:var(--mint)}
+.heart{position:absolute;z-index:1;width:12px;height:12px;background:var(--pink);transform:rotate(45deg);border-radius:2px;opacity:.55;pointer-events:none}
+.heart::before,.heart::after{content:"";position:absolute;width:12px;height:12px;border-radius:50%;background:inherit}
+.heart::before{left:-6px}.heart::after{top:-6px}
+
+/* ── floating rail ── */
+.rail{position:absolute;z-index:5;left:18px;top:50%;transform:translateY(-50%);width:66px;padding:12px 0 12px;border-radius:999px;background:rgba(255,255,255,.86);backdrop-filter:blur(14px);box-shadow:var(--sh-2);display:flex;flex-direction:column;align-items:center;gap:8px}
+.logo{width:36px;height:36px;border-radius:14px;background:linear-gradient(135deg,#ff9ac6,#ff6ea9);display:grid;place-items:center;box-shadow:0 8px 20px rgba(255,110,169,.35);transform:rotate(-8deg);margin-bottom:6px}
+.logo i{width:12px;height:12px;border:2.4px solid #fff;border-radius:3px;transform:rotate(45deg)}
+.ic{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;color:var(--ink-3);position:relative}
+.ic svg{width:21px;height:21px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ic.on{background:var(--pink-soft);color:var(--pink-2)}
+.ic.on::after{content:"";position:absolute;right:6px;top:8px;width:8px;height:8px;border-radius:50%;background:var(--pink);box-shadow:0 0 0 3px #fff}
+.ic.cur{overflow:hidden;box-shadow:0 0 0 3px #fff,0 0 0 5px var(--pink-soft)}
+.ic.cur img{width:100%;height:100%;object-fit:cover;object-position:center 20%}
+.ic.fab{background:linear-gradient(135deg,#ff9ac6,#ff6ea9);color:#fff;box-shadow:0 12px 26px rgba(255,110,169,.42);width:50px;height:50px;margin:6px 0}
+.ic.fab::before{content:"";position:absolute;inset:-6px;border-radius:50%;border:2px solid rgba(255,126,182,.35)}
+.rail .gap{height:34px}
+
+/* ── floating top ── */
+.top{position:absolute;z-index:4;left:112px;right:22px;top:18px;display:flex;align-items:center;gap:12px}
+.crumb{height:40px;padding:0 16px 0 14px;border-radius:999px;background:#fff;box-shadow:var(--sh);display:flex;align-items:center;gap:8px;font-size:13.5px;color:var(--ink-3);font-weight:600}
+.crumb b{color:var(--ink);font-weight:800}
+.crumb .fl{color:var(--pink)}
+.search{margin:0 auto;width:440px;height:40px;border-radius:999px;background:#fff;box-shadow:var(--sh);display:flex;align-items:center;gap:10px;padding:0 8px 0 16px;color:var(--ink-3);font-size:12.5px}
+.search svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.9}
+.search span{flex:1}
+.pill{display:flex;align-items:center;gap:7px;padding:0 12px;height:32px;border-radius:999px;background:#fff;box-shadow:var(--sh);font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--mint);box-shadow:0 0 0 3px var(--mint-soft)}
+.winctl{display:flex;gap:2px;margin-left:4px}
+.winctl span{width:30px;height:30px;display:grid;place-items:center;color:var(--ink-3);font-size:12px;border-radius:50%;background:rgba(255,255,255,.7)}
+
+/* ── buttons/chips ── */
+.btn{height:42px;padding:0 22px;border-radius:999px;font-size:13.5px;font-weight:800;display:inline-flex;align-items:center;gap:8px;border:0;white-space:nowrap;flex:none}
+.btn.primary{background:linear-gradient(135deg,#ff8fc2,#ff6ea9);color:#fff;box-shadow:0 14px 30px rgba(255,110,169,.38)}
+.btn.white{background:#fff;color:var(--ink-2);box-shadow:var(--sh)}
+.btn.soft{background:var(--pink-soft);color:var(--pink-2)}
+.btn.sm{height:34px;padding:0 15px;font-size:12.5px}
+.btn.icon{width:38px;height:38px;padding:0;justify-content:center}
+.btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:999px;font-size:12px;font-weight:700;background:#fff;color:var(--ink-2);box-shadow:0 4px 12px rgba(255,126,182,.12)}
+.chip em{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.chip.pink{background:var(--pink);color:#fff}.chip.pink em{color:rgba(255,255,255,.85)}
+.chip.lav{background:var(--lav-soft);color:var(--lav-2)}.chip.mint{background:var(--mint-soft);color:var(--mint-2)}.chip.peach{background:var(--peach-soft);color:var(--peach-2)}.chip.sky{background:var(--sky-soft);color:#0b7bb8}
+.sticker{position:absolute;z-index:3;display:inline-flex;align-items:center;gap:8px;height:38px;padding:0 16px;border-radius:999px;background:#fff;box-shadow:var(--sh-2);font-size:13px;font-weight:800;color:var(--ink);border:2px solid #fff;outline:3px solid rgba(255,255,255,.55)}
+.sticker b{font-family:var(--mono);font-size:15px;color:var(--pink-2)}
+.sticker.peach b{color:var(--peach-2)}.sticker.mint b{color:var(--mint-2)}.sticker.lav b{color:var(--lav-2)}
+.sticker i{font-style:normal}
+.wave{position:relative;display:inline-block}
+.wave::after{content:"";position:absolute;left:0;right:0;bottom:-6px;height:10px;background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 10' preserveAspectRatio='none'%3E%3Cpath d='M0 6 Q 7.5 0 15 6 T 30 6 T 45 6 T 60 6' fill='none' stroke='%23ff7eb6' stroke-width='3.2' stroke-linecap='round'/%3E%3C/svg%3E") repeat-x;background-size:60px 10px;opacity:.9}
+
+/* ── dashboard ── */
+.dash{position:absolute;inset:0;z-index:2;padding:78px 26px 0 112px}
+.hero{position:absolute;left:112px;top:80px;width:840px;height:300px;border-radius:40px;background:linear-gradient(120deg,#ffe4f1 0%,#f4e9ff 62%,#e9e6ff 100%);box-shadow:var(--sh-2)}
+.hero .ring{position:absolute;right:250px;top:-40px;width:260px;height:260px;border-radius:50%;border:26px solid rgba(255,255,255,.55)}
+.hero .copy{position:absolute;left:44px;top:46px;max-width:480px;z-index:2}
+.eyebrow{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--pink);text-transform:uppercase;font-weight:800}
+.hero h1{margin-top:14px;font-size:46px;font-weight:900;letter-spacing:-.02em;line-height:1.08}
+.hero h1 small{display:block;font-size:20px;font-weight:600;color:var(--ink-2);margin-top:14px;letter-spacing:0}
+.hero .btns{display:flex;gap:10px;margin-top:26px;align-items:center}
+.hero .cut{position:absolute;right:16px;bottom:0;height:392px;width:auto;z-index:2;filter:drop-shadow(0 24px 30px rgba(74,45,61,.25));-webkit-mask-image:linear-gradient(180deg,#000 80%,transparent 99%);mask-image:linear-gradient(180deg,#000 80%,transparent 99%)}
+.st-1{left:calc(112px + 560px);top:74px;transform:rotate(-7deg)}
+.st-2{left:calc(112px + 700px);top:318px;transform:rotate(4deg)}
+.st-3{left:calc(112px + 40px);top:352px;transform:rotate(-3deg)}
+.ringcard{position:absolute;left:986px;top:80px;width:428px;height:196px;border-radius:36px;background:#fff;box-shadow:var(--sh);display:grid;grid-template-columns:150px 1fr;align-items:center;gap:8px;padding:0 20px 0 22px}
+.donut{width:136px;height:136px;border-radius:50%;background:conic-gradient(var(--pink) 0 97%,var(--pink-soft) 97% 100%);display:grid;place-items:center;position:relative;transform:rotate(-8deg)}
+.donut::before{content:"";width:100px;height:100px;border-radius:50%;background:#fff}
+.donut b{position:absolute;font-size:26px;font-weight:900;color:var(--pink-2);letter-spacing:-.02em;transform:rotate(8deg)}
+.donut b small{display:block;font-size:10px;color:var(--ink-3);font-weight:700;text-align:center;letter-spacing:.08em}
+.ringcard h3{font-size:16px;font-weight:900}
+.ringcard p{font-size:12.5px;color:var(--ink-2);margin-top:6px;line-height:1.6}
+.ringcard .row{display:flex;gap:6px;margin-top:12px;flex-wrap:wrap}
+.tilt{position:absolute;left:1000px;top:298px;width:220px;height:118px;border-radius:30px;background:#fff;box-shadow:var(--sh);padding:18px 20px;transform:rotate(-3deg)}
+.tilt small{font-size:11.5px;font-weight:800;color:var(--ink-3)}
+.tilt b{display:block;margin-top:8px;font-size:30px;font-weight:900;color:var(--pink-2);letter-spacing:-.02em;line-height:1}
+.tilt b em{font-style:normal;font-size:13px;color:var(--ink-3);margin-left:4px}
+.tilt i{display:block;font-style:normal;margin-top:6px;font-size:11.5px;color:var(--ink-3)}
+.tilt2{position:absolute;left:1236px;top:306px;width:180px;height:102px;border-radius:26px;background:var(--lav-soft);box-shadow:var(--sh);padding:16px 18px;transform:rotate(3deg)}
+.tilt2 small{font-size:11.5px;font-weight:800;color:#8c78d6}
+.tilt2 b{display:block;margin-top:8px;font-size:26px;font-weight:900;color:var(--lav-2);line-height:1}
+.tilt2 b em{font-style:normal;font-size:12px;margin-left:4px;color:#8c78d6}
+.tilt2 i{display:block;font-style:normal;margin-top:6px;font-size:11px;color:#8c78d6}
+.recent{position:absolute;left:112px;top:432px;width:600px;height:400px}
+.recent h2,.sys h2,.wsx h2{font-size:15px;font-weight:900;display:flex;align-items:center;gap:8px}
+.recent h2 a,.sys h2 span,.wsx h2 span{margin-left:auto;font-size:12px;color:var(--pink-2);font-weight:800}
+.fan{position:relative;height:330px;margin-top:8px}
+.pol{position:absolute;bottom:20px;width:150px;padding:8px 8px 30px;background:#fff;border-radius:16px;box-shadow:var(--sh-ink);transform-origin:50% 100%;transition:transform .3s var(--bounce)}
+.pol img{width:100%;aspect-ratio:3/4;object-fit:cover;border-radius:10px;display:block}
+.pol figcaption{position:absolute;left:6px;right:6px;bottom:8px;text-align:center;font-family:var(--mono);font-size:9.5px;color:var(--ink-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pol.new::before{content:"新";position:absolute;left:-8px;top:-8px;z-index:2;width:30px;height:30px;border-radius:50%;background:var(--pink);color:#fff;font-size:11.5px;font-weight:900;display:grid;place-items:center;box-shadow:0 6px 14px rgba(255,110,169,.4);transform:rotate(-12deg)}
+.p1{left:0;transform:rotate(-9deg);z-index:1}.p2{left:88px;transform:rotate(-5deg);z-index:2}.p3{left:176px;transform:rotate(-1deg);z-index:3}.p4{left:264px;transform:rotate(3deg);z-index:4}.p5{left:352px;transform:rotate(6deg);z-index:5}.p6{left:440px;transform:rotate(10deg);z-index:6}
+.sys{position:absolute;left:760px;top:440px;width:352px;height:236px;border-radius:36px;background:#fff;box-shadow:var(--sh);padding:22px 24px}
+.sys .rings{display:flex;justify-content:space-between;margin-top:18px}
+.mini{width:88px;text-align:center}
+.mini .d{width:78px;height:78px;margin:0 auto;border-radius:50%;display:grid;place-items:center;position:relative}
+.mini .d::before{content:"";width:58px;height:58px;border-radius:50%;background:#fff}
+.mini .d b{position:absolute;font-family:var(--mono);font-size:14px;font-weight:800;color:var(--ink)}
+.mini small{display:block;margin-top:8px;font-size:11px;font-weight:800;color:var(--ink-3);letter-spacing:.06em}
+.mini i{display:block;font-style:normal;font-family:var(--mono);font-size:10px;color:var(--ink-4);margin-top:2px}
+.mini.cpu .d{background:conic-gradient(var(--pink) 0 18%,var(--pink-soft) 18% 100%)}
+.mini.gpu .d{background:conic-gradient(var(--lav) 0 9%,var(--lav-soft) 9% 100%)}
+.mini.ram .d{background:conic-gradient(var(--mint) 0 42%,var(--mint-soft) 42% 100%)}
+.sys .bubble{position:absolute;right:-14px;top:-18px;padding:8px 14px;border-radius:999px 999px 999px 6px;background:var(--ink);color:#fff;font-size:11.5px;font-weight:700;box-shadow:var(--sh-ink);transform:rotate(3deg)}
+.wsx{position:absolute;left:1146px;top:440px;width:270px}
+.wsx .list{display:grid;gap:10px;margin-top:14px}
+.wsx a{display:flex;align-items:center;gap:12px;height:56px;padding:0 14px 0 10px;border-radius:999px;background:#fff;box-shadow:var(--sh)}
+.wsx a img{width:38px;height:38px;border-radius:50%;object-fit:cover;flex:none}
+.wsx a span{min-width:0;flex:1}
+.wsx a b{display:block;font-size:12.5px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wsx a i{display:block;font-style:normal;font-size:10.5px;color:var(--ink-3);margin-top:2px}
+.wsx a em{font-style:normal;color:var(--pink);font-weight:900}
+.wsx a:nth-child(2){transform:translateX(10px)}
+.wsx a:nth-child(3){transform:translateX(-6px)}
+.mascot-hint{position:absolute;left:760px;top:706px;width:352px;height:126px;border-radius:32px;background:linear-gradient(120deg,#ffe4f1,#f4e9ff);box-shadow:var(--sh);padding:18px 22px 18px 24px;display:flex;align-items:center;gap:14px}
+.mascot-hint p{font-size:13px;color:var(--ink-2);line-height:1.55}
+.mascot-hint p b{color:var(--ink);font-weight:900}
+.mascot-hint .btn{margin-left:auto}
+.status{position:absolute;z-index:4;left:112px;right:24px;bottom:12px;display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--ink-3)}
+.status div{display:flex;gap:16px}
+
+/* ── gallery (loosened) ── */
+.gal{position:absolute;inset:0;z-index:2;padding:76px 22px 22px 108px;display:grid;grid-template-columns:236px 1fr 318px;gap:16px}
+.card{background:#fff;border-radius:32px;box-shadow:var(--sh);min-height:0;display:flex;flex-direction:column}
+.tree{padding:18px 14px}
+.tree h4{font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--ink-3);padding:0 10px;margin:8px 0 8px;display:flex;justify-content:space-between}
+.tree h4 a{color:var(--pink-2);font-size:13px}
+.tree .row{display:flex;align-items:center;justify-content:space-between;height:38px;padding:0 12px;border-radius:999px;color:var(--ink-2);font-size:13px;font-weight:600}
+.tree .row svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;margin-right:9px}
+.tree .row span{display:flex;align-items:center}
+.tree .row em{font-style:normal;font-family:var(--mono);font-size:10.5px;color:var(--ink-4)}
+.tree .row.on{background:var(--pink);color:#fff;box-shadow:0 10px 22px rgba(255,110,169,.3)}
+.tree .row.on em{color:rgba(255,255,255,.85)}
+.tree .row.sub{padding-left:26px;height:34px}
+.tree .chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 6px}
+.tree .chips .chip{box-shadow:none;background:var(--pink-tint)}
+.tree .chips .chip.pink{background:var(--pink)}
+.tree .bin{margin-top:auto}
+.center{display:flex;flex-direction:column;min-width:0;gap:12px;position:relative}
+.gtool{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border-radius:999px;box-shadow:var(--sh);margin:0 20px}
+.gtool .search{margin:0;width:260px;height:34px;box-shadow:none;background:var(--surface-2)}
+.dd{height:34px;padding:0 14px;border-radius:999px;font-size:12px;color:var(--ink-2);display:flex;align-items:center;gap:8px;background:var(--surface-2);white-space:nowrap;font-weight:700}
+.dd::after{content:"";width:6px;height:6px;border-right:1.5px solid var(--ink-3);border-bottom:1.5px solid var(--ink-3);transform:rotate(45deg) translateY(-2px)}
+.spacer{flex:1}
+.seg{display:flex;background:var(--surface-2);border-radius:999px;padding:3px}
+.seg span{width:32px;height:28px;border-radius:999px;display:grid;place-items:center;color:var(--ink-3)}
+.seg span.on{background:#fff;color:var(--pink-2);box-shadow:0 2px 8px rgba(255,126,182,.18)}
+.seg svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.8}
+.gsub{display:flex;align-items:center;gap:12px;padding:0 26px;font-size:12px;color:var(--ink-3)}
+.gsub b{color:var(--ink);font-weight:900;font-size:14px}
+.masonry{display:grid;grid-template-columns:repeat(6,1fr);grid-auto-rows:112px;grid-auto-flow:dense;gap:12px;overflow:visible;flex:1;padding:6px 22px 0}
+.tile{position:relative;border-radius:22px;overflow:hidden;background:var(--surface-3);box-shadow:0 8px 18px rgba(74,45,61,.08);transition:transform .25s var(--bounce)}
+.tile img{width:100%;height:100%;object-fit:cover;display:block}
+.tile.tall{grid-row:span 2}.tile.wide{grid-column:span 2}
+.tile.hov{transform:scale(1.08) rotate(-1.5deg);z-index:3;box-shadow:var(--sh-2)}
+.tile .chk{position:absolute;left:10px;top:10px;width:24px;height:24px;border-radius:50%;border:2px solid #fff;background:rgba(74,45,61,.25);opacity:0}
+.tile.hov .chk{opacity:1}
+.tile.sel{outline:4px solid var(--pink);outline-offset:-3px}
+.tile.sel .chk{opacity:1;background:var(--pink)}
+.tile.sel .chk::after{content:"";position:absolute;left:8px;top:4px;width:5px;height:9px;border-right:2.2px solid #fff;border-bottom:2.2px solid #fff;transform:rotate(45deg)}
+.tile .tags{position:absolute;left:10px;bottom:10px;display:flex;gap:4px}
+.tile .tags span{font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.92);color:var(--ink-2)}
+.tile .heartb{position:absolute;right:10px;top:10px;width:26px;height:26px;border-radius:50%;background:#fff;display:grid;place-items:center;color:var(--pink);font-size:13px;box-shadow:0 4px 10px rgba(0,0,0,.12)}
+.batch{position:absolute;left:50%;bottom:14px;transform:translateX(-50%) rotate(-1deg);z-index:6;display:flex;align-items:center;gap:8px;padding:8px 8px 8px 18px;border-radius:999px;background:var(--ink);color:#fff;box-shadow:0 20px 44px rgba(74,45,61,.35);font-size:13px;font-weight:800}
+.batch .btn{height:34px}
+.batch .btn.white{color:var(--ink);box-shadow:none}
+.insp{padding:0 18px 18px;position:relative;overflow:visible}
+.insp .pv{margin:-26px 6px 0;padding:10px 10px 12px;background:#fff;border-radius:22px;box-shadow:var(--sh-ink);transform:rotate(-2.5deg)}
+.insp .pv img{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:14px;display:block}
+.insp h3{font-size:14.5px;font-weight:900;word-break:break-all;margin-top:22px}
+.kv{display:grid;grid-template-columns:1fr 1fr;gap:10px 12px;font-size:12px;margin-top:12px}
+.kv small{display:block;font-size:10.5px;font-weight:800;color:var(--ink-3);margin-bottom:3px;letter-spacing:.04em}
+.kv b{font-weight:700;font-family:var(--mono);font-size:12px}
+.insp h4{font-size:11px;font-weight:800;letter-spacing:.06em;color:var(--ink-3);display:flex;justify-content:space-between;margin-top:16px}
+.insp h4 a{color:var(--pink-2);letter-spacing:0;font-size:11.5px}
+.insp .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.insp .chips .chip{box-shadow:none;background:var(--pink-tint);transform:rotate(var(--r,0deg))}
+.prompt{font-size:12px;line-height:1.6;color:var(--ink-2);border-radius:18px;padding:10px 12px;background:var(--surface-2);max-height:84px;overflow:hidden;position:relative;margin-top:10px}
+.prompt::after{content:"";position:absolute;inset:auto 0 0 0;height:34px;background:linear-gradient(transparent,var(--surface-2))}
+.insp .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:auto;padding-top:14px}
+.insp .acts .btn{justify-content:center;height:36px}
+.insp .acts .danger{color:var(--rose)}
+
+/* ── tagger (loosened) ── */
+.tg{position:absolute;inset:0;z-index:2;padding:76px 22px 22px 108px;display:grid;grid-template-columns:150px 1fr 300px;gap:18px}
+.strip{display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0;overflow:hidden}
+.strip .qh{font-size:11px;font-weight:800;color:var(--ink-3);letter-spacing:.06em}
+.strip .qh b{display:block;font-family:var(--mono);font-size:12px;color:var(--ink);margin-top:2px}
+.f{width:96px;height:96px;border-radius:26px;overflow:hidden;position:relative;box-shadow:var(--sh-ink);transform:rotate(var(--r,0deg));flex:none;background:#fff;padding:5px}
+.f img{width:100%;height:100%;object-fit:cover;border-radius:21px}
+.f .ok{position:absolute;right:6px;top:6px;width:20px;height:20px;border-radius:50%;background:var(--mint);color:#fff;font-size:11px;display:grid;place-items:center;font-weight:900}
+.f.cur{width:120px;height:120px;outline:4px solid var(--pink);outline-offset:-2px;transform:rotate(-4deg) scale(1.04);z-index:2}
+.f.todo{opacity:.7}
+.strip .more{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.strip .prog{margin-top:auto;width:96px;text-align:center}
+.strip .prog .d{width:64px;height:64px;margin:0 auto;border-radius:50%;background:conic-gradient(var(--pink) 0 85%,var(--pink-soft) 85% 100%);display:grid;place-items:center;position:relative}
+.strip .prog .d::before{content:"";width:46px;height:46px;border-radius:50%;background:#fff}
+.strip .prog .d b{position:absolute;font-family:var(--mono);font-size:12px;font-weight:900;color:var(--pink-2)}
+.strip .prog small{display:block;margin-top:6px;font-size:10.5px;color:var(--ink-3);font-weight:700}
+.stagebox{position:relative;display:flex;flex-direction:column;min-width:0}
+.stagebox .bar-top{display:flex;align-items:center;justify-content:space-between;padding:4px 10px 12px;font-size:12.5px;color:var(--ink-2)}
+.stagebox .bar-top b{color:var(--ink);font-weight:900}
+.stagebox .bar-top .chip{height:26px}
+.photo{position:relative;flex:1;display:grid;place-items:center;padding:0 40px 96px}
+.photo .frame{position:relative;padding:12px 12px 14px;background:#fff;border-radius:28px;box-shadow:0 30px 70px rgba(74,45,61,.22);transform:rotate(1.2deg);max-width:calc(100% - 60px)}
+.photo .frame img{max-width:100%;max-height:500px;width:auto;height:auto;display:block;border-radius:20px}
+.photo .frame .stk{position:absolute;right:-22px;top:-18px;transform:rotate(8deg)}
+.photo .frame .stk2{position:absolute;left:-26px;bottom:34px;transform:rotate(-8deg)}
+.dock{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);display:flex;align-items:center;gap:6px;padding:8px;border-radius:999px;background:rgba(255,255,255,.94);backdrop-filter:blur(14px);box-shadow:var(--sh-2)}
+.dock .seg span{width:auto;padding:0 14px;font-size:12px;font-weight:800;white-space:nowrap;height:30px}
+.dock .div{width:1px;height:22px;background:var(--line);margin:0 4px}
+.tags-panel{position:relative;padding:20px 18px 18px;overflow:visible}
+.tags-panel .th{display:flex;justify-content:space-between;align-items:center}
+.tags-panel .th b{font-size:14px;font-weight:900}
+.tags-panel .th span{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.tgroup{margin-top:16px}
+.tgroup h5{font-size:11px;font-weight:800;color:var(--ink-3);letter-spacing:.06em;margin-bottom:8px;display:flex;justify-content:space-between}
+.tgroup h5 i{font-style:normal;font-family:var(--mono);color:var(--ink-4)}
+.tgroup .chips{display:flex;flex-wrap:wrap;gap:7px}
+.tag{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 6px 0 12px;border-radius:999px;font-size:12px;font-weight:700;background:var(--pink-tint);color:var(--ink);transform:rotate(var(--r,0deg))}
+.tag em{font-style:normal;font-family:var(--mono);font-size:10px;color:var(--ink-3)}
+.tag i{width:18px;height:18px;border-radius:50%;background:#fff;display:grid;place-items:center;color:var(--ink-3);font-style:normal;font-size:11px}
+.tag.char{background:var(--lav-soft)}.tag.char em{color:var(--lav-2)}
+.tag.q{background:var(--mint-soft);color:var(--mint-2)}
+.tag.low{opacity:.5}
+.addtag{margin-top:16px;display:flex;align-items:center;gap:8px;height:38px;padding:0 14px;border-radius:999px;border:2px dashed var(--line);color:var(--ink-3);font-size:12px;font-weight:600}
+.tags-panel .foot{margin-top:auto;display:flex;gap:8px;padding-top:16px}
+.tags-panel .foot .btn{flex:1;justify-content:center}
+.tags-panel .peek{position:absolute;left:-78px;bottom:26px;width:118px;height:auto;transform:rotate(-10deg);filter:drop-shadow(0 10px 16px rgba(74,45,61,.2));z-index:-1}
+
+.notes{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+.notes .box{background:#fff;border-radius:28px;padding:20px 22px;box-shadow:var(--sh)}
+.notes h3{font-size:13px;font-weight:900;margin-bottom:12px}
+.notes p,.notes li{font-size:13px;color:var(--ink-2);line-height:1.7}
+.notes ul{padding-left:16px}
+</style>
+</head>
+<body>
+
+<header class="intro">
+  <div>
+    <small>Baka TOOLS · 柔粉治愈 · 灵动版 · 2026-09-20</small>
+    <h1>还是 F，<span>但不再横平竖直。</span></h1>
+    <p>上一版把所有东西都装进一样大的方框里，所以死板。这版换了几个手法：人物从卡片里"探出来"、数字做成歪着贴的贴纸、最近的图摆成一叠拍立得、进度改成圆环、导航和顶栏悬浮成胶囊、卡片大小不一还带一点点倾斜、背景有光斑和小星星。工具选择页保持上一版（你已确认）。</p>
+  </div>
+  <div class="rules">
+    <div><b>出框</b>人物剪影越过卡片顶边；详情页的预览图从卡片顶部探出</div>
+    <div><b>贴纸</b>数量、状态、"新"都是歪 3–8° 的白色胶囊贴纸，带描边和柔影</div>
+    <div><b>拍立得</b>最近加入的图摆成扇形；鼠标移上去会立正</div>
+    <div><b>圆环</b>标注进度、CPU / GPU / RAM 都是甜甜圈，不再是条</div>
+    <div><b>悬浮</b>导航栏是一颗浮着的胶囊，顶栏是几粒药丸，没有一整条横杠</div>
+    <div><b>错落</b>卡片 26–40 px 圆角、大小不一、个别歪 2–3°；背景光斑 + 小星星，静态为主</div>
+  </div>
+</header>
+
+<!-- ═══════════ 01 首页 ═══════════ -->
+<section class="screen">
+  <div class="cap"><h2><small>01</small>首页 · 灵动版</h2><p>人物出框 · 贴纸 · 拍立得 · 圆环 · 悬浮导航</p></div>
+  <div class="stage"><div class="fit">
+  <div class="win">
+    <div class="blobs"><i class="p1"></i><i class="p2"></i><i class="p3"></i></div>
+    <div class="dots"></div>
+    <span class="spark" style="left:1010px;top:60px">✦</span><span class="spark l s" style="left:1060px;top:96px">✦</span><span class="spark s" style="left:690px;top:400px">✦</span><span class="spark l" style="left:1390px;top:416px">✦</span><span class="spark m s" style="left:740px;top:850px">✦</span><i class="heart" style="left:930px;top:392px"></i><i class="heart" style="left:1190px;top:272px;transform:rotate(45deg) scale(.7)"></i>
+
+    <aside class="rail">
+      <div class="logo"><i></i></div>
+      <a class="ic on"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-6h6v6"/></svg></a>
+      <a class="ic cur"><img src="../../../public/tools/gallery.jpg" alt=""></a>
+      <a class="ic fab"><svg viewBox="0 0 24 24"><path d="m14.5 6.5 3-3 3 3-3 3"/><path d="m13 8-8.5 8.5a2.1 2.1 0 0 0 3 3L16 11"/><path d="m5 5 4 4M4 20l4-4"/></svg></a>
+      <div class="gap"></div>
+      <a class="ic"><svg viewBox="0 0 24 24"><path d="m5 8 4 4-4 4M11 16h8"/></svg></a>
+      <a class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></a>
+    </aside>
+
+    <div class="top">
+      <div class="crumb"><span class="fl">✿</span><b>首页</b></div>
+      <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>搜索工具、图片标签或动作…</span><kbd>Ctrl K</kbd></div>
+      <div class="pill"><i class="dot"></i>就绪</div><div class="pill">GPU 4% · 2.1 / 24 GB</div>
+      <div class="winctl"><span>—</span><span>▢</span><span>✕</span></div>
+    </div>
+
+    <div class="dash">
+      <section class="hero">
+        <i class="ring"></i>
+        <div class="copy">
+          <p class="eyebrow">Sunday · 09.20 · 17:26</p>
+          <h1><span class="wave">下午好</span> ✿<small>接着上次的标注继续？</small></h1>
+          <div class="btns"><a class="btn primary">继续标注 →</a><a class="btn white">打开工具选择</a></div>
+        </div>
+        <img class="cut" src="../../../public/mascot.png" alt="">
+      </section>
+      <span class="sticker st-1 peach"><b>36</b><i>张待标注</i></span>
+      <span class="sticker st-2 mint"><i>训练</i><b>空闲</b></span>
+      <span class="sticker st-3"><i>上次停在</i><b style="font-family:inherit;font-size:13px">图库</b><i>· 10 分钟前</i></span>
+
+      <section class="ringcard">
+        <div class="donut"><b>97%<small>标注进度</small></b></div>
+        <div>
+          <h3>角色A_v3 快标完啦</h3>
+          <p>1,248 张已确认，还剩 36 张。按现在的速度大约 6 分钟。</p>
+          <div class="row"><span class="chip peach">36 待处理</span><span class="chip mint">今日 +112</span><span class="chip lav">WD14 · 0.9s/张</span></div>
+        </div>
+      </section>
+      <section class="tilt"><small>图库</small><b>1,284<em>张</em></b><i>3 个来源 · 今日 +24</i></section>
+      <section class="tilt2"><small>数据集</small><b>6<em>个</em></b><i>最近 “角色A_v3”</i></section>
+
+      <section class="recent">
+        <h2>最近加入 <span class="chip pink" style="height:22px;font-size:10.5px">+24</span><a>查看全部 →</a></h2>
+        <div class="fan">
+          <figure class="pol p1"><img src="../../../public/tools/train.jpg" alt=""><figcaption>00119_spectrum</figcaption></figure>
+          <figure class="pol p2"><img src="../../../public/tools/upscale.jpg" alt=""><figcaption>00120_yellow</figcaption></figure>
+          <figure class="pol p3"><img src="../../../public/branding/dashboard-hero-1920.webp" style="object-position:70% 20%" alt=""><figcaption>00121_studio</figcaption></figure>
+          <figure class="pol p4"><img src="../../../public/tools/gallery.jpg" style="object-position:40% 20%" alt=""><figcaption>00122_rose</figcaption></figure>
+          <figure class="pol p5"><img src="../../../public/tools/workbench.jpg" alt=""><figcaption>00123_glasses</figcaption></figure>
+          <figure class="pol p6 new"><img src="../../../public/tools/tagger.jpg" alt=""><figcaption>00124_pink</figcaption></figure>
+        </div>
+      </section>
+
+      <section class="sys">
+        <span class="bubble">显卡很闲，可以开训练啦</span>
+        <h2>系统 <span class="mono" style="font-size:11px;color:var(--ink-3);font-weight:600">RTX 4090 · 51 °C</span></h2>
+        <div class="rings">
+          <div class="mini cpu"><div class="d"><b>18%</b></div><small>CPU</small><i>16 核</i></div>
+          <div class="mini gpu"><div class="d"><b>9%</b></div><small>GPU</small><i>2.1 / 24 GB</i></div>
+          <div class="mini ram"><div class="d"><b>42%</b></div><small>RAM</small><i>13.4 / 32 GB</i></div>
+        </div>
+      </section>
+
+      <section class="mascot-hint">
+        <p><b>没有进行中的任务。</b><br>数据集 “角色A_v3” 已经标完 97%，可以准备训练了。</p>
+        <a class="btn soft sm">新建训练 →</a>
+      </section>
+
+      <section class="wsx">
+        <h2>最近工作区 <span>全部</span></h2>
+        <div class="list">
+          <a><img src="../../../public/tools/gallery.jpg" alt=""><span><b>图库 · 全部图片</b><i>10 分钟前</i></span><em>→</em></a>
+          <a><img src="../../../public/tools/tagger.jpg" alt=""><span><b>标注 · 角色A_v3</b><i>昨天 23:10 · 第 212 张</i></span><em>→</em></a>
+          <a><img src="../../../public/tools/workbench.jpg" alt=""><span><b>工作台 · 抽帧→打标</b><i>3 天前</i></span><em>→</em></a>
+        </div>
+      </section>
+    </div>
+    <footer class="status"><div><span>● 就绪</span><span>v0.2.0-preview</span></div><div><span>0 个错误</span><span>控制台</span></div></footer>
+  </div>
+  </div></div>
+</section>
+
+<!-- ═══════════ 02 图库 ═══════════ -->
+<section class="screen">
+  <div class="cap"><h2><small>02</small>图库 · 灵动版</h2><p>悬浮工具栏 · 大圆角网格（悬停放大微倾）· 详情预览出框 · 底部批量操作胶囊</p></div>
+  <div class="stage"><div class="fit">
+  <div class="win">
+    <div class="blobs"><i class="p1"></i><i class="p2"></i></div>
+    <span class="spark l s" style="left:1400px;top:66px">✦</span><span class="spark s" style="left:96px;top:846px">✦</span>
+    <aside class="rail">
+      <div class="logo"><i></i></div>
+      <a class="ic"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-6h6v6"/></svg></a>
+      <a class="ic cur" style="box-shadow:0 0 0 3px #fff,0 0 0 6px var(--pink)"><img src="../../../public/tools/gallery.jpg" alt=""></a>
+      <a class="ic fab"><svg viewBox="0 0 24 24"><path d="m14.5 6.5 3-3 3 3-3 3"/><path d="m13 8-8.5 8.5a2.1 2.1 0 0 0 3 3L16 11"/><path d="m5 5 4 4M4 20l4-4"/></svg></a>
+      <div class="gap"></div>
+      <a class="ic"><svg viewBox="0 0 24 24"><path d="m5 8 4 4-4 4M11 16h8"/></svg></a>
+      <a class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></a>
+    </aside>
+    <div class="top">
+      <div class="crumb"><span>图库</span><span style="color:var(--ink-4)">/</span><b>全部图片</b></div>
+      <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>搜索工具、图片标签或动作…</span><kbd>Ctrl K</kbd></div>
+      <div class="pill"><i class="dot"></i>就绪</div><div class="pill">GPU 4% · 2.1 / 24 GB</div>
+      <div class="winctl"><span>—</span><span>▢</span><span>✕</span></div>
+    </div>
+    <main class="gal">
+      <aside class="card tree">
+        <h4>素材</h4>
+        <div class="row on"><span><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m4 18 5-5 3 3 3-4 5 6"/></svg>全部图片</span><em>1,284</em></div>
+        <div class="row"><span><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>最近加入</span><em>24</em></div>
+        <div class="row"><span><svg viewBox="0 0 24 24"><path d="M20 13.5 13.5 20H6a2 2 0 0 1-2-2v-7.5L10.5 4H18a2 2 0 0 1 2 2Z"/></svg>未标注</span><em>36</em></div>
+        <div class="row"><span><svg viewBox="0 0 24 24"><path d="m12 20-7.5-7.6a4.6 4.6 0 0 1 6.5-6.5l1 1 1-1a4.6 4.6 0 0 1 6.5 6.5Z"/></svg>收藏</span><em>12</em></div>
+        <h4 style="margin-top:14px">数据集 <a>＋</a></h4>
+        <div class="row sub"><span>角色A_v3</span><em>212</em></div>
+        <div class="row sub"><span>背景素材</span><em>480</em></div>
+        <div class="row sub"><span>服装参考</span><em>96</em></div>
+        <h4 style="margin-top:14px">常用标签</h4>
+        <div class="chips"><span class="chip pink">1girl<em>1,102</em></span><span class="chip">solo<em>980</em></span><span class="chip">long_hair<em>640</em></span><span class="chip">smile<em>402</em></span><span class="chip">pink_hair<em>188</em></span><span class="chip">gloves<em>77</em></span></div>
+        <div class="bin"><div class="row"><span><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>回收站</span><em>3</em></div></div>
+      </aside>
+      <div class="center">
+        <div class="gtool">
+          <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>1girl -blurry</span><kbd>/</kbd></div>
+          <div class="dd">全部状态</div><div class="dd">最近修改</div>
+          <div class="spacer"></div>
+          <div class="seg"><span class="on"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></span><span><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/></svg></span><span><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span></div>
+          <a class="btn white sm">同步</a><a class="btn primary sm">导入 ▾</a>
+        </div>
+        <div class="gsub"><b>1,284</b><span>张 · 按修改时间</span><span class="chip pink" style="height:24px">1girl ×</span></div>
+        <div class="masonry">
+          <div class="tile tall sel"><img src="../../../public/tools/tagger.jpg" alt=""><i class="chk"></i></div>
+          <div class="tile"><img src="../../../public/tools/workbench.jpg" alt=""></div>
+          <div class="tile wide"><img src="../../../public/branding/dashboard-hero-1920.webp" alt=""><div class="tags"><span>1girl</span><span>pink_hair</span><span>+12</span></div><span class="heartb">♥</span></div>
+          <div class="tile"><img src="../../../public/tools/train.jpg" alt=""></div>
+          <div class="tile tall"><img src="../../../public/tools/upscale.jpg" alt=""></div>
+          <div class="tile hov"><img src="../../../public/tools/gallery.jpg" style="object-position:30% 20%" alt=""><i class="chk"></i></div>
+          <div class="tile"><img src="../../../public/tools/tagger.jpg" style="object-position:50% 10%" alt=""></div>
+          <div class="tile"><img src="../../../public/tools/workbench.jpg" style="object-position:60% 30%" alt=""></div>
+          <div class="tile wide"><img src="../../../public/tools/train.jpg" style="object-position:20% 50%" alt=""></div>
+          <div class="tile"><img src="../../../public/branding/dashboard-hero-1920.webp" style="object-position:80% 30%" alt=""></div>
+          <div class="tile tall"><img src="../../../public/tools/gallery.jpg" style="object-position:70% 40%" alt=""></div>
+          <div class="tile"><img src="../../../public/tools/upscale.jpg" style="object-position:40% 10%" alt=""></div>
+          <div class="tile"><img src="../../../public/tools/tagger.jpg" style="object-position:20% 60%" alt=""></div>
+          <div class="tile wide"><img src="../../../public/tools/workbench.jpg" style="object-position:30% 60%" alt=""></div>
+          <div class="tile"><img src="../../../public/tools/train.jpg" style="object-position:80% 20%" alt=""></div>
+          <div class="tile"><img src="../../../public/branding/dashboard-hero-1920.webp" style="object-position:30% 60%" alt=""></div>
+          <div class="tile"><img src="../../../public/tools/upscale.jpg" style="object-position:70% 70%" alt=""></div>
+          <div class="tile"><img src="../../../public/tools/gallery.jpg" style="object-position:10% 80%" alt=""></div>
+          <div class="tile"><img src="../../../public/tools/tagger.jpg" style="object-position:80% 40%" alt=""></div>
+          <div class="tile"><img src="../../../public/tools/workbench.jpg" style="object-position:10% 10%" alt=""></div>
+          <div class="tile"><img src="../../../public/branding/dashboard-hero-1920.webp" style="object-position:55% 45%" alt=""></div>
+          <div class="tile"><img src="../../../public/tools/train.jpg" style="object-position:50% 90%" alt=""></div>
+          <div class="tile"><img src="../../../public/tools/upscale.jpg" style="object-position:20% 30%" alt=""></div>
+        </div>
+        <div class="batch">已选 1 张<a class="btn primary sm">送去标注</a><a class="btn white sm">加入数据集</a><a class="btn white sm" style="color:var(--rose)">回收站</a></div>
+      </div>
+      <aside class="card insp">
+        <div class="pv"><img src="../../../public/tools/tagger.jpg" alt=""></div>
+        <h3>00124_pink_hair.png</h3>
+        <div class="kv"><div><small>尺寸</small><b>1024 × 1536</b></div><div><small>大小</small><b>2.4 MB</b></div><div><small>加入</small><b>09-18 22:41</b></div><div><small>数据集</small><b>角色A_v3</b></div></div>
+        <h4>标签 · 16 <a>编辑</a></h4>
+        <div class="chips"><span class="chip" style="--r:-2deg">1girl</span><span class="chip" style="--r:1deg">solo</span><span class="chip lav" style="--r:-1deg">pink_hair</span><span class="chip" style="--r:2deg">long_hair</span><span class="chip" style="--r:-1.5deg">black_gloves</span><span class="chip" style="--r:1deg">smile</span><span class="chip" style="--r:-2deg">looking_at_viewer</span><span class="chip" style="color:var(--ink-4)">+9</span></div>
+        <h4>生成信息 <a>复制全部</a></h4>
+        <div class="kv" style="margin-top:8px"><div><small>模型</small><b>anime-xl-v3</b></div><div><small>采样</small><b>DPM++ 2M · 28</b></div><div><small>CFG</small><b>6.0</b></div><div><small>种子</small><b>3141592653</b></div></div>
+        <div class="prompt">1girl, solo, pink hair, long hair, black gloves, smile, looking at viewer, black turtleneck, earrings, upper body, soft lighting, masterpiece, best quality…</div>
+        <div class="acts"><a class="btn primary sm">送去标注</a><a class="btn white sm">打开位置</a><a class="btn white sm">加入数据集</a><a class="btn white sm danger">移到回收站</a></div>
+      </aside>
+    </main>
+    <footer class="status"><div><span>● 就绪</span><span>已选 1 / 1,284 · 2.4 MB</span></div><div><span>缩略图缓存 1,284 / 1,284</span><span>控制台</span></div></footer>
+  </div>
+  </div></div>
+</section>
+
+<!-- ═══════════ 03 标注 ═══════════ -->
+<section class="screen">
+  <div class="cap"><h2><small>03</small>标注 · 灵动版</h2><p>队列变成一条圆角胶片 · 图片像一张放在桌上的照片 · 标签是歪歪的贴纸 · 右上角小人探头</p></div>
+  <div class="stage"><div class="fit">
+  <div class="win">
+    <div class="blobs"><i class="p1"></i><i class="p2"></i><i class="p3"></i></div>
+    <span class="spark s" style="left:640px;top:70px">✦</span><span class="spark l s" style="left:1000px;top:120px">✦</span>
+    <aside class="rail">
+      <div class="logo"><i></i></div>
+      <a class="ic"><svg viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1Z"/><path d="M9 21v-6h6v6"/></svg></a>
+      <a class="ic cur" style="box-shadow:0 0 0 3px #fff,0 0 0 6px var(--pink)"><img src="../../../public/tools/tagger.jpg" alt=""></a>
+      <a class="ic fab"><svg viewBox="0 0 24 24"><path d="m14.5 6.5 3-3 3 3-3 3"/><path d="m13 8-8.5 8.5a2.1 2.1 0 0 0 3 3L16 11"/><path d="m5 5 4 4M4 20l4-4"/></svg></a>
+      <div class="gap"></div>
+      <a class="ic"><svg viewBox="0 0 24 24"><path d="m5 8 4 4-4 4M11 16h8"/></svg></a>
+      <a class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></a>
+    </aside>
+    <div class="top">
+      <div class="crumb"><span>标注</span><span style="color:var(--ink-4)">/</span><b>角色A_v3</b><span class="chip peach" style="height:24px;margin-left:4px;box-shadow:none">36 待处理</span></div>
+      <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>搜索工具、图片标签或动作…</span><kbd>Ctrl K</kbd></div>
+      <div class="pill"><i class="dot"></i>WD14 · 已加载</div><div class="pill">GPU 38% · 6.2 / 24 GB</div>
+      <div class="winctl"><span>—</span><span>▢</span><span>✕</span></div>
+    </div>
+    <main class="tg">
+      <aside class="strip">
+        <div class="qh">队列<b>212 / 248</b></div>
+        <div class="f" style="--r:-3deg"><img src="../../../public/tools/gallery.jpg" alt=""><i class="ok">✓</i></div>
+        <div class="f" style="--r:2deg"><img src="../../../public/tools/workbench.jpg" alt=""><i class="ok">✓</i></div>
+        <div class="f cur"><img src="../../../public/tools/tagger.jpg" alt=""></div>
+        <div class="f todo" style="--r:3deg"><img src="../../../public/tools/upscale.jpg" alt=""></div>
+        <div class="f todo" style="--r:-2deg"><img src="../../../public/tools/train.jpg" alt=""></div>
+        <div class="more">+ 33</div>
+        <div class="prog"><div class="d"><b>85%</b></div><small>约 6 分钟</small></div>
+      </aside>
+      <div class="stagebox">
+        <div class="bar-top"><span><b>00212_pink.png</b> · 1024 × 1536 · <span class="chip lav" style="box-shadow:none">校对中</span></span><span>← 上一张 · 下一张 → · 空格 保存并下一张</span></div>
+        <div class="photo">
+          <div class="frame">
+            <img src="../../../public/tools/tagger.jpg" alt="">
+            <span class="sticker stk lav" style="position:absolute"><b>16</b><i>个标签</i></span>
+            <span class="sticker stk2 mint" style="position:absolute"><i>置信度</i><b>0.35</b></span>
+          </div>
+        </div>
+        <div class="dock">
+          <div class="seg"><span class="on">WD14</span><span>LLM</span><span>混合</span></div>
+          <div class="div"></div>
+          <a class="btn primary sm">▶ 开始</a>
+          <a class="btn white sm icon" style="box-shadow:none;background:var(--surface-2)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5"/></svg></a>
+          <a class="btn white sm icon" style="box-shadow:none;background:var(--surface-2)"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg></a>
+          <a class="btn white sm icon" style="box-shadow:none;background:var(--surface-2)"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5M4 9h10a6 6 0 0 1 0 12h-3"/></svg></a>
+          <div class="div"></div>
+          <a class="btn soft sm">中文标签</a>
+        </div>
+      </div>
+      <aside class="card tags-panel">
+        <img class="peek" src="../../../public/mascot.png" alt="">
+        <div class="th"><b>标签校对</b><span>16 个</span></div>
+        <div class="tgroup"><h5>角色 <i>2</i></h5><div class="chips"><span class="tag char" style="--r:-2deg">hatsune_miku<em>.92</em><i>×</i></span><span class="tag char low" style="--r:2deg">vocaloid<em>.41</em><i>×</i></span></div></div>
+        <div class="tgroup"><h5>通用 <i>12</i></h5><div class="chips"><span class="tag" style="--r:1deg">1girl<em>.99</em><i>×</i></span><span class="tag" style="--r:-2deg">solo<em>.98</em><i>×</i></span><span class="tag" style="--r:2deg">pink_hair<em>.96</em><i>×</i></span><span class="tag" style="--r:-1deg">long_hair<em>.95</em><i>×</i></span><span class="tag" style="--r:1.5deg">black_gloves<em>.91</em><i>×</i></span><span class="tag" style="--r:-1.5deg">smile<em>.88</em><i>×</i></span><span class="tag" style="--r:1deg">looking_at_viewer<em>.86</em><i>×</i></span><span class="tag" style="--r:-2deg">earrings<em>.79</em><i>×</i></span><span class="tag" style="--r:2deg">turtleneck<em>.74</em><i>×</i></span><span class="tag low" style="--r:-1deg">upper_body<em>.52</em><i>×</i></span><span class="tag low" style="--r:1deg">blush<em>.44</em><i>×</i></span><span class="tag low" style="--r:-2deg">jewelry<em>.38</em><i>×</i></span></div></div>
+        <div class="tgroup"><h5>质量 <i>2</i></h5><div class="chips"><span class="tag q" style="--r:-1deg">masterpiece<i>×</i></span><span class="tag q" style="--r:2deg">best_quality<i>×</i></span></div></div>
+        <div class="addtag">＋ 输入标签，回车添加，支持中文</div>
+        <div class="foot"><a class="btn white sm">跳过</a><a class="btn primary sm">保存并下一张 ⏎</a></div>
+      </aside>
+    </main>
+    <footer class="status"><div><span>● WD14 · 0.9s / 张</span><span>自动保存 已开</span></div><div><span>本次已确认 12</span><span>控制台</span></div></footer>
+  </div>
+  </div></div>
+</section>
+
+<section class="screen">
+  <div class="cap"><h2><small>04</small>说明</h2><p></p></div>
+  <div class="notes">
+    <div class="box"><h3>和上一版比</h3><ul>
+      <li>侧栏从"一整条"变成一颗浮着的胶囊；顶栏拆成几粒药丸，画面四周留出呼吸感。</li>
+      <li>四个一样大的数字卡 → 一个圆环大卡 + 两张歪着的小卡 + 三张贴纸。</li>
+      <li>六张整齐缩略图 → 一叠拍立得；系统条形图 → 三个甜甜圈；再加一句小人气泡。</li>
+      <li>图库：工具栏悬浮、网格圆角加大、悬停放大微倾、详情预览像一张歪着别上去的照片、底部出现深色批量操作胶囊。</li>
+      <li>标注：队列变成竖向胶片、图片是桌面上的一张照片、标签歪 1–2°、右上角小人探头。</li>
+    </ul></div>
+    <div class="box"><h3>不会影响流畅度</h3><ul>
+      <li>倾斜、出框、贴纸都是静态 transform，没有渲染开销。</li>
+      <li>动效只有三处：拍立得悬停立正、网格悬停放大、按钮按下回弹，全部 transform + opacity，≤ 250 ms。</li>
+      <li>背景光斑是三张静态径向渐变，不做模糊动画；小星星是静态字符。</li>
+      <li>系统开启"减弱动效"时全部关闭。</li>
+    </ul></div>
+    <div class="box"><h3>下一步</h3><ul>
+      <li>你点头后按这版开始改真实程序：外壳 + 工具选择换皮 + 首页 → 出安装包实机看 → 图库 → 标注、训练、在线画廊。</li>
+      <li>训练、在线画廊、工作台沿用同一套手法：悬浮胶囊工具栏、圆环进度、贴纸状态。</li>
+      <li>深色版：底色换深梅子紫，贴纸和卡片变成半透明白，粉色不变。</li>
+    </ul></div>
+  </div>
+</section>
+
+<script>
+function fit(){document.querySelectorAll('.stage').forEach(function(s){var b=s.querySelector('.fit');var k=Math.min(1,s.clientWidth/1440);b.style.transform='scale('+k+')';s.style.height=(900*k)+'px'})}
+window.addEventListener('resize',fit);fit();
+</script>
+</body>
+</html>
