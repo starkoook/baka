@@ -172,8 +172,11 @@
   --glow-orange: rgba(255, 184, 107, 0.1);
 }
 
+:root { color-scheme: light; }
+
 /* ── Dark: 深梅子紫 ── */
 [data-theme="dark"] {
+  color-scheme: dark;
   --app-bg: #241a22;
   --surface-primary: #2f2230;
   --surface-secondary: #3a2a3a;

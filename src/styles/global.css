@@ -37,22 +37,18 @@ body {
   color: var(--ink-primary);
 }
 
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+/*
+ * 滚动条：平时完全隐藏，鼠标放到可滚动区域上时才显示一条细的。
+ * 用标准属性 scrollbar-width / scrollbar-color —— Chromium 一旦设置了它们就会忽略 ::-webkit-scrollbar，
+ * 之前各处零散写的 scrollbar-width: thin 正是让浅色粗滚动条冒出来的原因。
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
 }
 
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--line-strong);
-  border-radius: var(--radius-control);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--brand-primary);
+*:hover {
+  scrollbar-color: color-mix(in srgb, var(--ink-tertiary) 55%, transparent) transparent;
 }
 
 *:focus-visible {
