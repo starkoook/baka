@@ -5,7 +5,7 @@ import { getSettingsReturnTarget } from '@/features/navigation/workspace-history
 import { useAppStore, type ToolPosterKey } from '@/stores/app'
 import { TOOL_CATALOG } from '@/features/tools/tool-catalog'
 import { useTaggerStore } from '@/stores/tagger'
-import { SOUND_PACKS, VOICE_CLIPS, getSoundPack, previewClip, setSoundEnabled, setSoundPack, type SoundPack } from '@/composables/useSound'
+import { SOUND_PACKS, clipsOf, getSoundPack, previewClip, setSoundEnabled, setSoundPack, type SoundPack } from '@/composables/useSound'
 import TrainingComponentsPanel from '@/components/settings/TrainingComponentsPanel.vue'
 import SettingsCard from '@/components/settings/SettingsCard.vue'
 import SettingsRow from '@/components/settings/SettingsRow.vue'
@@ -119,17 +119,14 @@ watch(soundEnabled, (value) => {
 onMounted(() => setSoundEnabled(soundEnabled.value))
 const soundPack = ref<SoundPack>(getSoundPack())
 watch(soundPack, (value) => setSoundPack(value))
-const JP_CLIP_LABELS: Record<string, string> = {
-  'jp-hai': 'はいっ！',
-  'jp-okke': 'おっけー！',
-  'jp-pochi': 'ぽちっ',
-  'jp-un': 'うんっ！',
-  'jp-ikuyo': 'いくよー！',
-  'jp-ehehe': 'えへへ',
-  'jp-yatta': 'やったー！',
-  'jp-nyan': 'にゃん！',
-}
-const previewClips = VOICE_CLIPS.map((clip) => ({ id: clip.id, label: clip.id === 'nya' ? 'nya～' : JP_CLIP_LABELS[clip.id] ?? clip.id }))
+const activeSoundPack = computed(() => SOUND_PACKS.find((pack) => pack.value === soundPack.value))
+/** 试听行：选了某个角色就列它的 8 句；“全部随机”时按角色分组 */
+const previewGroups = computed(() => {
+  const packs = soundPack.value === 'all'
+    ? SOUND_PACKS.filter((pack) => pack.value !== 'all')
+    : SOUND_PACKS.filter((pack) => pack.value === soundPack.value)
+  return packs.map((pack) => ({ label: pack.label, clips: clipsOf(pack.value) }))
+})
 
 const TOOL_PREVIEWS: { key: ToolPosterKey; label: string; default: string }[] = TOOL_CATALOG
   .filter((tool) => tool.key !== 'console')
@@ -585,18 +582,23 @@ onMounted(() => {
           />
         </SettingsRow>
       </SettingsCard>
-      <SettingsCard title="操作反馈" description="点按钮时的萌系语音：经典 nya～ 加上 8 句日语短语，随机轮播">
+      <SettingsCard title="操作反馈" description="点按钮时的萌系语音：三个 VOICEVOX 少女音色各 8 句日语短语，随机轮播">
         <SettingsRow title="点击音效" description="开启后操作按钮会播放萌系反馈音">
           <SettingsToggle v-model="soundEnabled" />
         </SettingsRow>
-        <SettingsRow title="音色包" :description="SOUND_PACKS.find((pack) => pack.value === soundPack)?.description || ''">
+        <SettingsRow title="音色" :description="activeSoundPack?.description || ''">
           <div class="sk-seg">
             <button v-for="pack in SOUND_PACKS" :key="pack.value" type="button" :class="{ on: soundPack === pack.value }" :disabled="!soundEnabled" @click="soundPack = pack.value">{{ pack.label }}</button>
           </div>
         </SettingsRow>
-        <SettingsRow title="试听" description="点一下听听每一句" align="start">
-          <div class="sk-chips" data-no-click-sound>
-            <button v-for="clip in previewClips" :key="clip.id" class="sk-chip" type="button" :disabled="!soundEnabled" @click="previewClip(clip.id)">{{ clip.label }}</button>
+        <SettingsRow title="试听" :description="activeSoundPack?.credit ? `点一下听听每一句 · ${activeSoundPack.credit}` : '点一下听听每一句'" align="start">
+          <div class="sk-preview-groups" data-no-click-sound>
+            <div v-for="group in previewGroups" :key="group.label" class="sk-preview-group">
+              <span v-if="previewGroups.length > 1" class="sk-preview-group__label">{{ group.label }}</span>
+              <div class="sk-chips">
+                <button v-for="clip in group.clips" :key="clip.id" class="sk-chip" type="button" :disabled="!soundEnabled" @click="previewClip(clip.id)">{{ clip.label }}</button>
+              </div>
+            </div>
           </div>
         </SettingsRow>
       </SettingsCard>
@@ -904,6 +906,9 @@ onMounted(() => {
 }
 .sk-seg button.on { color: var(--settings-accent); background: var(--settings-accent-soft); }
 .sk-chips { display: flex; flex-wrap: wrap; gap: 4px; max-width: 320px; }
+.sk-preview-groups { display: grid; gap: 8px; justify-items: end; }
+.sk-preview-group { display: grid; gap: 4px; justify-items: end; }
+.sk-preview-group__label { font-size: 10.5px; font-weight: 800; color: var(--ink-tertiary); }
 .sk-chip {
   padding: 4px 10px;
   border: 1px solid var(--border-default);

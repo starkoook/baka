@@ -1,40 +1,74 @@
 import clickNyaUrl from '@/assets/sounds/click-nya.mp3'
-import jpEheheUrl from '@/assets/sounds/jp-ehehe.mp3'
-import jpHaiUrl from '@/assets/sounds/jp-hai.mp3'
-import jpIkuyoUrl from '@/assets/sounds/jp-ikuyo.mp3'
-import jpNyanUrl from '@/assets/sounds/jp-nyan.mp3'
-import jpOkkeUrl from '@/assets/sounds/jp-okke.mp3'
-import jpPochiUrl from '@/assets/sounds/jp-pochi.mp3'
-import jpUnUrl from '@/assets/sounds/jp-un.mp3'
-import jpYattaUrl from '@/assets/sounds/jp-yatta.mp3'
+import hauEhehe from '@/assets/sounds/hau-ehehe.mp3'
+import hauHai from '@/assets/sounds/hau-hai.mp3'
+import hauIkuyo from '@/assets/sounds/hau-ikuyo.mp3'
+import hauNyan from '@/assets/sounds/hau-nyan.mp3'
+import hauOkke from '@/assets/sounds/hau-okke.mp3'
+import hauPochi from '@/assets/sounds/hau-pochi.mp3'
+import hauUn from '@/assets/sounds/hau-un.mp3'
+import hauYatta from '@/assets/sounds/hau-yatta.mp3'
+import metanEhehe from '@/assets/sounds/metan-ehehe.mp3'
+import metanHai from '@/assets/sounds/metan-hai.mp3'
+import metanIkuyo from '@/assets/sounds/metan-ikuyo.mp3'
+import metanNyan from '@/assets/sounds/metan-nyan.mp3'
+import metanOkke from '@/assets/sounds/metan-okke.mp3'
+import metanPochi from '@/assets/sounds/metan-pochi.mp3'
+import metanUn from '@/assets/sounds/metan-un.mp3'
+import metanYatta from '@/assets/sounds/metan-yatta.mp3'
+import biiEhehe from '@/assets/sounds/bii-ehehe.mp3'
+import biiHai from '@/assets/sounds/bii-hai.mp3'
+import biiIkuyo from '@/assets/sounds/bii-ikuyo.mp3'
+import biiNyan from '@/assets/sounds/bii-nyan.mp3'
+import biiOkke from '@/assets/sounds/bii-okke.mp3'
+import biiPochi from '@/assets/sounds/bii-pochi.mp3'
+import biiUn from '@/assets/sounds/bii-un.mp3'
+import biiYatta from '@/assets/sounds/bii-yatta.mp3'
 
-/** 音色包：喵（原版）/ 日语萌音 / 全部随机 */
-export type SoundPack = 'all' | 'nya' | 'jp'
+/**
+ * 音色包：一个角色一套 8 句短语，'all' 是所有角色 + 喵 一起随机。
+ * 日语短句由 VOICEVOX 合成（雨晴はう / 四国めたん / 猫使ビィ），出处见 THIRD_PARTY_NOTICES.md。
+ */
+export type SoundPack = 'all' | 'nya' | 'hau' | 'metan' | 'bii'
 export const SOUND_PACK_KEY = 'baka-sound-pack'
-export const SOUND_PACKS: { value: SoundPack; label: string; description: string }[] = [
-  { value: 'all', label: '全部随机', description: '喵 + 日语萌音轮着来' },
-  { value: 'jp', label: '日语萌音', description: 'はいっ / おっけー / ぽちっ / やったー…' },
+export const DEFAULT_SOUND_PACK: SoundPack = 'hau'
+export const SOUND_PACKS: { value: SoundPack; label: string; description: string; credit?: string }[] = [
+  { value: 'hau', label: '雨晴はう', description: '软软的、慢半拍的小声音', credit: 'VOICEVOX:雨晴はう' },
+  { value: 'metan', label: '四国めたん', description: '甜甜的、带点撒娇', credit: 'VOICEVOX:四国めたん' },
+  { value: 'bii', label: '猫使ビィ', description: '猫猫系，音调更高更元气', credit: 'VOICEVOX:猫使ビィ' },
   { value: 'nya', label: '只要喵', description: '经典 nya～' },
+  { value: 'all', label: '全部随机', description: '三个角色 + 喵 轮着来' },
+]
+
+/** 八句短语的固定顺序与显示文字 */
+export const VOICE_LINES: { key: string; text: string }[] = [
+  { key: 'hai', text: 'はいっ！' },
+  { key: 'okke', text: 'おっけー！' },
+  { key: 'pochi', text: 'ぽちっ！' },
+  { key: 'un', text: 'うんっ！' },
+  { key: 'ikuyo', text: 'いくよー！' },
+  { key: 'ehehe', text: 'えへへっ' },
+  { key: 'yatta', text: 'やったー！' },
+  { key: 'nyan', text: 'にゃん！' },
 ]
 
 interface VoiceClip {
   id: string
   pack: Exclude<SoundPack, 'all'>
+  label: string
   url: string
   /** 单独微调音量，让每一句听起来差不多响 */
   gain: number
 }
 
+function characterPack(pack: Exclude<SoundPack, 'all' | 'nya'>, urls: Record<string, string>): VoiceClip[] {
+  return VOICE_LINES.map((line) => ({ id: `${pack}-${line.key}`, pack, label: line.text, url: urls[line.key], gain: 0.55 }))
+}
+
 export const VOICE_CLIPS: readonly VoiceClip[] = [
-  { id: 'nya', pack: 'nya', url: clickNyaUrl, gain: 0.5 },
-  { id: 'jp-hai', pack: 'jp', url: jpHaiUrl, gain: 0.55 },
-  { id: 'jp-okke', pack: 'jp', url: jpOkkeUrl, gain: 0.6 },
-  { id: 'jp-pochi', pack: 'jp', url: jpPochiUrl, gain: 0.6 },
-  { id: 'jp-un', pack: 'jp', url: jpUnUrl, gain: 0.45 },
-  { id: 'jp-ikuyo', pack: 'jp', url: jpIkuyoUrl, gain: 0.6 },
-  { id: 'jp-ehehe', pack: 'jp', url: jpEheheUrl, gain: 0.6 },
-  { id: 'jp-yatta', pack: 'jp', url: jpYattaUrl, gain: 0.6 },
-  { id: 'jp-nyan', pack: 'jp', url: jpNyanUrl, gain: 0.5 },
+  { id: 'nya', pack: 'nya', label: 'nya～', url: clickNyaUrl, gain: 0.5 },
+  ...characterPack('hau', { hai: hauHai, okke: hauOkke, pochi: hauPochi, un: hauUn, ikuyo: hauIkuyo, ehehe: hauEhehe, yatta: hauYatta, nyan: hauNyan }),
+  ...characterPack('metan', { hai: metanHai, okke: metanOkke, pochi: metanPochi, un: metanUn, ikuyo: metanIkuyo, ehehe: metanEhehe, yatta: metanYatta, nyan: metanNyan }),
+  ...characterPack('bii', { hai: biiHai, okke: biiOkke, pochi: biiPochi, un: biiUn, ikuyo: biiIkuyo, ehehe: biiEhehe, yatta: biiYatta, nyan: biiNyan }),
 ]
 
 function readStorage(key: string): string | null {
@@ -46,7 +80,7 @@ function readStorage(key: string): string | null {
 }
 
 function normalizePack(value: string | null): SoundPack {
-  return value === 'nya' || value === 'jp' ? value : 'all'
+  return SOUND_PACKS.some((pack) => pack.value === value) ? (value as SoundPack) : DEFAULT_SOUND_PACK
 }
 
 let soundEnabled = readStorage('baka-sound-enabled') !== 'off'
@@ -82,8 +116,12 @@ function getAudio(clip: VoiceClip): HTMLAudioElement {
   return audio
 }
 
+export function clipsOf(pack: SoundPack): VoiceClip[] {
+  return VOICE_CLIPS.filter((clip) => pack === 'all' || clip.pack === pack)
+}
+
 export function pickClip(pack: SoundPack = soundPack, random: () => number = Math.random): VoiceClip {
-  const pool = VOICE_CLIPS.filter((clip) => pack === 'all' || clip.pack === pack)
+  const pool = clipsOf(pack)
   const candidates = pool.length > 1 ? pool.filter((clip) => clip.id !== lastClipId) : pool
   const clip = candidates[Math.floor(random() * candidates.length)] ?? pool[0]
   lastClipId = clip.id

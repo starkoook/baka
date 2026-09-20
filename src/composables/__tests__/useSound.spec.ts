@@ -37,6 +37,17 @@ describe('character sound policy', () => {
     expect(FakeAudio.played).toHaveLength(1)
   })
 
+  it('defaults to one consistent character and every character has all eight lines', async () => {
+    const sound = await import('../useSound')
+
+    expect(sound.getSoundPack()).toBe('hau')
+    for (const pack of ['hau', 'metan', 'bii'] as const) {
+      expect(sound.clipsOf(pack).map((clip) => clip.label)).toEqual(sound.VOICE_LINES.map((line) => line.text))
+    }
+    expect(sound.clipsOf('nya')).toHaveLength(1)
+    expect(sound.clipsOf('all')).toHaveLength(1 + 3 * 8)
+  })
+
   it('keeps the classic nya-only pack when the user asks for it', async () => {
     localStorage.setItem('baka-sound-pack', 'nya')
     const sound = await import('../useSound')
@@ -47,31 +58,26 @@ describe('character sound policy', () => {
     expect(FakeAudio.sources[0]).toContain('click-nya')
   })
 
-  it('rotates through the Japanese pack without repeating the previous line', async () => {
-    localStorage.setItem('baka-sound-pack', 'jp')
+  it('rotates inside the chosen character pack without repeating the previous line', async () => {
+    localStorage.setItem('baka-sound-pack', 'metan')
     const sound = await import('../useSound')
 
     const seen: string[] = []
     for (let i = 0; i < 40; i++) seen.push(sound.pickClip().id)
 
-    expect(seen.every((id) => id.startsWith('jp-'))).toBe(true)
+    expect(seen.every((id) => id.startsWith('metan-'))).toBe(true)
     expect(new Set(seen).size).toBeGreaterThan(3)
     for (let i = 1; i < seen.length; i++) expect(seen[i]).not.toBe(seen[i - 1])
   })
 
-  it('mixes nya and Japanese lines in the default pack and persists pack changes', async () => {
+  it('falls back to the default pack for unknown or legacy values and persists changes', async () => {
+    localStorage.setItem('baka-sound-pack', 'jp')
     const sound = await import('../useSound')
-    expect(sound.getSoundPack()).toBe('all')
+    expect(sound.getSoundPack()).toBe('hau')
 
-    const ids = new Set<string>()
-    let seed = 0
-    for (let i = 0; i < 9; i++) ids.add(sound.pickClip('all', () => (seed++ % 9) / 9).id)
-    expect(ids.has('nya')).toBe(true)
-    expect([...ids].some((id) => id.startsWith('jp-'))).toBe(true)
-
-    sound.setSoundPack('jp')
-    expect(localStorage.getItem('baka-sound-pack')).toBe('jp')
-    expect(sound.getSoundPack()).toBe('jp')
+    sound.setSoundPack('bii')
+    expect(localStorage.getItem('baka-sound-pack')).toBe('bii')
+    expect(sound.getSoundPack()).toBe('bii')
   })
 
   it('stays silent when sound is disabled', async () => {
