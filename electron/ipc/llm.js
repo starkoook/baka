@@ -643,4 +643,4 @@ function registerLLMHandlers() {
   })
 }
 
-module.exports = { registerLLMHandlers, imageGeneration, callLLM, buildPrompt, parseOutput, parseTagList, loadApiConfigs, loadConfig }
+module.exports = { registerLLMHandlers, imageGeneration, callLLM, chatCompletion, buildPrompt, parseOutput, parseTagList, loadApiConfigs, loadConfig }

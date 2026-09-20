@@ -3,8 +3,8 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { diffTags, serializeWeightedCaption } from '@/features/tagger/caption'
 import type { TagQueueItem, TagResult } from '@/stores/tagger'
 
-const props = defineProps<{ item: TagQueueItem | null; affectedCount?: number; saving?: boolean }>()
-const emit = defineEmits<{ updateTags: [tags: TagResult[]]; save: []; saveNext: []; applySelected: [] }>()
+const props = defineProps<{ item: TagQueueItem | null; affectedCount?: number; saving?: boolean; triggerWord?: string }>()
+const emit = defineEmits<{ updateTags: [tags: TagResult[]]; save: []; saveNext: []; applySelected: []; 'update:triggerWord': [value: string] }>()
 const localTags = ref<TagResult[]>([])
 const input = ref('')
 const searchResults = ref<VocabEntry[]>([])
@@ -43,6 +43,30 @@ const isDirty = computed(() => savedDiff.value.added.length > 0 || savedDiff.val
 }))
 function snapshotBaseline() {
   baseline.value = (props.item?.tags ?? []).map((tag) => ({ ...tag }))
+}
+
+/** prompt-pyramid：让 LLM 按视觉权重金字塔重排当前标签（只重排，不增删），可撤销 */
+const sorting = ref(false)
+const sortError = ref('')
+async function pyramidSort() {
+  if (!window.characterAuditAPI?.pyramid || localTags.value.length < 2 || sorting.value) return
+  sorting.value = true
+  sortError.value = ''
+  try {
+    const names = localTags.value.map((tag) => tag.tag)
+    const res = await window.characterAuditAPI.pyramid({ tags: names, triggerWords: props.triggerWord ? [props.triggerWord] : [] })
+    if (!res.success || !res.data) { sortError.value = res.error || '排序失败'; return }
+    const byName = new Map(localTags.value.map((tag) => [tag.tag, tag]))
+    const ordered = res.data.ordered.map((name) => byName.get(name)).filter((tag): tag is TagResult => Boolean(tag))
+    if (ordered.length !== localTags.value.length) { sortError.value = '模型返回不完整，未改动'; return }
+    pushHistory()
+    localTags.value = ordered.map((tag) => ({ ...tag }))
+    commit()
+  } catch (error) {
+    sortError.value = error instanceof Error ? error.message : '排序失败'
+  } finally {
+    sorting.value = false
+  }
 }
 
 /** 实时 caption 预览：最终写进 .txt 的那一行 */
@@ -180,6 +204,15 @@ watch(input, (value) => {
         <div v-if="item.error" class="save-error"><strong>{{ item.status === 'partial' ? '部分保存' : '处理失败' }}</strong><span>{{ item.error }}</span></div>
         <label class="tag-search"><input v-model="input" placeholder="搜索或添加标签" @keydown.enter.prevent="addTag" /><button :disabled="!input.trim()" @click="addTag">添加</button></label>
 
+        <div class="tag-tools">
+          <label class="trigger-field" title="保存时保证它在第一位；留空则不处理">
+            <span>触发词</span>
+            <input :value="triggerWord ?? ''" placeholder="例如 hatsune miku" @change="emit('update:triggerWord', ($event.target as HTMLInputElement).value)" />
+          </label>
+          <button type="button" class="pyramid-btn" :disabled="sorting || localTags.length < 2" title="按 触发词 → 主体 → 眼睛头发 → 头部 → 上装到下装 → 腿 → 鞋 的顺序重排（可撤销）" @click="pyramidSort">{{ sorting ? '排序中…' : '金字塔排序' }}</button>
+        </div>
+        <p v-if="sortError" class="sort-error">{{ sortError }}</p>
+
         <div class="caption-box" :class="{ 'is-open': showCaption }">
           <button type="button" class="caption-box__toggle" :aria-expanded="showCaption" @click="showCaption = !showCaption">
             <span>caption 预览</span><small>{{ localTags.length }} 个标签 · {{ captionPreview.length }} 字符</small><i aria-hidden="true">{{ showCaption ? '▴' : '▾' }}</i>
@@ -269,6 +302,14 @@ watch(input, (value) => {
 .tag-editor__history button:disabled { opacity: .3; cursor: not-allowed; }
 .tag-editor__history button.active { background: var(--brand-primary); color: var(--brand-on-primary); }
 .tag-editor__history .tag-editor__clear { width: auto; padding: 0 10px; border-radius: 999px; font-size: 11px; }
+.tag-tools { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.trigger-field { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 6px 0 12px; border-radius: 999px; background: var(--accent-lavender-soft); }
+.trigger-field span { flex: none; color: var(--accent-lavender-strong); font-size: 11px; font-weight: 800; }
+.trigger-field input { flex: 1; min-width: 0; height: 24px; padding: 0 8px; border: 0; border-radius: 999px; background: var(--surface-primary); color: var(--ink-primary); font: inherit; font-size: 11.5px; outline: none; }
+.pyramid-btn { flex: none; height: 32px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--accent-lavender-soft); color: var(--accent-lavender-strong); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; }
+.pyramid-btn:hover:not(:disabled) { background: var(--accent-lavender); color: #fff; }
+.pyramid-btn:disabled { opacity: .4; cursor: not-allowed; }
+.sort-error { margin: 6px 0 0; padding: 6px 10px; border-radius: 10px; background: var(--danger-bg); color: var(--danger-foreground); font-size: 11px; }
 .caption-box { margin-top: 10px; border-radius: 16px; background: var(--surface-secondary); }
 .caption-box__toggle { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 0; background: transparent; color: var(--ink-secondary); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; text-align: left; }
 .caption-box__toggle small { flex: 1; color: var(--ink-tertiary); font: 10.5px var(--font-mono); font-weight: 600; }

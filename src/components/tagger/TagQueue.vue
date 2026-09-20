@@ -2,8 +2,14 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import type { TagQueueItem } from '@/stores/tagger'
 
-const props = defineProps<{ queue: TagQueueItem[]; currentIndex: number; collapsed: boolean }>()
-defineEmits<{ select: [index: number]; addFiles: []; addFolder: []; retry: []; removeSelected: []; toggleCollapsed: []; context: [index: number, event: MouseEvent] }>()
+const props = defineProps<{ queue: TagQueueItem[]; currentIndex: number; collapsed: boolean; highlightTag?: string }>()
+defineEmits<{ select: [index: number]; addFiles: []; addFolder: []; retry: []; removeSelected: []; toggleCollapsed: []; context: [index: number, event: MouseEvent]; toggleTag: [index: number] }>()
+
+function itemHasTag(item: TagQueueItem) {
+  const key = (props.highlightTag ?? '').trim().toLowerCase().replace(/_/g, ' ')
+  if (!key) return false
+  return item.tags.some((tag) => tag.tag.trim().toLowerCase().replace(/_/g, ' ') === key)
+}
 
 const statusLabel: Record<TagQueueItem['status'], string> = {
   pending: '等待', running: '识别中', ready: '待校对', reviewed: '已保存', failed: '失败', partial: '部分保存',
@@ -75,9 +81,16 @@ function fileName(path: string) {
         @click="$emit('select', index)"
         @contextmenu.prevent="$emit('context', index, $event)"
       >
-        <span class="queue-item__frame">
+        <span class="queue-item__frame" :class="highlightTag ? (itemHasTag(item) ? 'has-tag' : 'lacks-tag') : ''">
           <img v-if="thumbs[item.path]" :src="thumbs[item.path]" alt="" draggable="false" />
           <span v-else class="queue-item__placeholder" aria-hidden="true"></span>
+          <span
+            v-if="highlightTag"
+            class="queue-item__tagtoggle"
+            role="button"
+            :title="itemHasTag(item) ? `去掉「${highlightTag}」` : `加上「${highlightTag}」`"
+            @click.stop="$emit('toggleTag', index)"
+          >{{ itemHasTag(item) ? '有' : '无' }}</span>
           <i class="queue-item__badge" :class="`badge-${item.status}`" aria-hidden="true">
             <svg v-if="item.status === 'reviewed'" viewBox="0 0 16 16"><path d="m3.2 8.4 3 3 6.6-6.8" /></svg>
             <svg v-else-if="item.status === 'failed' || item.status === 'partial'" viewBox="0 0 16 16"><path d="M8 3.5v5.5M8 12.2v.3" /></svg>
@@ -135,6 +148,12 @@ function fileName(path: string) {
 .queue-item__badge.badge-running { display: grid; background: var(--accent-peach); }
 .queue-item__badge.badge-running::after { content: ""; width: 8px; height: 8px; border-radius: 50%; border: 2px solid #fff; border-top-color: transparent; animation: spin .8s linear infinite; }
 .queue-item__meta { display: none; }
+/* 校对模式：绿框 = 有这个标签，红框 = 没有；角上按钮点一下切换 */
+.queue-item__frame.has-tag { box-shadow: 0 0 0 3px var(--accent-mint), var(--surface-shadow); }
+.queue-item__frame.lacks-tag { box-shadow: 0 0 0 3px var(--accent-rose), var(--surface-shadow); opacity: .85; }
+.queue-item__tagtoggle { position: absolute; left: 8px; bottom: 8px; z-index: 2; height: 24px; padding: 0 9px; display: inline-flex; align-items: center; border-radius: 999px; background: rgba(255,255,255,.94); color: var(--ink-primary); font-size: 11px; font-weight: 900; cursor: pointer; box-shadow: var(--shadow-sm); }
+.queue-item__frame.has-tag .queue-item__tagtoggle { color: var(--accent-mint-strong); }
+.queue-item__frame.lacks-tag .queue-item__tagtoggle { color: var(--danger-foreground); }
 .queue-item--pending .queue-item__frame img { opacity: .8; }
 .queue-empty { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0 10px; color: var(--ink-tertiary); text-align: center; }
 .queue-empty span { font-size: 11px; line-height: 1.6; }

@@ -226,6 +226,7 @@ contextBridge.exposeInMainWorld('characterAuditAPI', {
   inventory: (params) => ipcRenderer.invoke('characterAudit:inventory', params),
   run: (params) => ipcRenderer.invoke('characterAudit:run', params),
   apply: (params) => ipcRenderer.invoke('characterAudit:apply', params),
+  pyramid: (params) => ipcRenderer.invoke('characterAudit:pyramid', params),
 })
 
 contextBridge.exposeInMainWorld('imageToolsAPI', {

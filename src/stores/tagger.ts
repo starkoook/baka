@@ -10,6 +10,15 @@ import {
   type TaggerPreset,
   type TaggerPresetInput,
 } from '@/features/tagger/presets'
+import {
+  addTag as addQueueTag,
+  buildQueueInventory,
+  ensureTriggerFirst,
+  hasTag as queueHasTag,
+  removeTag as removeQueueTag,
+  renameTag as renameQueueTag,
+  tagsEqual,
+} from '@/features/tagger/queue-tags'
 import { toIpcPayload } from '@/lib/ipc-payload'
 import { useGalleryStore } from './gallery'
 
@@ -52,6 +61,7 @@ interface PersistedTaggerSession {
     activeModelPath: string
     scope: TagScope
     conflict: TagConflict
+    triggerWord?: string
   }
 }
 
@@ -127,6 +137,7 @@ export const useTaggerStore = defineStore('tagger', () => {
         activeModelPath: activeModelPath.value,
         scope: scope.value,
         conflict: conflict.value,
+        triggerWord: triggerWord.value,
       },
     }
     localStorage.setItem(SESSION_KEY, JSON.stringify(payload))
@@ -147,6 +158,7 @@ export const useTaggerStore = defineStore('tagger', () => {
       activeModelPath.value = saved.config?.activeModelPath ?? ''
       scope.value = saved.config?.scope ?? 'all'
       conflict.value = saved.config?.conflict ?? 'skip'
+      triggerWord.value = saved.config?.triggerWord ?? ''
       taskId.value = ''
 
       const interrupted = saved.phase === 'running' || saved.phase === 'stopping'
@@ -490,6 +502,11 @@ export const useTaggerStore = defineStore('tagger', () => {
   async function saveCurrent() {
     const item = currentItem.value
     if (!item) return false
+    // 触发词置顶：保存前保证它在第一位（BDTM+ 的"触发词强制保留"）
+    if (triggerWord.value.trim()) {
+      const ordered = ensureTriggerFirst(item.tags, triggerWord.value)
+      if (!tagsEqual(item.tags, ordered)) item.tags = ordered as TagResult[]
+    }
     if (!item.id) {
       item.status = 'failed'
       item.error = '这张图片还没有加入图库数据库，请先在图库中同步所在文件夹。'
@@ -599,6 +616,70 @@ export const useTaggerStore = defineStore('tagger', () => {
     currentIndex.value = previous
   }
 
+  // ── 触发词 / 全部标签面板 / 队列级批量操作（参照 BDTM+ 的"全部标签"）──
+  const triggerWord = ref('')
+  /** 正在"校对"的标签：队列缩略图会标出有 / 没有，点一下切换 */
+  const highlightTag = ref('')
+  const queueInventory = computed(() => buildQueueInventory(queue.value))
+
+  function markEdited(item: TagQueueItem) {
+    if (item.status === 'reviewed') item.status = 'ready'
+  }
+
+  /** 对整个队列应用一个变换；返回改动了多少张 */
+  function transformQueue(transform: (tags: TagResult[]) => TagResult[]): number {
+    let changed = 0
+    for (const item of queue.value) {
+      const next = transform(item.tags) as TagResult[]
+      if (tagsEqual(item.tags, next)) continue
+      item.tags = next
+      markEdited(item)
+      changed++
+    }
+    if (changed) persistSession()
+    return changed
+  }
+
+  function renameTagAcrossQueue(from: string, to: string) {
+    return transformQueue((tags) => renameQueueTag(tags, from, to) as TagResult[])
+  }
+
+  function removeTagAcrossQueue(name: string) {
+    return transformQueue((tags) => removeQueueTag(tags, name) as TagResult[])
+  }
+
+  function addTagToAll(name: string, position: 'first' | 'last' = 'last') {
+    return transformQueue((tags) => addQueueTag(tags, name, position) as TagResult[])
+  }
+
+  /** 校对模式：给某张图加上 / 去掉正在校对的标签 */
+  function toggleTagOnItem(index: number, name: string) {
+    const item = queue.value[index]
+    if (!item || !name.trim()) return
+    item.tags = (queueHasTag(item.tags, name) ? removeQueueTag(item.tags, name) : addQueueTag(item.tags, name)) as TagResult[]
+    markEdited(item)
+    persistSession()
+  }
+
+  /** 把所有改过但没保存的（ready / partial / failed 且有 id）写盘 */
+  async function saveAllEdited() {
+    const previous = currentIndex.value
+    let saved = 0
+    let failed = 0
+    for (let index = 0; index < queue.value.length; index++) {
+      const item = queue.value[index]
+      if (item.status !== 'ready' && item.status !== 'partial' && item.status !== 'failed') continue
+      if (!item.id) continue
+      currentIndex.value = index
+      const ok = await saveCurrent()
+      if (ok) saved++
+      else failed++
+    }
+    currentIndex.value = previous
+    persistSession()
+    return { saved, failed }
+  }
+
   // ── 标注预设：一组参数存个名字，一键套用 ──
   const presets = ref<TaggerPreset[]>([])
   const presetInput = computed<TaggerPresetInput>(() => ({
@@ -650,6 +731,7 @@ export const useTaggerStore = defineStore('tagger', () => {
   }
 
   return {
+    triggerWord, highlightTag, queueInventory, renameTagAcrossQueue, removeTagAcrossQueue, addTagToAll, toggleTagOnItem, saveAllEdited,
     presets, activePresetId, loadPresets, savePreset, deletePreset, applyPreset,
     phase, queue, currentIndex, returnContext,
     models, activeModelPath, tagSource, threshold, characterThreshold, addCharacter, addCopyright,

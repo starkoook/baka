@@ -572,11 +572,21 @@ declare global {
     paths: string[]
   }
 
+  type CharacterAuditCategory =
+    | 'identity' | 'hair' | 'eyes' | 'face' | 'body' | 'clothing' | 'footwear' | 'legwear' | 'wearable_accessory'
+    | 'action' | 'pose' | 'expression' | 'scene' | 'composition' | 'quality' | 'object' | 'other'
+
   interface CharacterAuditDecision {
     tag: string
     type: 'keep' | 'delete' | 'replace' | 'unsure'
     target?: string
     reason?: string
+    /** 以下字段来自 character-tag-auditor 规则的输出 */
+    decision?: 'keep' | 'delete' | 'replace' | 'uncertain'
+    category?: CharacterAuditCategory
+    includeInPrompt?: boolean
+    promptOrder?: number
+    count?: number
   }
 
   interface CharacterAuditAPI {
@@ -585,9 +595,21 @@ declare global {
       data?: { items: CharacterAuditItem[]; inventory: CharacterAuditInventoryEntry[]; parentByChild?: Record<string, string> }
       error?: string
     }>
-    run: (params: { imageIds?: number[]; triggerWords?: string[]; referenceImagePaths?: string[] }) => Promise<{
+    run: (params: { imageIds?: number[]; triggerWords?: string[]; referenceImagePaths?: string[]; mode?: 'sparse' | 'full'; minimumCount?: number; otherTriggers?: string[] }) => Promise<{
       success: boolean
-      data?: { items: CharacterAuditItem[]; inventory: CharacterAuditInventoryEntry[]; decisions: CharacterAuditDecision[]; raw?: unknown }
+      data?: {
+        items: CharacterAuditItem[]
+        inventory: CharacterAuditInventoryEntry[]
+        decisions: CharacterAuditDecision[]
+        excluded?: CharacterAuditInventoryEntry[]
+        corePrompt?: string
+        stages?: { stage: 'text' | 'visual'; raw?: string; error?: string }[]
+      }
+      error?: string
+    }>
+    pyramid: (params: { tags: string[]; triggerWords?: string[] }) => Promise<{
+      success: boolean
+      data?: { ordered: string[]; matched: number }
       error?: string
     }>
     apply: (params: { items: CharacterAuditItem[]; decisions: CharacterAuditDecision[]; parentByChild?: Record<string, string> }) => Promise<{

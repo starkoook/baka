@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import TagQueue from '@/components/tagger/TagQueue.vue'
+import TagInventoryPanel from '@/components/tagger/TagInventoryPanel.vue'
 import TagEditor from '@/components/tagger/TagEditor.vue'
 import TagRunProgress from '@/components/tagger/TagRunProgress.vue'
 import TagSettingsPanel from '@/components/tagger/TagSettingsPanel.vue'
@@ -318,6 +319,7 @@ function onShortcut(event: KeyboardEvent) {
 
 // ── 标注预设 ──
 const showPresetMenu = ref(false)
+const showInventory = ref(false)
 const presetName = ref('')
 function savePreset() {
   const name = presetName.value.trim()
@@ -373,8 +375,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
         @retry="taggerStore.retryFailed"
         @remove-selected="removeSelected"
         @context="onQueueContext"
+        :highlight-tag="taggerStore.highlightTag"
+        @toggle-tag="(index) => taggerStore.toggleTagOnItem(index, taggerStore.highlightTag)"
         @toggle-collapsed="queueCollapsed = !queueCollapsed"
       />
+
+      <TagInventoryPanel v-if="showInventory" @close="showInventory = false; taggerStore.highlightTag = ''" />
 
       <div class="tagger-workspace">
         <div class="tagger-preview__toolbar">
@@ -533,6 +539,24 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
           <span class="dock-tile__label">批量</span>
         </button>
 
+        <button
+          type="button"
+          class="dock-tile"
+          :class="{ 'is-open': showInventory }"
+          :disabled="taggerStore.queue.length === 0"
+          aria-label="全部标签"
+          title="整批标签清单：统计、改名、移除、逐张校对"
+          @click="showInventory = !showInventory; if (!showInventory) taggerStore.highlightTag = ''"
+        >
+          <span class="dock-tile__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 6.5h9M4 12h16M4 17.5h12" />
+              <circle cx="18" cy="6.5" r="2" />
+            </svg>
+          </span>
+          <span class="dock-tile__label">全部标签</span>
+        </button>
+
         <div class="dock-preset">
           <button
             type="button"
@@ -622,6 +646,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onShortcut))
       <TagEditor
         :item="taggerStore.currentItem"
         :saving="saving"
+        :trigger-word="taggerStore.triggerWord"
+        @update:trigger-word="taggerStore.triggerWord = $event; taggerStore.persistSession()"
         @update-tags="updateCurrentTags"
         @save="saveCurrent"
         @save-next="saveAndNext"

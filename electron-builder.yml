@@ -8,6 +8,8 @@ files:
   - dist/**/*
   - electron/**/*.js
   - electron/**/*.py
+  - electron/skills/*.md
+  - electron/skills/*.txt
   - package.json
   - THIRD_PARTY_NOTICES.md
 asarUnpack:

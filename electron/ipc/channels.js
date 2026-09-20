@@ -171,6 +171,7 @@ const Channels = {
   CHARACTER_AUDIT_INVENTORY: 'characterAudit:inventory',
   CHARACTER_AUDIT_RUN: 'characterAudit:run',
   CHARACTER_AUDIT_APPLY: 'characterAudit:apply',
+  CHARACTER_AUDIT_PYRAMID: 'characterAudit:pyramid',
   IMAGE_TOOLS_REMOVE_BACKGROUND: 'imageTools:removeBackground',
   IMAGE_TOOLS_REPLACE_TRANSPARENT_BACKGROUND: 'imageTools:replaceTransparentBackground',
   IMAGE_TOOLS_EDIT: 'imageTools:edit',

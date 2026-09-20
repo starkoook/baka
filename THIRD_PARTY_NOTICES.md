@@ -14,6 +14,12 @@ Baka TOOLS 主安装包不包含训练器核心、Python、PyTorch 或显卡运�
 
 按需安装的 Python、PyTorch、CUDA、ROCm、Intel XPU 及其依赖分别受各自许可证约束。组件包应保留上游随附的许可证和声明文件。
 
+## 角色标签审计 / 提示词金字塔规则（lora-tagging-skills）
+
+- 来源：<https://github.com/storyAura/lora-tagging-skills>，MIT（全文见 `electron/skills/LICENSE-lora-tagging-skills.txt`）
+- `electron/skills/character-tag-auditor.md` 与 `electron/skills/prompt-pyramid.md` 原样打包，作为 LLM 系统提示的一部分
+- 审计流程（文本初筛 → 视觉复核 → 严格校验）与队列级"全部标签"面板的做法参考了同作者的 [BooruDatasetTagManager+](https://github.com/storyAura/BooruDatasetTagManagerPlus)（MIT），未复制其代码
+
 ## 点击音效语音
 
 界面点击反馈中的日语短句由 VOICEVOX 合成，使用了以下角色音源，按各角色利用规约标注出处：
