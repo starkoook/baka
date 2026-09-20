@@ -576,10 +576,12 @@ onMounted(async () => {
 .tagger-preview__toolbar button:disabled { opacity: .35; cursor: not-allowed; }
 
 /* 白色相框 */
-.tagger-preview { position: relative; flex: 1; min-height: 0; display: flex; overflow: auto; border-radius: 30px; background: var(--surface-primary); box-shadow: var(--surface-shadow); }
+.tagger-preview { position: relative; flex: 1; min-height: 0; display: flex; overflow: auto; border-radius: 30px; background: var(--surface-primary); box-shadow: var(--surface-shadow-lg); transform: rotate(-0.6deg); transform-origin: 50% 60%; scrollbar-width: none; }
+.tagger-preview::-webkit-scrollbar { display: none; }
+.tagger-workspace > .tagger-preview { margin: 6px 10px 4px 6px; }
 .tagger-preview::before { content: ''; position: absolute; inset: 0; opacity: .6; pointer-events: none; background-image: radial-gradient(var(--line-strong) 1px, transparent 1.2px); background-size: 22px 22px; }
 .preview-canvas { position: relative; z-index: 1; margin: auto; flex: none; display: flex; align-items: center; justify-content: center; }
-.preview-canvas img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 18px; box-shadow: var(--ink-shadow); }
+.preview-canvas img { display: block; width: 100%; height: 100%; object-fit: contain; border-radius: 18px; box-shadow: var(--ink-shadow); transform: rotate(0.6deg); }
 .preview-loading { position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--ink-tertiary); font-size: 12.5px; }
 .preview-loading span { width: 12px; height: 12px; border: 2px solid var(--brand-soft); border-top-color: var(--brand-primary); border-radius: 50%; animation: spin .75s linear infinite; }
 .preview-empty { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--ink-tertiary); text-align: center; }
@@ -651,5 +653,6 @@ onMounted(async () => {
 }
 @media (prefers-reduced-motion: reduce) {
   .dock-tile, .dock-tile__label, .tagger-preview__toolbar button { transition: none; }
+  .tagger-preview, .preview-canvas img { transform: none; }
 }
 </style>

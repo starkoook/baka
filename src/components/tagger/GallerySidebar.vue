@@ -4,9 +4,12 @@ defineProps<{
   datasets: { name: string; folderPath: string; imagePaths: string[] }[]
   activeRootId: number | null | undefined
   activeDatasetId: string | null
+  frequentTags?: { tag: string; count: number }[]
+  activeTag?: string
 }>()
 
 defineEmits<{
+  searchTag: [tag: string]
   selectAll: []
   selectRoot: [root: LibraryRoot]
   selectDataset: [folderPath: string]
@@ -47,6 +50,21 @@ defineEmits<{
         </button>
         <button v-if="datasets.length === 0" class="dataset-empty" @click="$emit('importDataset')">导入已有图片文件夹</button>
       </section>
+
+      <section v-if="frequentTags?.length">
+        <div class="section-heading"><span>常用标签</span></div>
+        <div class="tag-cloud">
+          <button
+            v-for="entry in frequentTags"
+            :key="entry.tag"
+            class="tag-cloud__chip"
+            :class="{ active: activeTag === entry.tag }"
+            type="button"
+            :title="`搜索 ${entry.tag}`"
+            @click="$emit('searchTag', entry.tag)"
+          >{{ entry.tag }} <b>{{ entry.count }}</b></button>
+        </div>
+      </section>
     </div>
     <div class="sidebar-footer">
       <button class="recycle-button" @click="$emit('openRecycle')">
@@ -79,6 +97,14 @@ section + section { margin-top: 18px; }
 .dot { width: 8px; height: 8px; margin: 0 5px; border-radius: 50%; }
 .dot--new { background: var(--accent-sky); box-shadow: 0 0 0 3px var(--accent-sky-soft); }
 .dot--empty { border: 2px solid var(--accent-peach); }
+.tag-cloud { display: flex; flex-wrap: wrap; gap: 6px; padding: 2px 6px; }
+.tag-cloud__chip { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border: 0; border-radius: var(--radius-pill); background: var(--brand-tint); color: var(--ink-secondary); font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: transform .2s var(--ease-bounce), background-color 140ms ease; }
+.tag-cloud__chip b { color: var(--ink-quaternary); font: 10px var(--font-mono); font-weight: 700; }
+.tag-cloud__chip:nth-child(3n) { background: var(--accent-lavender-soft); }
+.tag-cloud__chip:nth-child(5n) { background: var(--accent-mint-soft); }
+.tag-cloud__chip:hover { transform: translateY(-1px); }
+.tag-cloud__chip.active { background: var(--brand-primary); color: var(--brand-on-primary); }
+.tag-cloud__chip.active b { color: rgba(255,255,255,.8); }
 .dataset-empty { width: calc(100% - 8px); margin: 2px 4px; padding: 10px; border: 2px dashed var(--line-strong); border-radius: 16px; background: transparent; color: var(--ink-tertiary); font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer; }
 .dataset-empty:hover { border-color: var(--brand-primary); color: var(--brand-hover); }
 @media (max-width: 1200px) { .gallery-sidebar { width: 190px; flex-basis: 190px; } }

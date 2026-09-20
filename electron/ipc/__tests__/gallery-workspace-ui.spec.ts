@@ -28,7 +28,9 @@ describe('gallery workspace UI', () => {
     expect(gallery).toContain('v-if="selectedImage && !galleryStore.activeDatasetId"')
     expect(gallery).toContain(':preview="selectedPreview"')
     expect(gallery).toContain(':metadata="selectedMetadata"')
-    expect(gallery).toContain('v-if="galleryStore.selectedCount > 1"')
+    // 选中 1 张也出底部操作条（送去标注 / 加入数据集 / 回收站），多选时展开全部批量动作
+    expect(gallery).toContain('v-if="galleryStore.selectedCount >= 1 && !galleryStore.activeDatasetId"')
+    expect(read('src/components/tagger/GallerySelectionBar.vue')).toContain('<template v-if="count > 1">')
   })
 
   it('creates the annotation handoff before navigating', () => {

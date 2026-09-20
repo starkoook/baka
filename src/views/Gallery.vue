@@ -95,6 +95,18 @@ watch(selectedImage, async (image) => {
   if (meta?.success && meta.data) selectedMetadata.value = meta.data
 })
 const orderedSelectedImages = computed(() => visibleImages.value.filter((image) => galleryStore.selectedIds.has(image.id)))
+const sortLabel = computed(() => ({ 'modified-desc': '按修改时间', 'name-asc': '按名称 A→Z', 'name-desc': '按名称 Z→A' }[galleryStore.sortMode] ?? '按修改时间'))
+/** 侧栏"常用标签"：从已加载的标签里统计出现最多的几个 */
+const frequentTags = computed(() => {
+  const counts = new Map<string, number>()
+  for (const tags of galleryStore.imageTags.values()) {
+    for (const tag of tags) counts.set(tag.tag, (counts.get(tag.tag) ?? 0) + 1)
+  }
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([tag, count]) => ({ tag, count }))
+})
+function searchTag(tag: string) {
+  galleryStore.searchQuery = galleryStore.searchQuery.trim() === tag ? '' : tag
+}
 const activeRoot = computed(() => galleryStore.roots.find((root) => root.id === galleryStore.activeRootId) ?? null)
 const activeDataset = computed(() => galleryStore.datasets.find((dataset) => dataset.folderPath === galleryStore.activeDatasetId) ?? null)
 
@@ -698,6 +710,9 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
         :datasets="galleryStore.datasets"
         :active-root-id="galleryStore.activeRootId"
         :active-dataset-id="galleryStore.activeDatasetId"
+        :frequent-tags="frequentTags"
+        :active-tag="galleryStore.searchQuery.trim()"
+        @search-tag="searchTag"
         @select-all="selectAllImages"
         @select-root="selectRoot"
         @select-dataset="selectDataset"
@@ -724,6 +739,12 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           @update:sort="galleryStore.sortMode = $event"
           @update:view-mode="viewMode = $event"
         />
+
+        <div v-if="!galleryStore.activeDatasetId && galleryStore.images.length" class="gallery-countline">
+          <b>{{ visibleImages.length.toLocaleString() }}</b> 张 · {{ sortLabel }}
+          <button v-if="galleryStore.searchQuery" class="gallery-countline__chip" type="button" title="清除搜索" @click="galleryStore.searchQuery = ''">{{ galleryStore.searchQuery }} <i>×</i></button>
+          <button v-if="galleryStore.tagStateFilter !== 'all'" class="gallery-countline__chip gallery-countline__chip--lav" type="button" title="清除筛选" @click="galleryStore.tagStateFilter = 'all'">{{ galleryStore.tagStateFilter === 'tagged' ? '已标注' : '未标注' }} <i>×</i></button>
+        </div>
 
         <div v-if="galleryStore.activeDatasetId" class="dataset-toolbar">
           <div><strong>{{ activeDataset?.name }}</strong><span>{{ galleryStore.datasetImageItems.length }} 张 · {{ galleryStore.datasetImageItems.filter((item) => item.hasCaption).length }} 张已标注</span></div>
@@ -782,7 +803,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
           />
 
           <GallerySelectionBar
-            v-if="galleryStore.selectedCount > 1"
+            v-if="galleryStore.selectedCount >= 1 && !galleryStore.activeDatasetId"
             :count="galleryStore.selectedCount"
             :has-datasets="galleryStore.datasets.length > 0"
             @send-to-tagger="sendSelectedToTagger"
@@ -899,6 +920,11 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 .gallery-content { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .gallery-stage { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; gap: 14px; overflow: hidden; }
 .gallery-stage :deep(.gallery-grid-scroll) { flex: 1; min-width: 0; }
+.gallery-countline { display: flex; align-items: center; gap: 8px; margin: -4px 0 10px 14px; color: var(--ink-tertiary); font-size: 12px; font-weight: 600; }
+.gallery-countline b { color: var(--ink-primary); font-family: var(--font-mono); font-size: 14px; font-weight: 800; }
+.gallery-countline__chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--brand-primary); color: var(--brand-on-primary); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; box-shadow: 0 6px 14px rgba(var(--brand-primary-rgb), .25); }
+.gallery-countline__chip--lav { background: var(--accent-lavender); }
+.gallery-countline__chip i { font-style: normal; opacity: .8; }
 .dataset-toolbar { height: 50px; flex: 0 0 50px; display: flex; align-items: center; gap: 8px; margin: 0 4px 12px; padding: 0 8px 0 18px; border-radius: var(--radius-pill); background: var(--surface-primary); box-shadow: var(--surface-shadow); }
 .dataset-toolbar div { margin-right: auto; display: flex; align-items: baseline; gap: 9px; }
 .dataset-toolbar strong { font-size: 14px; font-weight: 900; }
