@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useGalleryStore } from '@/stores/gallery'
 import type { GalleryReturnContext } from '@/features/gallery/gallery-workflow'
@@ -19,6 +19,40 @@ function mockImage(id: number): GalleryImage {
     thumb_hash: null,
   } as GalleryImage
 }
+
+describe('gallery pagination', () => {
+  beforeEach(() => setActivePinia(createPinia()))
+  afterEach(() => vi.unstubAllGlobals())
+
+  it.each([['modified-desc', 'date', 'desc'], ['name-asc', 'name', 'asc'], ['name-desc', 'name', 'desc']])('requests stable server ordering for %s', async (mode, sort, order) => {
+    const getImages = vi.fn().mockResolvedValue({ success: true, data: [] })
+    vi.stubGlobal('galleryAPI', { getImages, getRoots: vi.fn().mockResolvedValue({ success: true, data: [] }) })
+    const s = useGalleryStore()
+    s.sortMode = mode
+    await s.loadImages(true)
+    expect(getImages).toHaveBeenCalledWith(expect.objectContaining({ sort, order, offset: 0 }))
+  })
+
+  it('removes only successful deletions without reloading and adjusts the next page', async () => {
+    const getImages = vi.fn().mockResolvedValue({ success: true, data: Array.from({ length: 100 }, (_, i) => mockImage(i + 1)) })
+    vi.stubGlobal('galleryAPI', { getImages, getRoots: vi.fn().mockResolvedValue({ success: true, data: [] }) })
+    vi.stubGlobal('fsAPI', { deleteMedia: vi.fn().mockResolvedValue({ success: false, data: { moved: 1, failures: [{ path: '/img/2.png', error: 'locked' }] } }) })
+    const s = useGalleryStore()
+    await s.loadImages(true)
+    s.selectedIds = new Set([1, 2])
+    s.imageTags.set(1, [])
+    await s.deleteMedia(['/img/1.png', '/img/2.png'])
+    expect(s.images).toHaveLength(99)
+    expect(s.images[0].id).toBe(2)
+    expect([...s.selectedIds]).toEqual([2])
+    expect(s.imageTags.has(1)).toBe(false)
+    expect(getImages).toHaveBeenCalledTimes(1)
+    getImages.mockResolvedValue({ success: true, data: [mockImage(101)] })
+    await s.loadMore()
+    expect(getImages).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 99 }))
+    expect(s.images[s.images.length - 1]?.id).toBe(101)
+  })
+})
 
 describe('gallery store — 选择状态机', () => {
   beforeEach(() => setActivePinia(createPinia()))

@@ -5,6 +5,9 @@ const { app, dialog, net, safeStorage, session } = require('electron')
 const fs = require('fs')
 const path = require('path')
 const { protectApiKeyFields, restoreApiKeyFields } = require('./credential-store')
+const { createConcurrencyGate } = require('./concurrency-gate')
+
+const previewGate = createConcurrencyGate(8)
 
 const PRESET_SITES = [
   { id: 'danbooru', label: 'Danbooru', type: 'danbooru', baseUrl: 'https://danbooru.donmai.us' },
@@ -343,9 +346,53 @@ async function relatedTags(siteId, query) {
   return { tags: extractTags(site, payload) }
 }
 
-async function proxyImage(url) {
-  const response = await net.fetch(url)
+function refererForBooruImage(url) {
+  try {
+    const host = new URL(url).hostname.toLowerCase()
+    if (host.endsWith('donmai.us')) return 'https://danbooru.donmai.us/'
+    if (host.includes('gelbooru.com')) return 'https://gelbooru.com/'
+    if (host.includes('safebooru.org')) return 'https://safebooru.org/'
+    if (host.includes('e621.net')) return 'https://e621.net/'
+    if (host.includes('e926.net')) return 'https://e926.net/'
+    if (host.includes('konachan')) return 'https://konachan.com/'
+    if (host.includes('yande.re')) return 'https://yande.re/'
+    if (host.includes('derpibooru.org') || host.includes('derpicdn.net')) return 'https://derpibooru.org/'
+    if (host.includes('rule34')) return 'https://rule34.xxx/'
+    return new URL(url).origin + '/'
+  } catch {
+    return ''
+  }
+}
+
+function booruImageHeaders(url) {
+  const headers = {
+    Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+    'User-Agent': 'BakaTools/0.1',
+  }
+  const referer = refererForBooruImage(url)
+  if (referer) headers.Referer = referer
+  return headers
+}
+
+async function fetchBooruImage(url) {
+  const response = await net.fetch(url, { headers: booruImageHeaders(url) })
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  return response
+}
+
+async function fetchBooruPreview(url) {
+  return previewGate.run(async () => {
+    const response = await fetchBooruImage(url)
+    const buffer = Buffer.from(await response.arrayBuffer())
+    return new Response(buffer, {
+      status: 200,
+      headers: { 'Content-Type': response.headers.get('content-type') || 'image/jpeg' },
+    })
+  })
+}
+
+async function proxyImage(url) {
+  const response = await fetchBooruImage(url)
   const buffer = Buffer.from(await response.arrayBuffer())
   const mime = response.headers.get('content-type') || 'image/jpeg'
   return { base64: buffer.toString('base64'), mime }
@@ -357,15 +404,13 @@ async function download(url, suggestedName) {
     filters: [{ name: 'Images', extensions: ['jpg', 'png', 'webp', 'gif'] }],
   })
   if (canceled || !filePath) return { canceled: true }
-  const response = await net.fetch(url)
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const response = await fetchBooruImage(url)
   fs.writeFileSync(filePath, Buffer.from(await response.arrayBuffer()))
   return { canceled: false, filePath }
 }
 
 async function downloadToFile(url, filePath) {
-  const response = await net.fetch(url)
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  const response = await fetchBooruImage(url)
   fs.writeFileSync(filePath, Buffer.from(await response.arrayBuffer()))
 }
 
@@ -489,4 +534,4 @@ function registerBooruGalleryHandlers(ipcMain) {
   })
 }
 
-module.exports = { registerBooruGalleryHandlers, PRESET_SITES, loadSettings }
+module.exports = { registerBooruGalleryHandlers, PRESET_SITES, loadSettings, fetchBooruImage, fetchBooruPreview, refererForBooruImage }

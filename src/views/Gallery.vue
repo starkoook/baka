@@ -68,11 +68,7 @@ const visibleImages = computed(() => {
     if (galleryStore.quickView === 'recent' && !isRecent(image.indexed_at)) return false
     return true
   })
-  return [...filtered].sort((a, b) => {
-    if (galleryStore.sortMode === 'name-asc') return a.filename.localeCompare(b.filename)
-    if (galleryStore.sortMode === 'name-desc') return b.filename.localeCompare(a.filename)
-    return String(b.file_modified_at).localeCompare(String(a.file_modified_at))
-  })
+  return filtered
 })
 
 const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
@@ -397,25 +393,21 @@ async function confirmDatasetDialog() {
 async function deleteSelectedMedia() {
   if (!confirm(`确定把选中的 ${orderedSelectedImages.value.length} 张图片移入回收站吗？`)) return
   const paths = orderedSelectedImages.value.map((image) => image.path)
-  const response = await window.fsAPI.deleteMedia({ filePaths: paths })
+  const response = await galleryStore.deleteMedia(paths)
   if (!response.success) {
     appStore.setError(response.error || '删除失败')
     return
   }
-  galleryStore.clearSelection()
-  await galleryStore.loadImages(true)
   appStore.setStatus(`已移入回收站：${response.data?.moved ?? 0} 张`)
 }
 
 async function deleteSingleMedia(image: { path: string }) {
   if (!confirm('确定把这张图片移入回收站吗？')) return
-  const response = await window.fsAPI.deleteMedia({ filePaths: [image.path] })
+  const response = await galleryStore.deleteMedia([image.path])
   if (!response.success) {
     appStore.setError(response.error || '删除失败')
     return
   }
-  galleryStore.clearSelection()
-  await galleryStore.loadImages(true)
   appStore.setStatus('已移入回收站')
 }
 
@@ -644,7 +636,10 @@ function onKeydown(event: KeyboardEvent) {
   else galleryStore.clearSelection()
 }
 
-watch(() => galleryStore.images.length, refreshVisibleTags)
+watch(() => galleryStore.sortMode, () => { void galleryStore.loadImages(true) })
+watch(() => galleryStore.images.map(image => image.id), (ids) => {
+  void galleryStore.fetchBatchTags(ids.filter(id => !galleryStore.imageTags.has(id)))
+})
 watch(selectedImage, (image) => { if (image) galleryStore.fetchTags(image.id) })
 
 /** 从首页拍立得点进来：?focus=<imageId>，找到这张图、选中并滚到它那里闪一下。 */
@@ -938,7 +933,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
 .gallery-drag-overlay span { font-size: 12px; }
 .gallery-content { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 .gallery-stage { position: relative; flex: 1; min-width: 0; min-height: 0; display: flex; gap: 14px; overflow: hidden; }
-.gallery-stage :deep(.gallery-grid-scroll) { flex: 1; min-width: 0; }
+.gallery-stage :deep(.gallery-grid-scroll) { flex: 1; min-width: 0; min-height: 0; }
 .gallery-countline { display: flex; align-items: center; gap: 8px; margin: -4px 0 10px 14px; color: var(--ink-tertiary); font-size: 12px; font-weight: 600; }
 .gallery-countline b { color: var(--ink-primary); font-family: var(--font-mono); font-size: 14px; font-weight: 800; }
 .gallery-countline__chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--brand-primary); color: var(--brand-on-primary); font: inherit; font-size: 11.5px; font-weight: 800; cursor: pointer; box-shadow: 0 6px 14px rgba(var(--brand-primary-rgb), .25); }

@@ -10,7 +10,7 @@
 - 任务系统：没有 Backlog.md，未初始化；任务在本文件 Next Step 与对话中跟踪。
 - Git 保存点：功能在 `eca9e9c`（可回滚）；其后是交接文档。工作区另有约 100 个未跟踪调试脚本与目录（`_*.js`、`_*.py`、`_asar_*`、`_app_tdr.asar`、`tools/`、`metadata.js`，约 1 GB）——历史热修补残留，不属于任何当前任务；不要提交，也不要未经 Owner 允许删除。
 - 远端：`origin` = github.com/starkoook/baka（**公开仓库**）。Owner 已授权，28 个本地提交已推到 `main`（`60e3491..85a3b70`）。界面源码、设计稿、标注功能均已公开。
-- 状态：可继续，无 blocker。
+- 状态：可继续，无 blocker。查看器已按批准的灵动稿落地（拍立得 / 贴纸 / 浮层），其余本轮还有扫描不堵、虚拟瀑布流、启动清日志。
 - 关键位置：标注状态 `src/stores/tagger.ts`；标注页 `src/views/Tagger.vue` + `src/components/tagger/`；审计核心 `electron/ipc/character-tag-audit.js`（IPC 在 `character-tag-audit-ipc.js`）；LLM 规则 `electron/skills/*.md`；类目 / 修复 `electron/ipc/tag-categories.js`、`tag-fixes.js`；标签数据 `resources/tag-data/*.csv`（打包后在 `resources/tag-data`，用 `tag-data-path.js` 定位）；IPC 契约 `electron/ipc/channels.js`（`npm run check:ipc` 校验）；打包 `node scripts/package.js` → `release/Baka-TOOLS-Portable.zip`。
 
 ## Current Focus
@@ -19,7 +19,10 @@ None（本轮授权范围——BDTM+ 对标的标注改进：审计规则接入�
 
 ## Last Meaningful Changes
 
-- 已推远端：`60e3491..85a3b70`（柔粉灵动版 + BDTM+ 标注强化 + 8 月底积压入库 + 交接文档）。调试残留未推。
+- 元数据查看器按 `docs/superpowers/mockups/2026-09-21-metadata-viewer.html` 落地：浮层胶囊、拍立得出框、邻居探出、贴纸、信息卡压在图上。默认整图，「查看原图」才 1:1。Owner 已对稿说「可以」。
+- 图库仍用原来的虚拟瀑布流（按原顺序线性取视野窗口）。按 top 二分取窗已回退，Owner 觉得观感不如之前。在线画廊预览并发限制为 8（`fetchBooruPreview`），下载仍走未限流的 `fetchBooruImage`。
+- 扫描异步让出主进程；`taggerV2:gpuInfo` 不再同步拉 nvidia-smi。启动时 `beginAppLogSession()` 清空 `app.jsonl`。
+- 已推远端：`60e3491..85a3b70`（柔粉灵动版 + BDTM+ 标注强化 + 8 月底积压入库 + 交接文档）。调试残留未推。卡顿修复与查看器默认整图尚未提交 / 未推。
 - `eca9e9c` 类目着色与排序、快速替换、错误标签修复；修复 `resources/tag-data` 未进包。
 - `806acf7` 角色标签审计重写、全部标签面板、触发词、金字塔排序。
 - 更早：灵动版外壳 / 图库瀑布流 / `media://` / 剔除画布 / Voicevox / 只出免安装 zip。细节看 `git log`。
@@ -44,6 +47,7 @@ None
 
 - 已验证（`eca9e9c`）：`npm run typecheck` 通过；`npm run check:ipc` 通过；`npm test` 417 例通过 413，失败 4 例即上述预存项；`node scripts/package.js` 成功，`Expand-Archive` 覆盖到 `D:\baka\BakaTOOLS` 后启动正常；`npx asar list` 确认包内含 `electron/skills/*`，`resources/tag-data` 三份 CSV 随包。
 - 已验证（Electron 离屏截图）：标注页全部标签面板、校对模式绿 / 红框、类目着色分组、修复对话框渲染正常；截图在 `%TEMP%\baka-shot\app\`，不入仓库。
+- 已验证（查看器灵动稿落地）：`metadata-viewer-ui.spec.ts` 7 例通过；`vue-tsc --noEmit` 通过；打包 SHA `d9f1741d…`；覆盖安装后重启。未能在 Electron 窗口里点开同一张图做目视核对。
 - 尚未验证：审计与金字塔排序对真实模型的输出质量——只用构造的假响应测过解析、校验与降级路径。
 
 ## Next Step

@@ -25,4 +25,21 @@ describe('moveImagesSafe', () => {
     expect(existsSync(join(dest, 'a.png'))).toBe(true)
     expect(existsSync(src1)).toBe(false)
   })
+
+  it('moves a sibling caption with the image', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'baka-caption-'))
+    const src = join(dir, 'a.png')
+    const caption = join(dir, 'a.txt')
+    const dest = join(dir, 'out')
+    writeFileSync(src, 'image')
+    writeFileSync(caption, 'prompt')
+
+    const result = await moveImages({ filePaths: [src], destFolder: dest, keepOriginal: false })
+
+    expect(result.success).toBe(true)
+    expect(existsSync(join(dest, 'a.png'))).toBe(true)
+    expect(existsSync(join(dest, 'a.txt'))).toBe(true)
+    expect(existsSync(src)).toBe(false)
+    expect(existsSync(caption)).toBe(false)
+  })
 })

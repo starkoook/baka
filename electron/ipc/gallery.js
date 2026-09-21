@@ -7,6 +7,7 @@ const { saveAnnotation } = require('./annotation-save')
 const { writeTextSafe } = require('./safe-file')
 const { serializeWeightedCaption } = require('./tag-weight')
 const { stampMetadataCache, parseCachedMetadata, galleryCacheNeedsReparse, galleryIndexCacheIsReusable, isModelLoraBlobPrompt } = require('./metadata-cache')
+const { collectImageEntries, yieldToEventLoop } = require('./walk-images')
 
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'])
 const DROPPED_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.bmp'])
@@ -378,34 +379,7 @@ async function scanFolder(folderPath, rootId, mainWindow) {
   const sharp = require('sharp')
   const { parseMetadata } = require('./metadata')
 
-  const entries = []
-  function walk(dir) {
-    let dirents
-    try {
-      dirents = fs.readdirSync(dir, { withFileTypes: true })
-    } catch (_) {
-      return
-    }
-    for (const d of dirents) {
-      const full = path.join(dir, d.name)
-      if (d.isDirectory()) {
-        walk(full)
-      } else if (IMAGE_EXTENSIONS.has(path.extname(d.name).toLowerCase())) {
-        try {
-          const stat = fs.statSync(full)
-          entries.push({
-            path: full,
-            filename: d.name,
-            dirname: dir,
-            size: stat.size,
-            mtime: stat.mtime.toISOString(),
-          })
-        } catch (_) {}
-      }
-    }
-  }
-
-  walk(folderPath)
+  const entries = await collectImageEntries(folderPath, { extensions: IMAGE_EXTENSIONS })
   console.log('[scanFolder] walk done, entries=', entries.length)
 
   // Build set of current disk paths
@@ -502,6 +476,7 @@ async function scanFolder(folderPath, rootId, mainWindow) {
           status: `同步中 ${current}/${total}`,
         })
       }
+      await yieldToEventLoop()
     }
     db.run('COMMIT')
     saveDb()

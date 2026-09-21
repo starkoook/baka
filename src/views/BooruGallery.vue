@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { toBooruImgUrl } from '@/lib/booru-img-url'
 import { useBooruGalleryStore } from '@/stores/booru-gallery'
 
 const store = useBooruGalleryStore()
@@ -366,7 +367,7 @@ async function startBatchDownload() {
         :class="{ 'booru-card--selected': selectedIds.has(post.id) }"
         @click="onCardClick(post)"
       >
-        <img :src="post.previewUrl || post.sampleUrl" :alt="post.id" loading="lazy" />
+        <img :src="toBooruImgUrl(post.previewUrl || post.sampleUrl)" :alt="post.id" loading="lazy" />
         <span v-if="batchMode" class="booru-card__check" :class="{ 'booru-card__check--active': selectedIds.has(post.id) }">
           {{ selectedIds.has(post.id) ? '✓' : '' }}
         </span>
@@ -424,7 +425,7 @@ async function startBatchDownload() {
       <div class="booru-detail__panel">
         <button class="booru-detail__close" type="button" aria-label="关闭" @click="store.closePost">×</button>
         <div class="booru-detail__image">
-          <img v-if="store.selectedImage" :src="store.selectedImage" alt="" />
+          <img v-if="store.selectedImage" :src="toBooruImgUrl(store.selectedImage)" alt="" />
         </div>
         <div class="booru-detail__body">
           <h2>#{{ store.selectedPost?.id }}</h2>

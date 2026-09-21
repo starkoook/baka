@@ -52,6 +52,14 @@ describe('gallery rescan persistence', () => {
     expect(handler).toContain('saveDb()')
   })
 
+  it('walks the folder tree asynchronously and yields between scan batches', () => {
+    const scanBlock = gallerySource.match(/async function scanFolder[\s\S]*?function classifyDroppedPaths/)?.[0] ?? ''
+
+    expect(scanBlock).toContain('collectImageEntries(')
+    expect(scanBlock).not.toContain('fs.readdirSync(dir, { withFileTypes: true })')
+    expect(scanBlock).toContain('yieldToEventLoop()')
+  })
+
   it('classifies dropped paths without scanning unrelated parent folders', () => {
     expect(gallerySource).toContain('function classifyDroppedPaths(paths)')
     expect(gallerySource).toContain('fs.statSync(filePath)')

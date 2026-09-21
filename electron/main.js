@@ -41,7 +41,7 @@ const { runFfprobe, parseProbe, extractFrames, convertVideo } = require('./ipc/v
 const { registerVideoTagHandlers } = require('./ipc/video-tag')
 const { registerAnnotationToolsHandlers } = require('./ipc/annotation-tools')
 const { registerTaggerSettingsHandlers } = require('./ipc/tagger-settings')
-const { registerLogHandlers, writeAppLog } = require('./ipc/app-log')
+const { registerLogHandlers, writeAppLog, beginAppLogSession } = require('./ipc/app-log')
 const { registerSystemStatsHandlers } = require('./ipc/system-stats')
 const { ensureDb, runSql, importImageFiles } = require('./ipc/gallery')
 const fs = require('fs')
@@ -51,6 +51,10 @@ const path = require('path')
 protocol.registerSchemesAsPrivileged([
   {
     scheme: 'media',
+    privileges: { stream: true, bypassCSP: true, supportFetchAPI: true },
+  },
+  {
+    scheme: 'booruimg',
     privileges: { stream: true, bypassCSP: true, supportFetchAPI: true },
   },
 ])
@@ -108,6 +112,13 @@ function createWindow() {
   })
   mainWindow.on('closed', () => {
     mainWindow = null
+  })
+
+  mainWindow.webContents.on('did-fail-load', (_event, code, desc, url) => {
+    writeAppLog('error', `did-fail-load ${code} ${desc} ${url}`, 'main')
+  })
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    writeAppLog('error', 'render-process-gone ' + JSON.stringify(details), 'main')
   })
 
   if (isDev) {
@@ -391,11 +402,17 @@ ipcMain.handle('fs:scanModels', async (_event, dirPath) => {
 registerSystemStatsHandlers(ipcMain)
 
 app.whenReady().then(async () => {
+  beginAppLogSession()
+  writeAppLog('info', 'Baka TOOLS 已启动', 'main')
+
   const { pathToFileURL } = require('url')
-  const { loadSettings } = require('./ipc/booru-gallery')
+  const { loadSettings, fetchBooruPreview } = require('./ipc/booru-gallery')
   const gallerySettings = loadSettings()
   if (gallerySettings.proxy) {
-    await session.defaultSession.setProxy({ proxyRules: `http=${gallerySettings.proxy};https=${gallerySettings.proxy}` })
+    await session.defaultSession.setProxy({
+      proxyRules: `http=${gallerySettings.proxy};https=${gallerySettings.proxy}`,
+      proxyBypassRules: '<local>,file://*,media://*,booruimg://*',
+    })
   }
   protocol.handle('media', (request) => {
     const url = new URL(request.url)
@@ -404,6 +421,15 @@ app.whenReady().then(async () => {
       return new Response('Not found', { status: 404 })
     }
     return net.fetch(pathToFileURL(filePath).toString())
+  })
+  protocol.handle('booruimg', async (request) => {
+    try {
+      const src = new URL(request.url).searchParams.get('src')
+      if (!src || !/^https?:\/\//i.test(src)) return new Response('Bad request', { status: 400 })
+      return await fetchBooruPreview(src)
+    } catch (error) {
+      return new Response(String((error && error.message) || error || 'fetch failed'), { status: 502 })
+    }
   })
 
   createWindow()
@@ -587,7 +613,6 @@ app.whenReady().then(async () => {
   registerVideoTagHandlers()
   registerNodeHandlers()
   registerLogHandlers(() => mainWindow)
-  writeAppLog('info', 'Baka TOOLS 已启动', 'main')
 
   // ── Open file in Explorer ──
   ipcMain.handle('shell:openFolder', async (_event, filePath) => {

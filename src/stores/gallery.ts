@@ -100,29 +100,75 @@ export const useGalleryStore = defineStore('gallery', () => {
     }
   }
 
+  let requestVersion = 0
+  let pendingPage: Promise<void> | null = null
+  const isDeleting = ref(false)
+
+  async function deleteMedia(paths: string[]) {
+    if (isDeleting.value) return { success: false, error: '正在删除，请稍候' }
+    isDeleting.value = true
+    try {
+      await pendingPage
+      const response = await window.fsAPI.deleteMedia({ filePaths: paths })
+      if (response.data) {
+        const failed = new Set(response.data.failures.map(item => item.path))
+        const removedPaths = new Set(paths.filter(path => !failed.has(path)))
+        const removed = images.value.filter(image => removedPaths.has(image.path))
+        images.value = images.value.filter(image => !removedPaths.has(image.path))
+        currentOffset.value = Math.max(0, currentOffset.value - removed.length)
+        for (const image of removed) {
+          selectedIds.value.delete(image.id)
+          imageTags.value.delete(image.id)
+          if (selectionAnchorId.value === image.id) selectionAnchorId.value = null
+          if (selectedImage.value?.id === image.id) selectedImage.value = null
+        }
+        void loadStats()
+        void loadRoots()
+      }
+      return response
+    } finally {
+      isDeleting.value = false
+    }
+  }
+
   async function loadImages(reset: boolean = false) {
+    if (isDeleting.value) return
+    if (!reset && isLoading.value) return
+    const version = ++requestVersion
+    const task = fetchImages(reset, version)
+    pendingPage = task
+    try { await task } finally { if (pendingPage === task) pendingPage = null }
+  }
+
+  async function fetchImages(reset: boolean, version: number) {
     if (!window.galleryAPI) return
     if (reset) { currentOffset.value = 0; _reachedEnd.value = false }
     isLoading.value = true
 
-    const res = await window.galleryAPI.getImages({
-      rootId: activeRootId.value || undefined,
-      limit: pageSize,
-      offset: reset ? 0 : currentOffset.value,
-      favoritesOnly: quickView.value === 'favorites' || undefined,
-    })
+    try {
+      const res = await window.galleryAPI.getImages({
+        sort: sortMode.value.startsWith('name-') ? 'name' : 'date',
+        order: sortMode.value === 'name-asc' ? 'asc' : 'desc',
+        rootId: activeRootId.value || undefined,
+        limit: pageSize,
+        offset: reset ? 0 : currentOffset.value,
+        favoritesOnly: quickView.value === 'favorites' || undefined,
+      })
 
-    if (res.success && res.data) {
-      if (reset) {
-        images.value = res.data
-      } else {
-        const existing = new Set(images.value.map((image) => image.id))
-        images.value.push(...res.data.filter((image) => !existing.has(image.id)))
+      if (version !== requestVersion) return
+      if (res.success && res.data) {
+        if (reset) {
+          images.value = res.data
+        } else {
+          const existing = new Set(images.value.map((image) => image.id))
+          images.value.push(...res.data.filter((image) => !existing.has(image.id)))
+        }
+        currentOffset.value = currentOffset.value + res.data.length
+        if (res.data.length < pageSize) _reachedEnd.value = true
       }
-      currentOffset.value = currentOffset.value + res.data.length
-      if (res.data.length < pageSize) _reachedEnd.value = true
+    } finally {
+      if (version === requestVersion) isLoading.value = false
     }
-    isLoading.value = false
   }
 
   async function loadMore() {
@@ -552,7 +598,7 @@ export const useGalleryStore = defineStore('gallery', () => {
     roots, images, selectedImage, selectedIds, scanProgress, isScanning, isLoading,
     activeRootId, searchQuery, tagStateFilter, sortMode, selectionAnchorId,
     pendingReturnContext, pendingScrollTop, imageTags, hasMore, selectedCount, selectedImages,
-    loadRoots, addRoot, removeRoot, scanRoot, loadImages, loadMore,
+    loadRoots, addRoot, removeRoot, scanRoot, loadImages, loadMore, deleteMedia,
     selectImage, toggleSelect, selectRange, isSelected, clearSelection, selectAll,
     captureReturnContext, restoreReturnContext, replaceImagePaths,
     fetchTags, fetchBatchTags, saveTags, sendToTagger,

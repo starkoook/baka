@@ -6,6 +6,7 @@ import { setupInteractions } from './composables/clickSound'
 import { useAppStore } from './stores/app'
 import { useLogStore } from './stores/logs'
 import { toIpcPayload, toPlainLogEntry } from './lib/ipc-payload'
+import { isBenignRendererError } from './lib/renderer-errors'
 import './styles/global.css'
 
 const app = createApp(App)
@@ -39,6 +40,7 @@ if (window.logAPI) {
 
 app.config.errorHandler = (err, _instance, info) => {
   const msg = err instanceof Error ? err.message : String(err)
+  if (isBenignRendererError(msg)) return
   const full = info ? msg + ' (' + info + ')' : msg
   console.error('[app]', full, err)
   try { useAppStore().setError(full) } catch { /* store not ready yet */ }
@@ -47,6 +49,7 @@ app.config.errorHandler = (err, _instance, info) => {
 
 window.addEventListener('error', (e) => {
   const msg = e.message || e.error?.message || '未知脚本错误'
+  if (isBenignRendererError(msg)) return
   console.error('[window]', msg, e)
   try { useAppStore().setError(msg) } catch { /* */ }
   persistLog('error', msg, 'window')
@@ -54,6 +57,7 @@ window.addEventListener('error', (e) => {
 
 window.addEventListener('unhandledrejection', (e) => {
   const msg = e.reason?.message || String(e.reason || '未处理的 Promise 异常')
+  if (isBenignRendererError(msg)) return
   console.error('[promise]', msg, e.reason)
   try { useAppStore().setError(msg) } catch { /* */ }
   persistLog('error', msg, 'promise')

@@ -72,7 +72,14 @@ function readAppLog(limit) {
 }
 
 function clearAppLog() {
-  try { fs.writeFileSync(getLogPath(), '', 'utf-8') } catch (_) {}
+  beginAppLogSession()
+}
+
+function beginAppLogSession(filePath) {
+  const file = filePath || getLogPath()
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  fs.writeFileSync(file, '', 'utf-8')
+  return file
 }
 
 function registerLogHandlers(getWin) {
@@ -93,4 +100,4 @@ function registerLogHandlers(getWin) {
   })
 }
 
-module.exports = { writeAppLog, readAppLog, clearAppLog, getLogPath, registerLogHandlers }
+module.exports = { writeAppLog, readAppLog, clearAppLog, beginAppLogSession, getLogPath, registerLogHandlers }

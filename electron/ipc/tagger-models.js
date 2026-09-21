@@ -134,15 +134,18 @@ function detectProviders() {
 
 /**
  * Get GPU info via nvidia-smi (Windows) or fallback.
+ * Must stay async — a previous blocking spawn here froze the whole window for up to 5s.
  */
-function getGpuInfo() {
+async function getGpuInfo(execFileFn) {
+  const run = execFileFn || require('util').promisify(require('child_process').execFile)
   try {
-    const { execSync } = require('child_process')
-    const out = execSync(
-      'nvidia-smi --query-gpu=name,memory.total,memory.used --format=csv,noheader,nounits',
-      { timeout: 5000, encoding: 'utf-8', windowsHide: true }
-    ).trim()
-    const parts = out.split(',').map((s) => s.trim())
+    const { stdout } = await run(
+      'nvidia-smi',
+      ['--query-gpu=name,memory.total,memory.used', '--format=csv,noheader,nounits'],
+      { timeout: 5000, encoding: 'utf-8', windowsHide: true },
+    )
+    const line = String(stdout || '').trim().split('\n')[0]
+    const parts = line.split(',').map((s) => s.trim())
     return {
       name: parts[0] || 'NVIDIA GPU',
       vramTotalMb: parseFloat(parts[1]) || 0,
@@ -170,7 +173,7 @@ function registerModelHandlers() {
 
   ipcMain.handle('taggerV2:gpuInfo', async () => {
     try {
-      const gpu = getGpuInfo()
+      const gpu = await getGpuInfo()
       const providers = detectProviders()
       return { success: true, data: { gpu, providers } }
     } catch (e) {

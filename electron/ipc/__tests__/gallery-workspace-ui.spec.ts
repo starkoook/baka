@@ -133,6 +133,18 @@ describe('gallery workspace UI', () => {
     }
   })
 
+  it('virtualizes the masonry grid so only the viewport window is mounted', () => {
+    const grid = read('src/components/tagger/GalleryGrid.vue')
+
+    expect(grid).toContain('@/lib/gallery-masonry-window')
+    expect(grid).toContain('layoutGalleryGrid')
+    expect(grid).toContain('visibleGalleryItems')
+    expect(grid).toContain('v-for="item in visibleItems"')
+    expect(grid).not.toContain('v-for="(image, index) in images"')
+    expect(grid).not.toContain('shouldReleaseThumb(')
+    expect(grid).not.toContain('content-visibility: auto')
+  })
+
   it('keeps the gallery fluid and quiet when motion is reduced', () => {
     const gallery = read('src/views/Gallery.vue')
     const grid = read('src/components/tagger/GalleryGrid.vue')
